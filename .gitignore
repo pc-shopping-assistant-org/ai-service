@@ -6,5 +6,27 @@ dist/
 wheels/
 *.egg-info
 
+# Test, coverage, and tooling caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Local environment and secrets
+.env
+!.env.example
+
+# Logs and local runtime files
+*.log
+*.pid
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
 # Virtual environments
 .venv

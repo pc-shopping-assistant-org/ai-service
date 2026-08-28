@@ -12,12 +12,13 @@ dependencies = [
     "httpx>=0.28.1",
     "pydantic>=2.13.4",
     "pydantic-ai>=2.35.0",
+    "pydantic-graph>=2.35.0",
     "pydantic-settings>=2.15.0",
     "uvicorn>=0.52.4",
 ]
 
 [project.scripts]
-ai-service = "ai_service:main"
+ai-service = "ai_service.main:run"
 
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]
