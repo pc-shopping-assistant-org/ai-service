@@ -34,6 +34,7 @@ dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pydantic-ai" },
+    { name = "pydantic-graph" },
     { name = "pydantic-settings" },
     { name = "uvicorn" },
 ]
@@ -60,6 +61,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-ai", specifier = ">=2.35.0" },
+    { name = "pydantic-graph", specifier = ">=2.35.0" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "uvicorn", specifier = ">=0.52.4" },
 ]
