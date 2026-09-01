@@ -1,0 +1,1 @@
+"""Assistant capability vertical slice."""

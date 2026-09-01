@@ -1,1 +1,1 @@
-"""Application-layer ports and use-case contracts."""
+"""Application layer: use-case orchestration, ports and domain errors."""

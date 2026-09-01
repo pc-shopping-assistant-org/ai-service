@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 
+from ai_service.application.ports.catalog import CatalogPage
+from ai_service.config.enums import EmbeddingProviderKind
 from ai_service.config.settings import Settings, get_settings
-from ai_service.services.backend_client import BackendClient, CatalogPage
+from ai_service.services.backend_client import BackendClient
 from ai_service.services.semantic_retriever import (
     EmbeddingProvider,
     HashEmbeddingProvider,
@@ -14,7 +16,7 @@ from ai_service.services.semantic_retriever import (
 
 
 def _embedding_provider(settings: Settings) -> EmbeddingProvider:
-    if settings.embedding_provider == "hash":
+    if settings.embedding_provider == EmbeddingProviderKind.HASH:
         return HashEmbeddingProvider(settings.embedding_dimension)
     if not settings.embedding_api_url:
         raise RuntimeError(

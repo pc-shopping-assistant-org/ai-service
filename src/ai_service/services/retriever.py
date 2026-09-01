@@ -3,27 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from typing import Any, Protocol
+from typing import Any
 
+from ai_service.application.ports.catalog import (
+    BackendCatalogClient,
+    CatalogRetriever,
+)
 
-class BackendCatalogClient(Protocol):
-    """Small client surface required by the backend-backed retriever."""
-
-    async def search_products(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
-        """Search products through the canonical backend API."""
-
-
-class CatalogRetriever(Protocol):
-    """Retrieve catalog records for an assistant request.
-
-    The assistant depends on this small boundary rather than on a concrete
-    transport.  The backend keyword implementation and the optional
-    semantic/vector implementation both satisfy this boundary without
-    changing the HTTP schemas or answer-generation flow.
-    """
-
-    async def search(self, query: str, limit: int) -> list[dict[str, Any]]:
-        """Return catalog records ordered by the retriever's relevance."""
+__all__ = ["BackendCatalogClient", "BackendCatalogRetriever", "CatalogRetriever"]
 
 
 class BackendCatalogRetriever:

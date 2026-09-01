@@ -1,4 +1,5 @@
 from ai_service.application.ports.model_provider import ModelProvider
+from ai_service.config.enums import AIProvider
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.providers.gemini import GeminiModelProvider
 from ai_service.infrastructure.providers.openai import OpenAIModelProvider
@@ -12,8 +13,8 @@ def build_model_provider(settings: Settings) -> ModelProvider | None:
     This keeps tests and local fallback mode independent of provider secrets.
     """
 
-    if settings.provider == "openai":
+    if settings.provider == AIProvider.OPENAI:
         return OpenAIModelProvider(settings)
-    if settings.provider == "gemini":
+    if settings.provider == AIProvider.GEMINI:
         return GeminiModelProvider(settings)
     return None

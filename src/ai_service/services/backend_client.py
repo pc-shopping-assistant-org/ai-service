@@ -1,25 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 import httpx
 
+from ai_service.application.errors import BackendUnavailableError
+from ai_service.application.ports.catalog import CatalogPage
 from ai_service.config.settings import Settings, get_settings
 
-
-class BackendUnavailableError(RuntimeError):
-    """Raised when the catalog API cannot be reached or returns bad data."""
-
-
-@dataclass(frozen=True, slots=True)
-class CatalogPage:
-    """Cursor page returned by the canonical backend catalog endpoint."""
-
-    items: list[dict[str, Any]]
-    next_cursor: str | None = None
-    has_next: bool = False
+__all__ = ["BackendClient", "BackendUnavailableError", "CatalogPage"]
 
 
 class BackendClient:

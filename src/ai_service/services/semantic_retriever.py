@@ -10,13 +10,11 @@ from urllib.parse import quote
 
 import httpx
 
+from ai_service.application.errors import BackendUnavailableError
+from ai_service.application.ports.catalog import BackendCatalogClient, CatalogRetriever
+from ai_service.config.enums import EmbeddingProviderKind, RetrievalBackend
 from ai_service.config.settings import Settings
-from ai_service.services.backend_client import BackendUnavailableError
-from ai_service.services.retriever import (
-    BackendCatalogClient,
-    BackendCatalogRetriever,
-    CatalogRetriever,
-)
+from ai_service.services.retriever import BackendCatalogRetriever
 
 LOGGER = logging.getLogger(__name__)
 
@@ -384,10 +382,10 @@ def build_catalog_retriever(
     vector infrastructure is unavailable.
     """
     fallback = BackendCatalogRetriever(backend_client)
-    if settings.retrieval_backend == "backend" or not settings.qdrant_url:
+    if settings.retrieval_backend == RetrievalBackend.BACKEND or not settings.qdrant_url:
         return fallback
 
-    if settings.embedding_provider == "hash":
+    if settings.embedding_provider == EmbeddingProviderKind.HASH:
         embedding_provider: EmbeddingProvider = HashEmbeddingProvider(settings.embedding_dimension)
     elif settings.embedding_api_url:
         embedding_provider = HttpEmbeddingProvider(
@@ -410,7 +408,11 @@ def build_catalog_retriever(
             timeout_seconds=settings.request_timeout_seconds,
         ),
     )
-    return semantic if settings.retrieval_backend == "qdrant" else HybridCatalogRetriever(semantic, fallback)
+    return (
+        semantic
+        if settings.retrieval_backend == RetrievalBackend.QDRANT
+        else HybridCatalogRetriever(semantic, fallback)
+    )
 
 
 def _catalog_text(product: dict[str, Any]) -> str:

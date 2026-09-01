@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from uuid import UUID, uuid4
 
+from ai_service.capabilities.assistant.schemas import ConversationMessage
 from ai_service.config.settings import Settings, get_settings
-from ai_service.schemas.conversation import ConversationMessage
 
 
 class ConversationManager:

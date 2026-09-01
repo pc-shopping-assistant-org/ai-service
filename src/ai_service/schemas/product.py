@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from ai_service.schemas.conversation import ProductCard
+    from ai_service.capabilities.assistant.schemas import ProductCard
 
 
 class BackendProduct(BaseModel):
@@ -20,7 +20,7 @@ class BackendProduct(BaseModel):
     description: str | None = None
 
     def to_card(self) -> ProductCard:
-        from ai_service.schemas.conversation import ProductCard
+        from ai_service.capabilities.assistant.schemas import ProductCard
 
         return ProductCard(
             id=self.id,

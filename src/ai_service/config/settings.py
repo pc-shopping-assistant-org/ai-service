@@ -1,8 +1,9 @@
 from functools import lru_cache
-from typing import Literal
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from ai_service.config.enums import AIProvider, EmbeddingProviderKind, RetrievalBackend
 
 
 class Settings(BaseSettings):
@@ -18,7 +19,7 @@ class Settings(BaseSettings):
     backend_api_url: str = "http://localhost:8080/api/v1"
     request_timeout_seconds: float = 5.0
     conversation_max_messages: int = 20
-    retrieval_backend: Literal["backend", "qdrant", "hybrid"] = "backend"
+    retrieval_backend: RetrievalBackend = RetrievalBackend.BACKEND
     qdrant_url: str | None = Field(
         default=None,
         validation_alias=AliasChoices("AI_QDRANT_URL", "QDRANT_URL"),
@@ -32,9 +33,9 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("AI_EMBEDDING_API_KEY", "EMBEDDING_API_KEY"),
     )
-    embedding_provider: Literal["http", "hash"] = "http"
+    embedding_provider: EmbeddingProviderKind = EmbeddingProviderKind.HTTP
     embedding_dimension: int = Field(default=384, ge=2, le=4096)
-    provider: Literal["fallback", "openai", "gemini"] = "fallback"
+    provider: AIProvider = AIProvider.FALLBACK
     model_name: str | None = None
     openai_model_name: str = "gpt-4o-mini"
     gemini_model_name: str = "gemini-2.5-flash"

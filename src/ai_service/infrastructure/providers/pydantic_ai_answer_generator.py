@@ -21,6 +21,7 @@ from ai_service.application.ports.answer_generator import (
     AnswerGenerator,
     StreamingAnswerGenerator,
 )
+from ai_service.config.enums import AIProvider
 from ai_service.config.settings import Settings, get_settings
 from ai_service.infrastructure.providers.factory import build_model_provider
 from ai_service.schemas.agent import ShoppingAnswer
@@ -51,7 +52,7 @@ class PydanticAIAnswerGenerator(AnswerGenerator, StreamingAnswerGenerator):
             return self._model
 
         configured_fallback_model = (
-            self.settings.provider == "fallback" and not self.settings.model_name
+            self.settings.provider == AIProvider.FALLBACK and not self.settings.model_name
         )
         if configured_fallback_model:
             self._initialization_attempted = True
