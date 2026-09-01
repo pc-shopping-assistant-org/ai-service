@@ -19,6 +19,8 @@ capabilities/<feature>/      feature-owned schemas, graphs and tools
 process-scoped adapters, PydanticAI answer generator, graph runners and
 application use case. FastAPI receives the inbound `AssistantUseCase` through
 `api/dependencies.py`; routes do not construct providers or graphs.
+Runtime provider/retrieval choices and assistant branches use typed enums whose
+values remain compatible with the environment/API strings.
 
 ## Rules for a new capability
 
