@@ -13,6 +13,7 @@ from ai_service.capabilities.assistant.graphs.shopping import (
     ShoppingState,
     shopping_graph,
 )
+from ai_service.capabilities.assistant.schemas import AssistantIntent
 from ai_service.config.enums import AIProvider, EmbeddingProviderKind, RetrievalBackend
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.composition import build_container
@@ -59,3 +60,7 @@ def test_composition_root_wires_ports_without_external_io() -> None:
     assert container.settings.embedding_provider is EmbeddingProviderKind.HTTP
     assert container.shopping_graph_runner is not None
     assert container.comparison_graph_runner is not None
+
+
+def test_assistant_intent_is_a_stable_enum() -> None:
+    assert AssistantService.classify_intent("tư vấn laptop") is AssistantIntent.CONSULT

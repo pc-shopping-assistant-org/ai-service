@@ -5,6 +5,7 @@ this module remains for existing integrations that import the old path.
 """
 
 from ai_service.capabilities.assistant.schemas import (
+    AssistantIntent,
     ChatData,
     ChatRequest,
     ChatStreamEvent,
@@ -14,6 +15,7 @@ from ai_service.capabilities.assistant.schemas import (
     ConsultData,
     ConsultRequest,
     ConversationMessage,
+    ConversationRole,
     EvaluateData,
     EvaluateRequest,
     ProductCard,
@@ -23,6 +25,7 @@ from ai_service.capabilities.assistant.schemas import (
 )
 
 __all__ = [
+    "AssistantIntent",
     "ChatData",
     "ChatRequest",
     "ChatStreamEvent",
@@ -32,6 +35,7 @@ __all__ = [
     "ConsultData",
     "ConsultRequest",
     "ConversationMessage",
+    "ConversationRole",
     "EvaluateData",
     "EvaluateRequest",
     "ProductCard",

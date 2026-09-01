@@ -1,21 +1,23 @@
 """Deterministic graph that normalizes a shopping request."""
 
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from pydantic import BaseModel
 from pydantic_graph import GraphBuilder
 
-ShoppingIntent = Literal["SEARCH", "CONSULT", "COMPARE", "EVALUATE"]
+from ai_service.capabilities.assistant.schemas import AssistantIntent
+
+ShoppingIntent = AssistantIntent
 
 
 class ShoppingState(BaseModel):
     query: str = ""
-    intent: ShoppingIntent = "SEARCH"
+    intent: ShoppingIntent = AssistantIntent.SEARCH
 
 
 class ShoppingInput(BaseModel):
     query: str
-    intent: ShoppingIntent = "SEARCH"
+    intent: ShoppingIntent = AssistantIntent.SEARCH
 
 
 class ShoppingOutput(BaseModel):

@@ -1,14 +1,30 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
 
+class AssistantIntent(StrEnum):
+    """Validated capability branch selected by the planning graph."""
+
+    SEARCH = "SEARCH"
+    CONSULT = "CONSULT"
+    COMPARE = "COMPARE"
+    EVALUATE = "EVALUATE"
+
+
+class ConversationRole(StrEnum):
+    """Roles allowed in the bounded assistant context."""
+
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
 class ConversationMessage(BaseModel):
-    role: Literal["user", "assistant"]
+    role: ConversationRole
     content: str = Field(min_length=1, max_length=4000)
 
 
@@ -19,7 +35,7 @@ class ChatRequest(BaseModel):
 
 class ChatData(BaseModel):
     conversation_id: UUID
-    intent: str
+    intent: AssistantIntent
     answer: str
     products: list[ProductCard] = Field(default_factory=list)
 
@@ -116,6 +132,7 @@ ChatData.model_rebuild()
 
 
 __all__ = [
+    "AssistantIntent",
     "ChatData",
     "ChatRequest",
     "ChatStreamEvent",
@@ -125,6 +142,7 @@ __all__ = [
     "ConsultData",
     "ConsultRequest",
     "ConversationMessage",
+    "ConversationRole",
     "EvaluateData",
     "EvaluateRequest",
     "ProductCard",

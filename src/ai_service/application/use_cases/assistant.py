@@ -4,7 +4,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 from ai_service.application.errors import BackendUnavailableError
@@ -18,10 +18,10 @@ from ai_service.capabilities.assistant.graphs.comparison import (
 )
 from ai_service.capabilities.assistant.graphs.shopping import (
     ShoppingInput,
-    ShoppingIntent,
     ShoppingOutput,
 )
 from ai_service.capabilities.assistant.schemas import (
+    AssistantIntent,
     ChatData,
     ChatRequest,
     ChatStreamEvent,
@@ -31,6 +31,7 @@ from ai_service.capabilities.assistant.schemas import (
     ConsultData,
     ConsultRequest,
     ConversationMessage,
+    ConversationRole,
     EvaluateData,
     EvaluateRequest,
     ProductCard,
@@ -45,7 +46,7 @@ from ai_service.schemas.response import ApiResponse, ErrorDetail, ResponseMessag
 @dataclass(frozen=True)
 class _PreparedChat:
     conversation_id: UUID
-    intent: str
+    intent: AssistantIntent
     query: str
     products: list[ProductCard]
     errors: list[ErrorDetail]
@@ -77,7 +78,7 @@ class AssistantService:
         answer = await self.answer_generator.generate(prepared.prompt, prepared.fallback)
         self.context_manager.append(
             prepared.conversation_id,
-            ConversationMessage(role="assistant", content=answer),
+            ConversationMessage(role=ConversationRole.ASSISTANT, content=answer),
         )
         return ApiResponse(
             data=ChatData(
@@ -149,7 +150,7 @@ class AssistantService:
             answer = "".join(chunks).strip() or prepared.fallback
             self.context_manager.append(
                 prepared.conversation_id,
-                ConversationMessage(role="assistant", content=answer),
+                ConversationMessage(role=ConversationRole.ASSISTANT, content=answer),
             )
             yield ApiResponse(
                 data=ChatStreamEvent(
@@ -169,7 +170,7 @@ class AssistantService:
         answer = "".join(chunks).strip() or prepared.fallback
         self.context_manager.append(
             prepared.conversation_id,
-            ConversationMessage(role="assistant", content=answer),
+            ConversationMessage(role=ConversationRole.ASSISTANT, content=answer),
         )
         yield ApiResponse(
             data=ChatStreamEvent(
@@ -190,13 +191,13 @@ class AssistantService:
         conversation_id = self.context_manager.get_or_create(request.conversation_id)
         self.context_manager.append(
             conversation_id,
-            ConversationMessage(role="user", content=request.message),
+            ConversationMessage(role=ConversationRole.USER, content=request.message),
         )
         intent = self.classify_intent(request.message)
         plan = await self._shopping_plan(request.message, intent)
         products: list[ProductCard] = []
         errors: list[ErrorDetail] = []
-        if plan.intent in {"SEARCH", "CONSULT"}:
+        if plan.intent in {AssistantIntent.SEARCH, AssistantIntent.CONSULT}:
             try:
                 products = self._cards(await self.retriever.search(plan.query, 5))
             except BackendUnavailableError:
@@ -219,7 +220,7 @@ class AssistantService:
 
     async def search(self, request: SearchRequest) -> ApiResponse[SearchData]:
         try:
-            plan = await self._shopping_plan(request.query, "SEARCH")
+            plan = await self._shopping_plan(request.query, AssistantIntent.SEARCH)
             products = self._cards(await self.retriever.search(plan.query, request.limit))
             return ApiResponse(
                 data=SearchData(query=plan.query, products=products),
@@ -243,7 +244,7 @@ class AssistantService:
 
     async def consult(self, request: ConsultRequest) -> ApiResponse[ConsultData]:
         try:
-            plan = await self._shopping_plan(request.query, "CONSULT")
+            plan = await self._shopping_plan(request.query, AssistantIntent.CONSULT)
             products = self._cards(await self.retriever.search(plan.query, request.limit))
             fallback = self._consult_answer(plan.query, products)
             answer = await self.answer_generator.generate(
@@ -351,12 +352,12 @@ class AssistantService:
         )
 
     @staticmethod
-    def classify_intent(message: str) -> str:
+    def classify_intent(message: str) -> AssistantIntent:
         lowered = message.lower()
         if "so sánh" in lowered or "compare" in lowered:
-            return "COMPARE"
+            return AssistantIntent.COMPARE
         if any(token in lowered for token in ("tư vấn", "nên mua", "phù hợp", "recommend")):
-            return "CONSULT"
+            return AssistantIntent.CONSULT
         explicit_evaluation = any(
             token in lowered for token in ("đánh giá", "giải thích", "evaluate")
         )
@@ -368,20 +369,24 @@ class AssistantService:
             for token in ("tìm", "search", "find", "gợi ý", "xem", "show")
         )
         if explicit_evaluation or review_request:
-            return "EVALUATE"
-        return "SEARCH"
+            return AssistantIntent.EVALUATE
+        return AssistantIntent.SEARCH
 
-    async def _shopping_plan(self, query: str, intent: str) -> ShoppingOutput:
+    async def _shopping_plan(
+        self,
+        query: str,
+        intent: AssistantIntent | str,
+    ) -> ShoppingOutput:
         """Run the deterministic shopping graph before catalog retrieval.
 
         The graph is intentionally limited to request planning. Retrieval and
         answer generation remain replaceable ports, so the configured vector
         store or model provider can change without changing the HTTP contract.
         """
-        plan_intent = cast(
-            ShoppingIntent,
-            intent if intent in {"SEARCH", "CONSULT", "COMPARE", "EVALUATE"} else "SEARCH",
-        )
+        try:
+            plan_intent = intent if isinstance(intent, AssistantIntent) else AssistantIntent(intent)
+        except ValueError:
+            plan_intent = AssistantIntent.SEARCH
         shopping_input = ShoppingInput(query=query, intent=plan_intent)
         return await self.shopping_graph_runner.run(shopping_input)
 
