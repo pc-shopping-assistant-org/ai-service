@@ -1,13 +1,13 @@
 from collections.abc import AsyncIterator
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
+from ai_service.api.dependencies import get_assistant_service
 from ai_service.api.sse import encode_chat_event
-from ai_service.infrastructure.providers.pydantic_ai_answer_generator import (
-    PydanticAIAnswerGenerator,
-)
-from ai_service.schemas.conversation import (
+from ai_service.application.ports.assistant import AssistantUseCase
+from ai_service.capabilities.assistant.schemas import (
     ChatData,
     ChatRequest,
     ChatStreamEvent,
@@ -22,15 +22,16 @@ from ai_service.schemas.conversation import (
     SearchRequest,
 )
 from ai_service.schemas.response import ApiResponse, ErrorDetail, ResponseMessage
-from ai_service.services.assistant_service import AssistantService
 
 router = APIRouter()
-assistant_service = AssistantService(answer_generator=PydanticAIAnswerGenerator())
 
 
 @router.post("/chat", response_model=ApiResponse[ChatData], tags=["assistant"])
-async def chat(request: ChatRequest) -> ApiResponse[ChatData]:
-    return await assistant_service.chat(request)
+async def chat(
+    request: ChatRequest,
+    service: Annotated[AssistantUseCase, Depends(get_assistant_service)],
+) -> ApiResponse[ChatData]:
+    return await service.chat(request)
 
 
 @router.post(
@@ -44,10 +45,13 @@ async def chat(request: ChatRequest) -> ApiResponse[ChatData]:
         }
     },
 )
-async def stream_chat(request: ChatRequest) -> StreamingResponse:
+async def stream_chat(
+    request: ChatRequest,
+    service: Annotated[AssistantUseCase, Depends(get_assistant_service)],
+) -> StreamingResponse:
     async def event_stream() -> AsyncIterator[str]:
         try:
-            async for event in assistant_service.stream_chat(request):
+            async for event in service.stream_chat(request):
                 yield encode_chat_event(event)
         except Exception:  # noqa: BLE001 - keep SSE failures in the API contract
             error = ApiResponse(
@@ -74,20 +78,32 @@ async def stream_chat(request: ChatRequest) -> StreamingResponse:
 
 
 @router.post("/search", response_model=ApiResponse[SearchData], tags=["assistant"])
-async def search(request: SearchRequest) -> ApiResponse[SearchData]:
-    return await assistant_service.search(request)
+async def search(
+    request: SearchRequest,
+    service: Annotated[AssistantUseCase, Depends(get_assistant_service)],
+) -> ApiResponse[SearchData]:
+    return await service.search(request)
 
 
 @router.post("/consult", response_model=ApiResponse[ConsultData], tags=["assistant"])
-async def consult(request: ConsultRequest) -> ApiResponse[ConsultData]:
-    return await assistant_service.consult(request)
+async def consult(
+    request: ConsultRequest,
+    service: Annotated[AssistantUseCase, Depends(get_assistant_service)],
+) -> ApiResponse[ConsultData]:
+    return await service.consult(request)
 
 
 @router.post("/compare", response_model=ApiResponse[CompareData | None], tags=["assistant"])
-async def compare(request: CompareRequest) -> ApiResponse[CompareData | None]:
-    return await assistant_service.compare(request)
+async def compare(
+    request: CompareRequest,
+    service: Annotated[AssistantUseCase, Depends(get_assistant_service)],
+) -> ApiResponse[CompareData | None]:
+    return await service.compare(request)
 
 
 @router.post("/evaluate", response_model=ApiResponse[EvaluateData | None], tags=["assistant"])
-async def evaluate(request: EvaluateRequest) -> ApiResponse[EvaluateData | None]:
-    return await assistant_service.evaluate(request)
+async def evaluate(
+    request: EvaluateRequest,
+    service: Annotated[AssistantUseCase, Depends(get_assistant_service)],
+) -> ApiResponse[EvaluateData | None]:
+    return await service.evaluate(request)

@@ -15,6 +15,13 @@ comparison and evaluation routes while keeping the frontend envelope stable:
 `message` is a static key for frontend mapping. Human-readable validation,
 backend and product details belong in `errors[]`.
 
+The reusable project foundation is documented in
+[`ARCHITECTURE.md`](ARCHITECTURE.md). Runtime wiring follows clean
+architecture: capability use cases depend on application ports, PydanticAI
+and Pydantic Graph live behind infrastructure adapters, and FastAPI resolves
+the application port from the composition root. Add new vertical slices under
+`src/ai_service/capabilities/<feature>/`.
+
 ## Run locally
 
 ```bash

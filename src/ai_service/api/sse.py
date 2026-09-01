@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 
-from ai_service.schemas.conversation import ChatStreamEvent, ChatStreamEventType
+from ai_service.capabilities.assistant.schemas import (
+    ChatStreamEvent,
+    ChatStreamEventType,
+)
 from ai_service.schemas.response import ApiResponse
 
 
