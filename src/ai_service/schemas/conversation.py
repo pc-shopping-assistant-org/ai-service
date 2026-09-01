@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
@@ -89,6 +90,24 @@ class EvaluateRequest(BaseModel):
 class EvaluateData(BaseModel):
     product: ProductCard
     answer: str
+
+
+class ChatStreamEventType(StrEnum):
+    """Stable event kinds carried by the chat SSE endpoint."""
+
+    START = "START"
+    DELTA = "DELTA"
+    COMPLETED = "COMPLETED"
+    ERROR = "ERROR"
+
+
+class ChatStreamEvent(BaseModel):
+    """Transport-neutral payload for one incremental chat event."""
+
+    event: ChatStreamEventType
+    conversation_id: UUID | None = None
+    delta: str | None = None
+    result: ChatData | None = None
 
 
 # Forward reference used by ChatData so ProductCard can remain close to the

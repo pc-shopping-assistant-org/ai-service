@@ -19,6 +19,10 @@ app = FastAPI(
             "name": "health",
             "description": "Service health and readiness endpoints.",
         },
+        {
+            "name": "assistant",
+            "description": "Catalog-grounded assistant workflows, including SSE chat streaming.",
+        },
     ],
 )
 

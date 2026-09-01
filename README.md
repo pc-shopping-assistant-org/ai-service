@@ -30,13 +30,19 @@ until an LLM provider/model is configured.
 ## Environment
 
 All settings use the `AI_` prefix. `AI_BACKEND_API_URL` should point at the
-backend API's `/api/v1` root. `AI_MODEL_NAME` is intentionally optional; no
-provider call is made when it is unset.
+backend API's `/api/v1` root. `AI_PROVIDER=fallback` and an empty
+`AI_MODEL_NAME` are the safe local defaults; no provider call is made in that
+mode. Set `AI_PROVIDER=openai` or `AI_PROVIDER=gemini` to use the built-in
+lazy provider adapters, then inject `AI_OPENAI_API_KEY` or `AI_GEMINI_API_KEY`
+through the runtime secret store. `AI_MODEL_NAME` overrides the provider's
+default model (`gpt-4o-mini` or `gemini-2.5-flash`).
 
-When `AI_MODEL_NAME` is set using PydanticAI's `provider:model` format, chat,
+When `AI_MODEL_NAME` is set using PydanticAI's `provider:model` format while
+`AI_PROVIDER=fallback`, the legacy model selection remains supported. Chat,
 consult, compare and evaluate use the lazy `ShoppingAnswer` adapter. Provider
 or network failure falls back to the deterministic answer so local integration
-remains available. Semantic/vector search is opt-in through the
+remains available. The streaming chat route uses a text-only adapter and emits
+the same fallback as one delta when a provider is not configured. Semantic/vector search is opt-in through the
 `AI_RETRIEVAL_BACKEND` setting. Internally, search/chat/consult depend on the
 `CatalogRetriever` protocol and use `BackendCatalogRetriever` by default.
 `hybrid` or `qdrant` additionally require `AI_QDRANT_URL` and either an HTTP

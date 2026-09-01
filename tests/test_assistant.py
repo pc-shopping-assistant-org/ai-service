@@ -35,6 +35,13 @@ class FakeAnswerGenerator:
         return self.answer
 
 
+class FakeStreamingAnswerGenerator(FakeAnswerGenerator):
+    async def stream(self, prompt: str, fallback: str):
+        self.prompts.append(prompt)
+        yield "streamed "
+        yield "answer"
+
+
 class RecordingRetriever:
     def __init__(self) -> None:
         self.calls: list[tuple[str, int]] = []
@@ -56,6 +63,34 @@ async def test_chat_uses_static_message_and_keeps_context() -> None:
     assert response.data is not None
     assert response.data.intent == "SEARCH"
     assert len(manager.history(response.data.conversation_id)) == 2
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_emits_enveloped_deltas_and_persists_complete_answer() -> None:
+    generator = FakeStreamingAnswerGenerator()
+    manager = ConversationManager()
+    service = AssistantService(
+        FakeBackend(),
+        context_manager=manager,
+        answer_generator=generator,
+    )
+
+    events = [event async for event in service.stream_chat(ChatRequest(message="tìm laptop"))]
+
+    assert [event.data.event.value for event in events if event.data] == [
+        "START",
+        "DELTA",
+        "DELTA",
+        "COMPLETED",
+    ]
+    assert events[0].message == "AI_CHAT_STREAM_STARTED"
+    assert events[1].data is not None
+    assert events[1].data.delta == "streamed "
+    assert events[-1].message == "AI_CHAT_STREAM_COMPLETED"
+    assert events[-1].data is not None
+    assert events[-1].data.result is not None
+    assert events[-1].data.result.answer == "streamed answer"
+    assert len(manager.history(events[-1].data.result.conversation_id)) == 2
 
 
 @pytest.mark.asyncio
@@ -96,6 +131,42 @@ async def test_pydantic_ai_generator_can_run_with_builtin_test_model() -> None:
     generator = PydanticAIAnswerGenerator(Settings(model_name="test"))
 
     assert await generator.generate("say hello", "local fallback") == "a"
+
+
+@pytest.mark.asyncio
+async def test_pydantic_ai_generator_streams_with_builtin_test_model() -> None:
+    generator = PydanticAIAnswerGenerator(Settings(model_name="test"))
+
+    chunks = [chunk async for chunk in generator.stream("say hello", "local fallback")]
+
+    assert "".join(chunks)
+    assert chunks != ["local fallback"]
+
+
+def test_model_provider_adapters_are_lazy_but_build_supported_models() -> None:
+    from ai_service.infrastructure.providers.factory import build_model_provider
+
+    openai_provider = build_model_provider(
+        Settings(
+            provider="openai",
+            model_name="gpt-4o-mini",
+            openai_api_key="test-key",
+        )
+    )
+    gemini_provider = build_model_provider(
+        Settings(
+            provider="gemini",
+            model_name="gemini-2.5-flash",
+            gemini_api_key="test-key",
+        )
+    )
+
+    assert openai_provider is not None
+    assert openai_provider.name == "openai"
+    assert openai_provider.create_model().model_name == "gpt-4o-mini"  # type: ignore[attr-defined]
+    assert gemini_provider is not None
+    assert gemini_provider.name == "gemini"
+    assert gemini_provider.create_model().model_name == "gemini-2.5-flash"  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio

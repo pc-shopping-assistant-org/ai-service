@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
 
+from ai_service.application.deterministic_answer_generator import (
+    DeterministicAnswerGenerator,
+)
+from ai_service.application.ports.answer_generator import AnswerGenerator
 from ai_service.config.settings import Settings, get_settings
 from ai_service.context.manager import ConversationManager
 from ai_service.graphs.comparison_graph import (
@@ -23,6 +29,8 @@ from ai_service.graphs.shopping_graph import (
 from ai_service.schemas.conversation import (
     ChatData,
     ChatRequest,
+    ChatStreamEvent,
+    ChatStreamEventType,
     CompareData,
     CompareRequest,
     ConsultData,
@@ -36,13 +44,20 @@ from ai_service.schemas.conversation import (
     SearchRequest,
 )
 from ai_service.schemas.response import ApiResponse, ErrorDetail, ResponseMessage
-from ai_service.services.answer_generator import (
-    AnswerGenerator,
-    PydanticAIAnswerGenerator,
-)
 from ai_service.services.backend_client import BackendClient, BackendUnavailableError
 from ai_service.services.retriever import CatalogRetriever
 from ai_service.services.semantic_retriever import build_catalog_retriever
+
+
+@dataclass(frozen=True)
+class _PreparedChat:
+    conversation_id: UUID
+    intent: str
+    query: str
+    products: list[ProductCard]
+    errors: list[ErrorDetail]
+    fallback: str
+    prompt: str
 
 
 class AssistantService:
@@ -57,10 +72,124 @@ class AssistantService:
         self.settings = settings or get_settings()
         self.backend_client = backend_client or BackendClient(self.settings)
         self.context_manager = context_manager or ConversationManager()
-        self.answer_generator = answer_generator or PydanticAIAnswerGenerator()
+        self.answer_generator = answer_generator or DeterministicAnswerGenerator()
         self.retriever = retriever or build_catalog_retriever(self.backend_client, self.settings)
 
     async def chat(self, request: ChatRequest) -> ApiResponse[ChatData]:
+        prepared = await self._prepare_chat(request)
+        answer = await self.answer_generator.generate(prepared.prompt, prepared.fallback)
+        self.context_manager.append(
+            prepared.conversation_id,
+            ConversationMessage(role="assistant", content=answer),
+        )
+        return ApiResponse(
+            data=ChatData(
+                conversation_id=prepared.conversation_id,
+                intent=prepared.intent,
+                answer=answer,
+                products=prepared.products,
+            ),
+            message=ResponseMessage.AI_CHAT_COMPLETED,
+            errors=prepared.errors,
+        )
+
+    async def stream_chat(
+        self,
+        request: ChatRequest,
+    ) -> AsyncIterator[ApiResponse[ChatStreamEvent]]:
+        """Stream a planned, catalog-grounded chat answer as envelope events."""
+        prepared = await self._prepare_chat(request)
+        yield ApiResponse(
+            data=ChatStreamEvent(
+                event=ChatStreamEventType.START,
+                conversation_id=prepared.conversation_id,
+            ),
+            message=ResponseMessage.AI_CHAT_STREAM_STARTED,
+        )
+
+        chunks: list[str] = []
+        try:
+            stream_method = getattr(self.answer_generator, "stream", None)
+            if callable(stream_method):
+                async for chunk in stream_method(prepared.prompt, prepared.fallback):
+                    if not chunk:
+                        continue
+                    chunks.append(chunk)
+                    yield ApiResponse(
+                        data=ChatStreamEvent(
+                            event=ChatStreamEventType.DELTA,
+                            conversation_id=prepared.conversation_id,
+                            delta=chunk,
+                        ),
+                        message=ResponseMessage.AI_CHAT_STREAM_DELTA,
+                    )
+            else:
+                # Existing test/deterministic adapters only need the complete
+                # application port.  They remain compatible with the stream
+                # endpoint by emitting one complete answer delta.
+                answer = await self.answer_generator.generate(
+                    prepared.prompt,
+                    prepared.fallback,
+                )
+                if answer:
+                    chunks.append(answer)
+                    yield ApiResponse(
+                        data=ChatStreamEvent(
+                            event=ChatStreamEventType.DELTA,
+                            conversation_id=prepared.conversation_id,
+                            delta=answer,
+                        ),
+                        message=ResponseMessage.AI_CHAT_STREAM_DELTA,
+                    )
+        except asyncio.CancelledError:
+            # Do not append a partial assistant message when the browser
+            # cancels a request or navigates away.
+            raise
+        except Exception:  # noqa: BLE001 - provider implementations vary
+            # An unexpected adapter error is terminal for this SSE stream. The
+            # provider adapter normally converts its own failures to fallback
+            # text, so this branch is reserved for broken custom adapters.
+            answer = "".join(chunks).strip() or prepared.fallback
+            self.context_manager.append(
+                prepared.conversation_id,
+                ConversationMessage(role="assistant", content=answer),
+            )
+            yield ApiResponse(
+                data=ChatStreamEvent(
+                    event=ChatStreamEventType.ERROR,
+                    conversation_id=prepared.conversation_id,
+                ),
+                message=ResponseMessage.AI_CHAT_STREAM_FAILED,
+                errors=[
+                    ErrorDetail(
+                        code=ResponseMessage.AI_CHAT_STREAM_FAILED.value,
+                        message="Streaming answer generation failed",
+                    )
+                ],
+            )
+            return
+
+        answer = "".join(chunks).strip() or prepared.fallback
+        self.context_manager.append(
+            prepared.conversation_id,
+            ConversationMessage(role="assistant", content=answer),
+        )
+        yield ApiResponse(
+            data=ChatStreamEvent(
+                event=ChatStreamEventType.COMPLETED,
+                conversation_id=prepared.conversation_id,
+                result=ChatData(
+                    conversation_id=prepared.conversation_id,
+                    intent=prepared.intent,
+                    answer=answer,
+                    products=prepared.products,
+                ),
+            ),
+            message=ResponseMessage.AI_CHAT_STREAM_COMPLETED,
+            errors=prepared.errors,
+        )
+
+    async def _prepare_chat(self, request: ChatRequest) -> _PreparedChat:
         conversation_id = self.context_manager.get_or_create(request.conversation_id)
         self.context_manager.append(
             conversation_id,
@@ -81,23 +210,14 @@ class AssistantService:
                     )
                 )
         fallback = self._chat_answer(plan.intent, plan.query, products)
-        answer = await self.answer_generator.generate(
-            self._chat_prompt(plan.query, plan.intent, products, conversation_id),
-            fallback,
-        )
-        self.context_manager.append(
-            conversation_id,
-            ConversationMessage(role="assistant", content=answer),
-        )
-        return ApiResponse(
-            data=ChatData(
-                conversation_id=conversation_id,
-                intent=plan.intent,
-                answer=answer,
-                products=products,
-            ),
-            message=ResponseMessage.AI_CHAT_COMPLETED,
+        return _PreparedChat(
+            conversation_id=conversation_id,
+            intent=plan.intent,
+            query=plan.query,
+            products=products,
             errors=errors,
+            fallback=fallback,
+            prompt=self._chat_prompt(plan.query, plan.intent, products, conversation_id),
         )
 
     async def search(self, request: SearchRequest) -> ApiResponse[SearchData]:

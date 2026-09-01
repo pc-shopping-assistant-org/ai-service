@@ -34,7 +34,22 @@ class Settings(BaseSettings):
     )
     embedding_provider: Literal["http", "hash"] = "http"
     embedding_dimension: int = Field(default=384, ge=2, le=4096)
+    provider: Literal["fallback", "openai", "gemini"] = "fallback"
     model_name: str | None = None
+    openai_model_name: str = "gpt-4o-mini"
+    gemini_model_name: str = "gemini-2.5-flash"
+    openai_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("AI_OPENAI_API_KEY", "OPENAI_API_KEY"),
+    )
+    gemini_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "AI_GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "GEMINI_API_KEY",
+        ),
+    )
     model_system_prompt: str = (
         "You are a PC shopping assistant. Answer in Vietnamese when the user "
         "uses Vietnamese. Use only the catalog context supplied in the prompt; "

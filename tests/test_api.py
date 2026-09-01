@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -45,3 +47,23 @@ def test_response_defaults_to_static_success_message() -> None:
     response = ApiResponse[None](data=None)
 
     assert response.message == "SUCCESS"
+
+
+def test_chat_stream_returns_sse_frames_with_canonical_envelopes() -> None:
+    response = TestClient(app).post("/api/v1/chat/stream", json={"message": "tìm laptop"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    frames = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert [frame["data"]["event"] for frame in frames] == [
+        "START",
+        "DELTA",
+        "COMPLETED",
+    ]
+    assert all(list(frame) == ["data", "message", "errors"] for frame in frames)
+    assert frames[0]["message"] == "AI_CHAT_STREAM_STARTED"
+    assert frames[-1]["message"] == "AI_CHAT_STREAM_COMPLETED"
