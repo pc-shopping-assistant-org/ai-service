@@ -14,7 +14,12 @@ class Settings(BaseSettings):
     contract can be integrated and tested first.
     """
 
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="AI_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="AI_",
+        extra="ignore",
+    )
 
     backend_api_url: str = "http://localhost:8080/api/v1"
     request_timeout_seconds: float = 5.0

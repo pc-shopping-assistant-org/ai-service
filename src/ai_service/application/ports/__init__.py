@@ -12,20 +12,60 @@ from ai_service.application.ports.catalog import (
     CatalogPageClient,
     CatalogRetriever,
 )
+from ai_service.application.ports.commerce import (
+    CatalogFilter,
+    CommerceClient,
+    PromotionReport,
+    VoucherOption,
+)
 from ai_service.application.ports.conversation import ConversationStore
 from ai_service.application.ports.graph_runner import GraphRunner
+from ai_service.application.ports.hardware import (
+    CompatibilityIssue,
+    CompatibilityReport,
+    ComponentCategory,
+    ComponentSpec,
+    HardwareRuleEngine,
+    RecommendedBuild,
+    WattageReport,
+)
 from ai_service.application.ports.use_case import UseCase
+from ai_service.application.ports.web_search import (
+    WebSearchCategory,
+    WebSearchClient,
+    WebSearchItem,
+    WebSearchQuery,
+    WebSearchResult,
+)
 
 __all__ = [
     "AnswerGenerator",
     "AssistantUseCase",
     "BackendCatalogClient",
     "CatalogClient",
+    "CatalogFilter",
     "CatalogPage",
     "CatalogPageClient",
     "CatalogRetriever",
+    "CommerceClient",
+    "CompatibilityIssue",
+    "CompatibilityReport",
+    "ComponentCategory",
+    "ComponentSpec",
     "ConversationStore",
     "GraphRunner",
+    "HardwareRuleEngine",
+    "PromotionReport",
+    "RecommendedBuild",
     "StreamingAnswerGenerator",
     "UseCase",
+    "VoucherOption",
+    "WattageReport",
+    "WebSearchCategory",
+    "WebSearchClient",
+    "WebSearchItem",
+    "WebSearchQuery",
+    "WebSearchResult",
 ]
+
+
