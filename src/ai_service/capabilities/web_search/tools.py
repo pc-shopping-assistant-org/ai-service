@@ -10,6 +10,7 @@ from ai_service.application.ports.web_search import (
 )
 from ai_service.capabilities.web_search.schemas import (
     BuildGuideSearchArgs,
+    DriverSoftwareSearchArgs,
     GameRequirementSearchArgs,
     HardwareCompatibilitySearchArgs,
     HardwareIssueSearchArgs,
@@ -17,6 +18,7 @@ from ai_service.capabilities.web_search.schemas import (
     LiveSearchResultView,
     ProductReviewSearchArgs,
     PsuTierSearchArgs,
+    VendorSpecsSearchArgs,
 )
 from ai_service.infrastructure.search.duckduckgo_adapter import (
     DuckDuckGoSearchAdapter,
@@ -148,6 +150,46 @@ class WebSearchTools:
         )
         res = await self.search_client.search(search_query)
         return self._format_response("Bảng xếp hạng an toàn bộ nguồn (PSU Tier List)", res)
+
+    async def search_driver_and_software(
+        self, args: DriverSoftwareSearchArgs
+    ) -> LiveSearchResponse:
+        """Tra cứu link tải Driver chính thức, phiên bản cập nhật BIOS bo mạch chủ hoặc phần mềm điều khiển LED/quạt của hãng.
+
+        Ví dụ: 'NVIDIA GeForce Game Ready Driver mới nhất', 'MSI B760M BIOS update fix lỗi', 'ASUS Armoury Crate download'.
+        """
+        soft_kw = {
+            "VGA_DRIVER": "official graphics driver download latest",
+            "BIOS_UPDATE": "motherboard BIOS update download official",
+            "CHIPSET_DRIVER": "chipset driver support download",
+            "RGB_CONTROL": "RGB software utility control download",
+        }.get(args.software_type, "official driver download")
+
+        query_str = f"{args.component_name} {soft_kw}"
+        search_query = WebSearchQuery(
+            query=query_str,
+            category=WebSearchCategory.DRIVER_SOFTWARE,
+            limit=4,
+        )
+        res = await self.search_client.search(search_query)
+        return self._format_response("Driver & Phần mềm chính hãng", res)
+
+    async def search_tech_specs_from_vendor(
+        self, args: VendorSpecsSearchArgs
+    ) -> LiveSearchResponse:
+        """Tra cứu bảng thông số kỹ thuật chuẩn từ trang chủ nhà sản xuất (khi kho nội bộ thiếu thông tin).
+
+        Ví dụ: 'ASUS TUF RTX 4070 Ti SUPER chiều dài mm', 'Thermalright Assassin X 120 chiều cao mm', 'khe tản nhiệt m.2'.
+        """
+        attr_part = f" {args.spec_attribute}" if args.spec_attribute else " specifications dimensions clearance official"
+        query_str = f"{args.product_model}{attr_part}"
+        search_query = WebSearchQuery(
+            query=query_str,
+            category=WebSearchCategory.VENDOR_SPECS,
+            limit=4,
+        )
+        res = await self.search_client.search(search_query)
+        return self._format_response("Thông số kỹ thuật chính thức từ nhà sản xuất", res)
 
     def _format_response(
         self, topic: str, search_result: WebSearchResult

@@ -57,3 +57,47 @@ def test_pc_builder_tools_find_alternatives() -> None:
     result = tools.find_compatible_alternatives(args)
     assert len(result.alternatives) > 0
     assert any("B650" in a.name for a in result.alternatives)
+
+
+def test_pc_builder_tools_bottleneck() -> None:
+    from ai_service.application.ports.hardware import ResolutionTier
+    from ai_service.capabilities.pc_builder.schemas import AnalyzeBottleneckArgs
+
+    tools = PCBuilderTools()
+    res = tools.analyze_bottleneck_balance(
+        AnalyzeBottleneckArgs(
+            cpu_name="Ryzen 5 7600",
+            gpu_name="GeForce RTX 4070 SUPER",
+            resolution=ResolutionTier.RES_1440P,
+        )
+    )
+    assert res.status.value == "BALANCED"
+
+
+def test_pc_builder_tools_upgrade_path() -> None:
+    from ai_service.capabilities.pc_builder.schemas import AssessUpgradePathArgs
+
+    tools = PCBuilderTools()
+    res = tools.assess_upgrade_path(
+        AssessUpgradePathArgs(
+            socket="LGA1700",
+            psu_wattage=650,
+            ram_type="DDR4",
+        )
+    )
+    assert "MATURE" in res.platform_lifecycle
+    assert "DDR4" in res.ram_upgradeability
+
+
+def test_pc_builder_tools_peripherals() -> None:
+    from ai_service.capabilities.pc_builder.schemas import RecommendPeripheralsArgs
+
+    tools = PCBuilderTools()
+    res = tools.recommend_monitor_and_peripherals(
+        RecommendPeripheralsArgs(
+            gpu_name="GeForce RTX 4080 SUPER",
+            target_use_case="Gaming AAA Đồ Họa Đẹp",
+        )
+    )
+    assert "4K" in res.recommended_display_resolution or "2K" in res.recommended_display_resolution
+    assert len(res.display_examples) > 0

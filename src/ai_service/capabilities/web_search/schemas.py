@@ -77,6 +77,30 @@ class PsuTierSearchArgs(BaseModel):
     psu_model_name: str = Field(description="Full PSU model name and brand (e.g. 'MSI MAG A650BN', 'Corsair RM850x', 'Seasonic Focus GX').")
 
 
+class DriverSoftwareSearchArgs(BaseModel):
+    """Parameters for looking up latest drivers, BIOS updates, or hardware companion software."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    component_name: str = Field(description="Hardware component or motherboard model (e.g. 'RTX 4070 Super', 'MSI B760M GAMING PLUS', 'Ryzen 5 7600X').")
+    software_type: Literal["VGA_DRIVER", "BIOS_UPDATE", "CHIPSET_DRIVER", "RGB_CONTROL"] = Field(
+        default="VGA_DRIVER",
+        description="Type of software or driver needed.",
+    )
+
+
+class VendorSpecsSearchArgs(BaseModel):
+    """Parameters for searching manufacturer official spec sheets when internal catalog attributes are missing."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    product_model: str = Field(description="Exact hardware model name (e.g. 'Thermalright Peerless Assassin 120 SE', 'ASUS TUF Gaming GeForce RTX 4070 Ti SUPER').")
+    spec_attribute: str | None = Field(
+        default=None,
+        description="Specific attribute to search (e.g. 'kích thước dài x rộng x cao', 'chiều cao tản nhiệt', 'chuẩn nguồn khuyến nghị', 'cổng kết nối displayport').",
+    )
+
+
 class LiveSearchResultView(BaseModel):
     title: str
     url: str
@@ -93,6 +117,7 @@ class LiveSearchResponse(BaseModel):
 
 __all__ = [
     "BuildGuideSearchArgs",
+    "DriverSoftwareSearchArgs",
     "GameRequirementSearchArgs",
     "HardwareCompatibilitySearchArgs",
     "HardwareIssueSearchArgs",
@@ -100,4 +125,5 @@ __all__ = [
     "LiveSearchResultView",
     "ProductReviewSearchArgs",
     "PsuTierSearchArgs",
+    "VendorSpecsSearchArgs",
 ]

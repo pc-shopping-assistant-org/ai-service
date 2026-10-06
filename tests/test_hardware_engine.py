@@ -92,3 +92,45 @@ def test_recommend_build(engine: LocalHardwareRuleEngine) -> None:
     assert len(build.parts) >= 6
     assert any(p.slot == ComponentCategory.GPU for p in build.parts)
     assert build.compatibility_guaranteed is True
+
+
+def test_analyze_bottleneck_balanced(engine: LocalHardwareRuleEngine) -> None:
+    report = engine.analyze_bottleneck(
+        cpu_name="Intel Core i5-12400F",
+        gpu_name="GeForce RTX 4060",
+    )
+    assert report.status.value == "BALANCED"
+    assert report.bottleneck_percentage <= 8.0
+
+
+def test_analyze_bottleneck_cpu_bound(engine: LocalHardwareRuleEngine) -> None:
+    from ai_service.application.ports.hardware import ResolutionTier
+
+    report = engine.analyze_bottleneck(
+        cpu_name="Core i3-12100F",
+        gpu_name="GeForce RTX 4080",
+        resolution=ResolutionTier.RES_1080P,
+    )
+    assert report.status.value == "CPU_BOTTLENECK"
+    assert report.bottleneck_percentage > 15.0
+
+
+def test_assess_upgrade_path_am5(engine: LocalHardwareRuleEngine) -> None:
+    report = engine.assess_upgrade_path(
+        socket="AM5",
+        psu_wattage=750,
+        ram_type="DDR5",
+    )
+    assert "ACTIVE" in report.platform_lifecycle
+    assert any("7800X3D" in opt for opt in report.cpu_upgrade_options)
+    assert "DDR5" in report.ram_upgradeability
+
+
+def test_recommend_peripherals(engine: LocalHardwareRuleEngine) -> None:
+    report = engine.recommend_peripherals(
+        gpu_name="GeForce RTX 4070 SUPER",
+        target_use_case="Gaming AAA",
+    )
+    assert "2K" in report.recommended_display_resolution
+    assert len(report.display_examples) > 0
+    assert len(report.recommended_peripherals) > 0

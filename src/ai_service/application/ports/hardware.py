@@ -38,6 +38,21 @@ class ComponentSpec(BaseModel):
     max_gpu_length_mm: int | None = None
     cooler_height_mm: int | None = None
     max_cooler_height_mm: int | None = None
+    performance_score: float | None = None
+    vram_gb: int | None = None
+    capacity_gb: int | None = None
+    psu_tier: str | None = None
+    efficiency_rating: str | None = None
+    brand: str | None = None
+    has_integrated_graphics: bool = False
+    integrated_graphics_score: float | None = None
+    integrated_graphics_power_watts: int | None = None
+    includes_stock_cooler: bool = False
+    stock_cooler_height_mm: int | None = None
+    stock_cooler_tdp_watts: int | None = None
+    stock_cooler_score: float | None = None
+    is_integrated: bool = False
+    supported_sockets: list[str] = Field(default_factory=list)
     extra_specs: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -90,6 +105,54 @@ class RecommendedBuild(BaseModel):
     compatibility_guaranteed: bool = True
 
 
+class ResolutionTier(StrEnum):
+    RES_1080P = "1080P"
+    RES_1440P = "1440P"
+    RES_4K = "4K"
+
+
+class BottleneckRating(StrEnum):
+    BALANCED = "BALANCED"
+    CPU_BOTTLENECK = "CPU_BOTTLENECK"
+    GPU_BOTTLENECK = "GPU_BOTTLENECK"
+
+
+class BottleneckReport(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    cpu_name: str
+    gpu_name: str
+    resolution: ResolutionTier
+    bottleneck_percentage: float
+    status: BottleneckRating
+    explanation: str
+    recommendation: str
+
+
+class UpgradePathReport(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    platform_socket: str
+    platform_lifecycle: str
+    cpu_upgrade_options: list[str]
+    gpu_upgrade_headroom: str
+    ram_upgradeability: str
+    verdict: str
+
+
+class PeripheralRecommendation(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    gpu_model: str
+    target_use_case: str
+    recommended_display_resolution: str
+    recommended_refresh_rate: str
+    recommended_panel: str
+    display_examples: list[str]
+    recommended_peripherals: list[str]
+    advice: str
+
+
 class HardwareRuleEngine(Protocol):
     """Domain rule engine interface for PC component compatibility & sizing."""
 
@@ -109,3 +172,27 @@ class HardwareRuleEngine(Protocol):
         purpose: BuildPurpose = BuildPurpose.GAMING_AAA,
     ) -> RecommendedBuild:
         """Synthesize an optimal balanced PC configuration within budget."""
+
+    def analyze_bottleneck(
+        self,
+        cpu_name: str,
+        gpu_name: str,
+        resolution: ResolutionTier = ResolutionTier.RES_1440P,
+    ) -> BottleneckReport:
+        """Analyze performance balance and bottleneck percentage between CPU and GPU."""
+
+    def assess_upgrade_path(
+        self,
+        socket: str,
+        psu_wattage: int,
+        ram_type: str,
+        current_gpu: str | None = None,
+    ) -> UpgradePathReport:
+        """Evaluate platform lifecycle and future component upgrade potential."""
+
+    def recommend_peripherals(
+        self,
+        gpu_name: str,
+        target_use_case: str = "Gaming",
+    ) -> PeripheralRecommendation:
+        """Recommend matching monitor specifications and peripherals."""

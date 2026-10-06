@@ -79,10 +79,44 @@ class ExportBuildToCartArgs(BaseModel):
     )
 
 
+class CompareProductsArgs(BaseModel):
+    """Parameters for comparing technical specifications and prices across products."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    product_ids: list[str] = Field(
+        description="List of 2 to 4 product UUIDs or SKU codes to compare side-by-side.",
+        min_length=2,
+        max_length=5,
+    )
+
+
+class GetProductDetailSpecsArgs(BaseModel):
+    """Parameters for retrieving the full technical specification sheet of a specific product."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    product_id: str = Field(description="Product UUID or SKU identifier to query details for.")
+
+
+class QueryStorePoliciesArgs(BaseModel):
+    """Parameters for looking up official store policies and customer guarantees."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    topic: Literal["ALL", "WARRANTY", "ASSEMBLY", "RETURN", "INSTALLMENT", "SHIPPING"] = Field(
+        default="ALL",
+        description="Specific policy topic or 'ALL' to view all service guarantees.",
+    )
+
+
 __all__ = [
     "CheckPromotionsArgs",
+    "CompareProductsArgs",
     "ExportBuildToCartArgs",
     "FilterCatalogArgs",
+    "GetProductDetailSpecsArgs",
     "ManageCartArgs",
+    "QueryStorePoliciesArgs",
     "TrackOrderArgs",
 ]

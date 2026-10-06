@@ -11,13 +11,19 @@ from ai_service.application.ports.commerce import (
     CatalogFilter,
     CommerceClient,
     OrderStatusView,
+    ProductComparisonReport,
+    ProductDetailSpec,
     PromotionReport,
+    StorePolicyReport,
 )
 from ai_service.capabilities.shopping_assistant.schemas import (
     CheckPromotionsArgs,
+    CompareProductsArgs,
     ExportBuildToCartArgs,
     FilterCatalogArgs,
+    GetProductDetailSpecsArgs,
     ManageCartArgs,
+    QueryStorePoliciesArgs,
     TrackOrderArgs,
 )
 from ai_service.infrastructure.commerce.backend_commerce_client import (
@@ -124,6 +130,45 @@ class ShoppingAssistantTools:
             total=subtotal,
             items=items,
         )
+
+    async def compare_products(self, args: CompareProductsArgs) -> ProductComparisonReport:
+        """So sánh chi tiết 2-4 sản phẩm hoặc linh kiện trực tiếp từ cơ sở dữ liệu của shop.
+
+        Đối chiếu bảng thông số kỹ thuật (xung nhịp, chuẩn kết nối, VRAM, TDP...), giá bán và đưa ra nhận xét đánh giá phân khúc.
+        """
+        return await self.commerce_client.compare_products(args.product_ids)
+
+    async def get_product_detail_specs(self, args: GetProductDetailSpecsArgs) -> ProductDetailSpec:
+        """Lấy toàn bộ bảng thông số kỹ thuật chi tiết của một sản phẩm trong kho.
+
+        Hỗ trợ trả lời các câu hỏi kỹ thuật sâu: số khe M.2 NVMe, chuẩn Wi-Fi, cổng kết nối, VRM, công suất tản nhiệt...
+        """
+        detail = await self.commerce_client.get_product_detail(args.product_id)
+        if detail is not None:
+            return detail
+        return ProductDetailSpec(
+            id=uuid4(),
+            name=f"Sản phẩm {args.product_id}",
+            category="General",
+            list_price=0,
+            in_stock=False,
+            brand="Chính hãng",
+            warranty_months=0,
+            specifications={"Thông báo": "Không tìm thấy chi tiết sản phẩm với ID cung cấp."},
+            highlights=["Vui lòng kiểm tra lại mã sản phẩm."],
+        )
+
+    async def query_store_policies(self, args: QueryStorePoliciesArgs) -> StorePolicyReport:
+        """Tra cứu chính sách dịch vụ và cam kết chính thức của cửa hàng (tránh việc AI tự bịa quy định).
+
+        Bao gồm:
+        - Chính sách lắp ráp & cài đặt máy (miễn phí công lắp ráp, cài win/driver).
+        - Chính sách bảo hành (lỗi 1 đổi 1 trong 15 ngày, bảo hành 24-36 tháng).
+        - Chính sách đổi trả linh hoạt.
+        - Trả góp 0% qua thẻ tín dụng và CCCD gắn chip.
+        - Chính sách vận chuyển hỏa tốc & đóng kiện gỗ an toàn toàn quốc.
+        """
+        return await self.commerce_client.get_store_policies(topic=args.topic)
 
 
 __all__ = ["ShoppingAssistantTools"]

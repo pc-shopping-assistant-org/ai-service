@@ -62,3 +62,43 @@ async def test_export_build_to_cart(commerce_tools: ShoppingAssistantTools) -> N
     cart = await commerce_tools.export_build_to_cart(args)
     assert cart.item_count == 6
     assert len(cart.items) == 6
+
+
+@pytest.mark.asyncio
+async def test_compare_products(commerce_tools: ShoppingAssistantTools) -> None:
+    from ai_service.capabilities.shopping_assistant.schemas import CompareProductsArgs
+
+    args = CompareProductsArgs(product_ids=[str(uuid4()), str(uuid4())])
+    report = await commerce_tools.compare_products(args)
+    assert len(report.compared_products) == 2
+    assert len(report.differences_summary) > 0
+
+
+@pytest.mark.asyncio
+async def test_get_product_detail_specs(commerce_tools: ShoppingAssistantTools) -> None:
+    from ai_service.capabilities.shopping_assistant.schemas import (
+        GetProductDetailSpecsArgs,
+    )
+
+    args = GetProductDetailSpecsArgs(product_id=str(uuid4()))
+    detail = await commerce_tools.get_product_detail_specs(args)
+    assert detail.name != ""
+    assert detail.warranty_months >= 24
+    assert len(detail.specifications) > 0
+
+
+@pytest.mark.asyncio
+async def test_query_store_policies(commerce_tools: ShoppingAssistantTools) -> None:
+    from ai_service.capabilities.shopping_assistant.schemas import (
+        QueryStorePoliciesArgs,
+    )
+
+    # 1. Query warranty
+    args_w = QueryStorePoliciesArgs(topic="WARRANTY")
+    report_w = await commerce_tools.query_store_policies(args_w)
+    assert any("Bảo hành" in p.title for p in report_w.policies)
+
+    # 2. Query all
+    args_all = QueryStorePoliciesArgs(topic="ALL")
+    report_all = await commerce_tools.query_store_policies(args_all)
+    assert len(report_all.policies) >= 5

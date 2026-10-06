@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -68,6 +69,53 @@ class OrderStatusView(BaseModel):
     note: str
 
 
+class ProductDetailSpec(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: UUID
+    name: str
+    category: str
+    list_price: int
+    in_stock: bool
+    brand: str
+    warranty_months: int
+    specifications: dict[str, Any] = Field(default_factory=dict)
+    highlights: list[str] = Field(default_factory=list)
+
+
+class ProductComparisonItem(BaseModel):
+    product_id: UUID
+    name: str
+    price: int
+    key_specs: dict[str, str] = Field(default_factory=dict)
+
+
+class ProductComparisonReport(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    compared_products: list[ProductComparisonItem]
+    shared_specs: list[str] = Field(default_factory=list)
+    differences_summary: list[str] = Field(default_factory=list)
+    verdict: str
+
+
+class StorePolicyItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    category: str  # WARRANTY, ASSEMBLY, RETURN, INSTALLMENT, SHIPPING
+    title: str
+    content: str
+    conditions: list[str] = Field(default_factory=list)
+
+
+class StorePolicyReport(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    topic_queried: str | None = None
+    policies: list[StorePolicyItem] = Field(default_factory=list)
+    general_hotline: str = "1800 6868"
+
+
 class CommerceClient(Protocol):
     """Client protocol for store commerce operations."""
 
@@ -94,3 +142,12 @@ class CommerceClient(Protocol):
 
     async def get_order_by_code(self, order_code: str) -> OrderStatusView | None:
         """Lookup order shipping/delivery status."""
+
+    async def get_product_detail(self, product_id: UUID | str) -> ProductDetailSpec | None:
+        """Get full technical specifications and details of a specific product."""
+
+    async def compare_products(self, product_ids: Sequence[UUID | str]) -> ProductComparisonReport:
+        """Compare technical specs, warranty, and pricing across 2 or more products."""
+
+    async def get_store_policies(self, topic: str | None = None) -> StorePolicyReport:
+        """Query official store policies on assembly, warranty, returns, installment, and shipping."""

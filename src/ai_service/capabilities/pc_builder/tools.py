@@ -3,18 +3,25 @@
 from __future__ import annotations
 
 from ai_service.application.ports.hardware import (
+    BottleneckReport,
+    BuildPurpose,
     CompatibilityReport,
     HardwareRuleEngine,
+    PeripheralRecommendation,
     RecommendedBuild,
+    UpgradePathReport,
     WattageReport,
 )
 from ai_service.capabilities.pc_builder.schemas import (
     AlternativeComponentView,
+    AnalyzeBottleneckArgs,
+    AssessUpgradePathArgs,
     CalculateWattageArgs,
     CheckCompatibilityArgs,
     FindAlternativesArgs,
     FindAlternativesOutput,
     RecommendBuildArgs,
+    RecommendPeripheralsArgs,
 )
 from ai_service.infrastructure.hardware.rule_engine import LocalHardwareRuleEngine
 
@@ -53,9 +60,15 @@ class PCBuilderTools:
 
         Tránh nghẽn cổ chai (bottleneck) giữa CPU và GPU, tối ưu hiệu năng trên từng đồng chi phí.
         """
+        purpose_val = BuildPurpose.GAMING_AAA
+        if args.purpose:
+            try:
+                purpose_val = BuildPurpose(args.purpose)
+            except ValueError:
+                purpose_val = BuildPurpose.GAMING_AAA
         return self.rule_engine.recommend_build(
             budget=args.budget_vnd,
-            purpose=args.purpose,
+            purpose=purpose_val,
         )
 
     def find_compatible_alternatives(self, args: FindAlternativesArgs) -> FindAlternativesOutput:
@@ -125,6 +138,39 @@ class PCBuilderTools:
             requested_ram_type=args.required_ram_type,
             alternatives=alternatives[: args.limit],
             message=f"Đã tìm thấy {len(alternatives)} linh kiện {args.slot} tương thích phù hợp yêu cầu.",
+        )
+
+    def analyze_bottleneck_balance(self, args: AnalyzeBottleneckArgs) -> BottleneckReport:
+        """Phân tích nghẽn cổ chai (bottleneck) và sự cân xứng hiệu năng giữa CPU và Card đồ họa (GPU).
+
+        Đo lường tỉ lệ phần trăm nghẽn theo từng độ phân giải mục tiêu (1080p, 1440p, 4K) và đưa ra lời khuyên tối ưu.
+        """
+        return self.rule_engine.analyze_bottleneck(
+            cpu_name=args.cpu_name,
+            gpu_name=args.gpu_name,
+            resolution=args.resolution,
+        )
+
+    def assess_upgrade_path(self, args: AssessUpgradePathArgs) -> UpgradePathReport:
+        """Đánh giá tiềm năng nâng cấp trong tương lai của dàn máy (vòng đời socket bo mạch chủ, công suất nguồn dư, chuẩn RAM).
+
+        Giúp khách hàng biết cấu hình này có thể nâng cấp CPU/GPU trong 2-4 năm tới mà không cần thay toàn bộ hệ thống hay không.
+        """
+        return self.rule_engine.assess_upgrade_path(
+            socket=args.socket,
+            psu_wattage=args.psu_wattage,
+            ram_type=args.ram_type,
+            current_gpu=args.current_gpu,
+        )
+
+    def recommend_monitor_and_peripherals(self, args: RecommendPeripheralsArgs) -> PeripheralRecommendation:
+        """Gợi ý màn hình (độ phân giải, tần số quét Hz, tấm nền IPS/OLED) và phụ kiện (chuột, phím, tai nghe) tương xứng với sức mạnh của bộ PC.
+
+        Tránh lãng phí sức mạnh card đồ họa cao cấp hoặc chọn màn hình quá sức chịu đựng của linh kiện.
+        """
+        return self.rule_engine.recommend_peripherals(
+            gpu_name=args.gpu_name,
+            target_use_case=args.target_use_case,
         )
 
 

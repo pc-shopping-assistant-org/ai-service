@@ -130,3 +130,29 @@ async def test_search_psu_tier(search_tools: WebSearchTools) -> None:
     res = await search_tools.search_psu_tier(args)
     assert res.category == "PSU_TIER"
     assert len(res.results) > 0
+
+
+@pytest.mark.asyncio
+async def test_search_driver_and_software(search_tools: WebSearchTools) -> None:
+    from ai_service.capabilities.web_search.schemas import DriverSoftwareSearchArgs
+
+    args = DriverSoftwareSearchArgs(
+        component_name="RTX 4070 SUPER",
+        software_type="VGA_DRIVER",
+    )
+    res = await search_tools.search_driver_and_software(args)
+    assert res.category == "DRIVER_SOFTWARE"
+    assert len(res.results) > 0
+
+
+@pytest.mark.asyncio
+async def test_search_tech_specs_from_vendor(search_tools: WebSearchTools) -> None:
+    from ai_service.capabilities.web_search.schemas import VendorSpecsSearchArgs
+
+    args = VendorSpecsSearchArgs(
+        product_model="Thermalright Peerless Assassin 120 SE",
+        spec_attribute="chiều cao mm",
+    )
+    res = await search_tools.search_tech_specs_from_vendor(args)
+    assert res.category == "VENDOR_SPECS"
+    assert len(res.results) > 0
