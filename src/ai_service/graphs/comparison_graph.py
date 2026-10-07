@@ -3,13 +3,11 @@
 from ai_service.capabilities.assistant.graphs.comparison import (
     ComparisonInput,
     ComparisonOutput,
-    ComparisonState,
-    comparison_graph,
+    normalize_comparison,
 )
 
 __all__ = [
     "ComparisonInput",
     "ComparisonOutput",
-    "ComparisonState",
-    "comparison_graph",
+    "normalize_comparison",
 ]

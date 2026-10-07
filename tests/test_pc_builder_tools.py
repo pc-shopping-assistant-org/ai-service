@@ -38,12 +38,12 @@ def test_pc_builder_tools_calculate_wattage() -> None:
     assert result.is_sufficient is True
 
 
-def test_pc_builder_tools_recommend_build() -> None:
+def test_pc_builder_tools_recommend_build(realistic_catalog: list[ComponentSpec]) -> None:
     tools = PCBuilderTools()
     args = RecommendBuildArgs(budget_vnd=15_000_000, purpose=BuildPurpose.GAMING_ESPORTS)
-    result = tools.recommend_pc_build(args)
-    assert result.total_estimated_price <= 16_000_000
-    assert len(result.parts) > 5
+    result = tools.recommend_pc_build(args, realistic_catalog)
+    assert result.recommendation.build.total_price <= args.budget_vnd
+    assert len(result.recommendation.build.parts) == 8
 
 
 def test_pc_builder_tools_find_alternatives() -> None:

@@ -12,7 +12,7 @@ from ai_service.schemas.conversation import (
     ConsultRequest,
     SearchRequest,
 )
-from ai_service.services.answer_generator import PydanticAIAnswerGenerator
+from ai_service.services.answer_generator import ModelAnswerGenerator
 from ai_service.services.assistant_service import AssistantService
 from ai_service.services.retriever import BackendCatalogRetriever
 
@@ -120,27 +120,10 @@ async def test_configured_answer_generator_is_grounded_and_keeps_envelope_key() 
 
 
 @pytest.mark.asyncio
-async def test_pydantic_ai_generator_uses_deterministic_fallback_without_model() -> None:
-    generator = PydanticAIAnswerGenerator(Settings(model_name=None))
+async def test_model_generator_uses_deterministic_fallback_without_model() -> None:
+    generator = ModelAnswerGenerator(Settings(model_name=None))
 
     assert await generator.generate("ignored", "local fallback") == "local fallback"
-
-
-@pytest.mark.asyncio
-async def test_pydantic_ai_generator_can_run_with_builtin_test_model() -> None:
-    generator = PydanticAIAnswerGenerator(Settings(model_name="test"))
-
-    assert await generator.generate("say hello", "local fallback") == "a"
-
-
-@pytest.mark.asyncio
-async def test_pydantic_ai_generator_streams_with_builtin_test_model() -> None:
-    generator = PydanticAIAnswerGenerator(Settings(model_name="test"))
-
-    chunks = [chunk async for chunk in generator.stream("say hello", "local fallback")]
-
-    assert "".join(chunks)
-    assert chunks != ["local fallback"]
 
 
 def test_model_provider_adapters_are_lazy_but_build_supported_models() -> None:
@@ -166,7 +149,7 @@ def test_model_provider_adapters_are_lazy_but_build_supported_models() -> None:
     assert openai_provider.create_model().model_name == "gpt-4o-mini"  # type: ignore[attr-defined]
     assert gemini_provider is not None
     assert gemini_provider.name == "gemini"
-    assert gemini_provider.create_model().model_name == "gemini-2.5-flash"  # type: ignore[attr-defined]
+    assert gemini_provider.create_model().model == "gemini-2.5-flash"  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio

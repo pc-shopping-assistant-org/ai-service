@@ -1,3 +1,4 @@
+import httpx
 import pytest
 
 from ai_service.application.ports.web_search import (
@@ -24,7 +25,18 @@ def search_adapter() -> DuckDuckGoSearchAdapter:
 
 
 @pytest.fixture
-def search_tools() -> WebSearchTools:
+def search_tools(monkeypatch: pytest.MonkeyPatch) -> WebSearchTools:
+    original_client = httpx.AsyncClient
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text='''
+            <h2 class="result__title"><a class="result__url" href="https://example.org/review">Fixture review</a></h2>
+            <a class="result__snippet" href="https://example.org/review">RAM clearance fixture evidence</a>
+        ''')
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(respond), **kwargs,
+    ))
     return WebSearchTools()
 
 

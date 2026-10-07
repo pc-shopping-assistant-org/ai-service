@@ -1,5 +1,5 @@
-"""Adapters around the Pydantic Graph runtime."""
+"""Adapters around the LangGraph runtime."""
 
-from ai_service.infrastructure.graph.pydantic_runner import PydanticGraphRunner
+from ai_service.infrastructure.graph.langgraph_runner import LangGraphRunner
 
-__all__ = ["PydanticGraphRunner"]
+__all__ = ["LangGraphRunner"]

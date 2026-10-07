@@ -9,7 +9,7 @@ from enum import StrEnum
 
 
 class AIProvider(StrEnum):
-    """LLM provider selected for PydanticAI answer generation."""
+    """LLM provider selected for model answer generation."""
 
     FALLBACK = "fallback"
     OPENAI = "openai"

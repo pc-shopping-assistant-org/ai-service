@@ -2,24 +2,35 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from ai_service.application.errors import BackendUnavailableError
 from ai_service.application.ports.hardware import (
     BottleneckReport,
-    BuildPurpose,
     CompatibilityReport,
+    ComponentSpec,
     HardwareRuleEngine,
     PeripheralRecommendation,
-    RecommendedBuild,
     UpgradePathReport,
     WattageReport,
+)
+from ai_service.capabilities.pc_builder.application import (
+    BuildApplicationResult,
+    PCBuildApplicationService,
+    build_explanation_context,
 )
 from ai_service.capabilities.pc_builder.schemas import (
     AlternativeComponentView,
     AnalyzeBottleneckArgs,
     AssessUpgradePathArgs,
+    BuildObjective,
     CalculateWattageArgs,
     CheckCompatibilityArgs,
+    ConstraintSource,
+    ConstraintValue,
     FindAlternativesArgs,
     FindAlternativesOutput,
+    PCBuildConstraints,
     RecommendBuildArgs,
     RecommendPeripheralsArgs,
 )
@@ -27,10 +38,60 @@ from ai_service.infrastructure.hardware.rule_engine import LocalHardwareRuleEngi
 
 
 class PCBuilderTools:
-    """Executable tools callable by PydanticAI agents or orchestration workflows."""
+    """Deterministic operations callable by application/graph workflows."""
 
-    def __init__(self, rule_engine: HardwareRuleEngine | None = None) -> None:
+    def __init__(
+        self,
+        rule_engine: HardwareRuleEngine | None = None,
+        application_service: PCBuildApplicationService | None = None,
+    ) -> None:
         self.rule_engine = rule_engine or LocalHardwareRuleEngine()
+        self.application_service = application_service or PCBuildApplicationService()
+
+    def build_pc(
+        self,
+        constraints: PCBuildConstraints,
+        catalog: list[ComponentSpec],
+        requested_objective: BuildObjective | None = None,
+    ) -> BuildApplicationResult:
+        """Run deterministic optimization and recommendation policy."""
+        return self.application_service.build_pc(
+            constraints=constraints,
+            catalog=catalog,
+            requested_objective=requested_objective,
+        )
+
+    def build_pc_from_args(
+        self,
+        args: RecommendBuildArgs,
+        catalog: list[ComponentSpec],
+        requested_objective: BuildObjective | None = None,
+    ) -> BuildApplicationResult:
+        """Convert RecommendBuildArgs into PCBuildConstraints and run the optimization pipeline."""
+        constraints = PCBuildConstraints(
+            target_budget_vnd=ConstraintValue(
+                value=args.budget_vnd,
+                source=ConstraintSource.USER,
+                confidence=1.0,
+            ),
+            use_case=ConstraintValue(
+                value=args.use_case,
+                source=ConstraintSource.USER,
+                confidence=1.0,
+            ),
+        )
+        return self.build_pc(
+            constraints=constraints,
+            catalog=catalog,
+            requested_objective=requested_objective,
+        )
+
+    def explain_build(
+        self,
+        result: BuildApplicationResult,
+    ) -> dict[str, Any]:
+        """Produce factual explanation context for downstream presentation."""
+        return build_explanation_context(result)
 
     def check_pc_compatibility(self, args: CheckCompatibilityArgs) -> CompatibilityReport:
         """Kiểm tra tính tương thích vật lý và điện năng giữa các linh kiện PC đã chọn.
@@ -55,21 +116,13 @@ class PCBuilderTools:
             selected_psu_watts=args.selected_psu_watts,
         )
 
-    def recommend_pc_build(self, args: RecommendBuildArgs) -> RecommendedBuild:
-        """Đề xuất trọn bộ cấu hình PC cân bằng tối ưu theo mức ngân sách và mục đích sử dụng.
-
-        Tránh nghẽn cổ chai (bottleneck) giữa CPU và GPU, tối ưu hiệu năng trên từng đồng chi phí.
-        """
-        purpose_val = BuildPurpose.GAMING_AAA
-        if args.purpose:
-            try:
-                purpose_val = BuildPurpose(args.purpose)
-            except ValueError:
-                purpose_val = BuildPurpose.GAMING_AAA
-        return self.rule_engine.recommend_build(
-            budget=args.budget_vnd,
-            purpose=purpose_val,
-        )
+    def recommend_pc_build(
+        self, args: RecommendBuildArgs, catalog: list[ComponentSpec] | None = None,
+    ) -> BuildApplicationResult:
+        """Recommend only from explicitly supplied canonical component data."""
+        if catalog is None:
+            raise BackendUnavailableError("PC recommendation requires a canonical component catalog")
+        return self.build_pc_from_args(args, catalog)
 
     def find_compatible_alternatives(self, args: FindAlternativesArgs) -> FindAlternativesOutput:
         """Tìm linh kiện thay thế tương thích khi một linh kiện bị hết hàng hoặc vượt ngân sách.

@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from typing import Any
-from uuid import uuid4
 
+from ai_service.application.errors import BackendUnavailableError
 from ai_service.application.ports.commerce import (
-    CartItemView,
     CartSummary,
     CatalogFilter,
     CommerceClient,
@@ -32,7 +31,7 @@ from ai_service.infrastructure.commerce.backend_commerce_client import (
 
 
 class ShoppingAssistantTools:
-    """Executable commerce tools callable by PydanticAI agents or unified chat workflows."""
+    """Executable commerce operations callable by application/graph workflows."""
 
     def __init__(self, commerce_client: CommerceClient | None = None) -> None:
         self.commerce_client = commerce_client or BackendCommerceClient()
@@ -66,7 +65,7 @@ class ShoppingAssistantTools:
             product_ids=args.product_ids,
         )
 
-    async def manage_cart(self, args: ManageCartArgs) -> CartSummary:
+    async def manage_cart(self, args: ManageCartArgs) -> CartSummary | None:
         """Thao tác trực tiếp với giỏ hàng của khách hàng qua hội thoại.
 
         Hỗ trợ:
@@ -78,14 +77,7 @@ class ShoppingAssistantTools:
                 variant_id=args.variant_id,
                 quantity=args.quantity,
             )
-        cart = await self.commerce_client.get_cart()
-        return cart or CartSummary(
-            cart_id=uuid4(),
-            item_count=0,
-            subtotal=0,
-            total=0,
-            items=[],
-        )
+        return await self.commerce_client.get_cart()
 
     async def track_order_status(self, args: TrackOrderArgs) -> OrderStatusView:
         """Tra cứu trạng thái vận chuyển và tiến độ giao hàng của một đơn hàng theo mã đơn.
@@ -108,28 +100,8 @@ class ShoppingAssistantTools:
 
         Giúp khách hàng nhanh chóng chuyển từ giai đoạn tư vấn cấu hình sang bước thanh toán đặt cọc.
         """
-        items: list[CartItemView] = []
-        subtotal = 0
-        for vid in args.component_variant_ids:
-            item_price = 2500000
-            items.append(
-                CartItemView(
-                    variant_id=vid,
-                    product_name="Linh kiện trong bộ PC cấu hình",
-                    unit_price=item_price,
-                    quantity=1,
-                    subtotal=item_price,
-                )
-            )
-            subtotal += item_price
-
-        return CartSummary(
-            cart_id=uuid4(),
-            item_count=len(items),
-            subtotal=subtotal,
-            total=subtotal,
-            items=items,
-        )
+        # Single-item writes cannot replace an atomic, ownership-bound build export.
+        raise BackendUnavailableError("Atomic authenticated build export is not integrated")
 
     async def compare_products(self, args: CompareProductsArgs) -> ProductComparisonReport:
         """So sánh chi tiết 2-4 sản phẩm hoặc linh kiện trực tiếp từ cơ sở dữ liệu của shop.
@@ -138,25 +110,12 @@ class ShoppingAssistantTools:
         """
         return await self.commerce_client.compare_products(args.product_ids)
 
-    async def get_product_detail_specs(self, args: GetProductDetailSpecsArgs) -> ProductDetailSpec:
+    async def get_product_detail_specs(self, args: GetProductDetailSpecsArgs) -> ProductDetailSpec | None:
         """Lấy toàn bộ bảng thông số kỹ thuật chi tiết của một sản phẩm trong kho.
 
         Hỗ trợ trả lời các câu hỏi kỹ thuật sâu: số khe M.2 NVMe, chuẩn Wi-Fi, cổng kết nối, VRM, công suất tản nhiệt...
         """
-        detail = await self.commerce_client.get_product_detail(args.product_id)
-        if detail is not None:
-            return detail
-        return ProductDetailSpec(
-            id=uuid4(),
-            name=f"Sản phẩm {args.product_id}",
-            category="General",
-            list_price=0,
-            in_stock=False,
-            brand="Chính hãng",
-            warranty_months=0,
-            specifications={"Thông báo": "Không tìm thấy chi tiết sản phẩm với ID cung cấp."},
-            highlights=["Vui lòng kiểm tra lại mã sản phẩm."],
-        )
+        return await self.commerce_client.get_product_detail(args.product_id)
 
     async def query_store_policies(self, args: QueryStorePoliciesArgs) -> StorePolicyReport:
         """Tra cứu chính sách dịch vụ và cam kết chính thức của cửa hàng (tránh việc AI tự bịa quy định).

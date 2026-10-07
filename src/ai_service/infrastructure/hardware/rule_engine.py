@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from ai_service.application.errors import BackendUnavailableError
 from ai_service.application.ports.hardware import (
     BottleneckRating,
     BottleneckReport,
@@ -15,7 +16,6 @@ from ai_service.application.ports.hardware import (
     HardwareRuleEngine,
     PeripheralRecommendation,
     RecommendedBuild,
-    RecommendedPart,
     ResolutionTier,
     UpgradePathReport,
     WattageReport,
@@ -178,6 +178,22 @@ class LocalHardwareRuleEngine(HardwareRuleEngine):
                         )
                     )
 
+        if cpus and coolers:
+            cpu, cooler = cpus[0], coolers[0]
+            supported = cooler.supported_sockets or ([cooler.socket] if cooler.socket else [])
+            if not cpu.socket or not supported:
+                issues.append(CompatibilityIssue(
+                    level="ERROR", category="UNKNOWN_COOLER_SOCKET",
+                    components_involved=[cpu.name, cooler.name],
+                    message="Thiếu dữ liệu socket CPU hoặc socket hỗ trợ của tản nhiệt; chưa thể xác nhận tương thích.",
+                ))
+            elif _norm_str(cpu.socket) not in {_norm_str(socket) for socket in supported}:
+                issues.append(CompatibilityIssue(
+                    level="ERROR", category="COOLER_SOCKET_MISMATCH",
+                    components_involved=[cpu.name, cooler.name],
+                    message="Tản nhiệt không hỗ trợ socket của CPU.",
+                ))
+
         errors_count = sum(1 for i in issues if i.level == "ERROR")
         warnings_count = sum(1 for i in issues if i.level == "WARNING")
         return CompatibilityReport(
@@ -239,67 +255,8 @@ class LocalHardwareRuleEngine(HardwareRuleEngine):
         budget: int,
         purpose: BuildPurpose = BuildPurpose.GAMING_AAA,
     ) -> RecommendedBuild:
-        """Rule-based preset recommendation based on budget tier and use case."""
-        if budget <= 16_000_000:
-            parts = [
-                RecommendedPart(slot=ComponentCategory.CPU, name="Intel Core i3-12100F", estimated_price=1900000, key_specs="4C/8T, LGA1700"),
-                RecommendedPart(slot=ComponentCategory.MAINBOARD, name="ASRock H610M-HDV/M.2", estimated_price=1600000, key_specs="LGA1700, DDR4"),
-                RecommendedPart(slot=ComponentCategory.RAM, name="Kingston Fury Beast 16GB (2x8GB) DDR4 3200MHz", estimated_price=950000, key_specs="16GB DDR4"),
-                RecommendedPart(slot=ComponentCategory.STORAGE, name="Kingston NV2 500GB PCIe 4.0 NVMe", estimated_price=950000, key_specs="500GB NVMe"),
-                RecommendedPart(slot=ComponentCategory.GPU, name="AMD Radeon RX 6500 XT 4GB", estimated_price=3800000, key_specs="4GB GDDR6"),
-                RecommendedPart(slot=ComponentCategory.PSU, name="MSI MAG A550BN 550W 80 Plus Bronze", estimated_price=1100000, key_specs="550W Bronze"),
-                RecommendedPart(slot=ComponentCategory.CASE, name="Xigmatek NYX Air Arctic (mATX)", estimated_price=650000, key_specs="Micro-ATX"),
-            ]
-            summary = "Cấu hình PC Gaming Esport tiết kiệm: chiến mượt Liên Minh, Valorant, CS2, FO4 ở độ phân giải 1080p."
-
-        elif budget < 22_000_000:
-            parts = [
-                RecommendedPart(slot=ComponentCategory.CPU, name="Intel Core i5-12400F", estimated_price=2800000, key_specs="6C/12T, LGA1700"),
-                RecommendedPart(slot=ComponentCategory.MAINBOARD, name="MSI PRO B760M-E DDR4", estimated_price=2400000, key_specs="LGA1700, DDR4"),
-                RecommendedPart(slot=ComponentCategory.RAM, name="Corsair Vengeance LPX 16GB (2x8GB) DDR4 3200", estimated_price=1050000, key_specs="16GB DDR4"),
-                RecommendedPart(slot=ComponentCategory.STORAGE, name="Samsung 980 1TB NVMe PCIe 3.0", estimated_price=1750000, key_specs="1TB NVMe"),
-                RecommendedPart(slot=ComponentCategory.GPU, name="GeForce RTX 4060 8GB GDDR6", estimated_price=7800000, key_specs="8GB GDDR6, DLSS 3"),
-                RecommendedPart(slot=ComponentCategory.PSU, name="Corsair CV650 650W 80 Plus Bronze", estimated_price=1450000, key_specs="650W Bronze"),
-                RecommendedPart(slot=ComponentCategory.COOLER, name="Thermalright Assassin X 120 Refined SE", estimated_price=450000, key_specs="4 heatpipes 120mm"),
-                RecommendedPart(slot=ComponentCategory.CASE, name="Montech Air 100 ARGB (mATX)", estimated_price=1100000, key_specs="Kèm 4 fan ARGB"),
-            ]
-            summary = "Cấu hình Quốc Dân tầm trung: Chiến tốt game AAA với DLSS 3, dựng video Full HD / 2K mượt mà."
-
-        elif budget < 38_000_000:
-            parts = [
-                RecommendedPart(slot=ComponentCategory.CPU, name="AMD Ryzen 5 7600X", estimated_price=5600000, key_specs="6C/12T, AM5, 5.3GHz"),
-                RecommendedPart(slot=ComponentCategory.MAINBOARD, name="MSI B650M GAMING PLUS WIFI", estimated_price=4200000, key_specs="Socket AM5, DDR5, Wi-Fi 6E"),
-                RecommendedPart(slot=ComponentCategory.RAM, name="Corsair Vengeance RGB 32GB (2x16GB) DDR5 6000MHz", estimated_price=2900000, key_specs="32GB DDR5"),
-                RecommendedPart(slot=ComponentCategory.STORAGE, name="Kingston KC3000 1TB PCIe 4.0 NVMe", estimated_price=2300000, key_specs="Tốc độ 7000MB/s"),
-                RecommendedPart(slot=ComponentCategory.GPU, name="GeForce RTX 4070 SUPER 12GB GDDR6X", estimated_price=16800000, key_specs="12GB, 2K/4K Gaming"),
-                RecommendedPart(slot=ComponentCategory.PSU, name="Super Flower Leadex III Gold 750W", estimated_price=2500000, key_specs="750W 80 Plus Gold, Full Modular"),
-                RecommendedPart(slot=ComponentCategory.COOLER, name="Deepcool AK620 Digital", estimated_price=1650000, key_specs="Tháp đôi hiển thị nhiệt độ"),
-                RecommendedPart(slot=ComponentCategory.CASE, name="NZXT H5 Flow", estimated_price=2100000, key_specs="ATX, airflow tối ưu"),
-            ]
-            summary = "Dàn máy hiệu năng cao chuẩn AM5: Cân mọi game AAA 2K max setting, Render 3D, Premiere, After Effects chuyên nghiệp."
-
-        else:
-            parts = [
-                RecommendedPart(slot=ComponentCategory.CPU, name="AMD Ryzen 7 7800X3D", estimated_price=10500000, key_specs="8C/16T, 3D V-Cache đỉnh gaming"),
-                RecommendedPart(slot=ComponentCategory.MAINBOARD, name="ASUS ROG STRIX B650-A GAMING WIFI", estimated_price=6400000, key_specs="AM5, PCIe 5.0, VRM khủng"),
-                RecommendedPart(slot=ComponentCategory.RAM, name="G.Skill Trident Z5 Neo RGB 64GB (2x32GB) DDR5 6000", estimated_price=5800000, key_specs="64GB DDR5 Expo"),
-                RecommendedPart(slot=ComponentCategory.STORAGE, name="Samsung 990 PRO 2TB PCIe 4.0 NVMe", estimated_price=4600000, key_specs="2TB, 7450MB/s"),
-                RecommendedPart(slot=ComponentCategory.GPU, name="GeForce RTX 4080 SUPER 16GB GDDR6X", estimated_price=28500000, key_specs="16GB, Đỉnh cao 4K / AI Training"),
-                RecommendedPart(slot=ComponentCategory.PSU, name="Corsair RM850e 850W ATX 3.0 PCIe 5.0", estimated_price=3400000, key_specs="850W Gold, cáp 12VHPWR"),
-                RecommendedPart(slot=ComponentCategory.COOLER, name="Thermalright Frozen Warframe 360 ARGB", estimated_price=2600000, key_specs="AIO 360mm có màn hình LCD"),
-                RecommendedPart(slot=ComponentCategory.CASE, name="Lian Li O11 Dynamic EVO", estimated_price=3900000, key_specs="Bể cá cao cấp, thoáng khí"),
-            ]
-            summary = "Cấu hình Flagship cao cấp nhất: Vua chơi game 4K, xử lý đồ họa kiến trúc nặng và huấn luyện mô hình AI Local."
-
-        total_price = sum(p.estimated_price for p in parts)
-        return RecommendedBuild(
-            purpose=purpose,
-            target_budget=budget,
-            total_estimated_price=total_price,
-            parts=parts,
-            summary=summary,
-            compatibility_guaranteed=True,
-        )
+        """Legacy entry point fails closed; canonical builds use PCBuildApplicationService."""
+        raise BackendUnavailableError("Use PCBuildApplicationService with a canonical component catalog")
 
     def analyze_bottleneck(
         self,

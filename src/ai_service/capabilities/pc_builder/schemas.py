@@ -354,6 +354,8 @@ class RankedBuild(BaseModel):
     power_estimate: PowerEstimate
     evidence: list[MetricEvidence] = Field(default_factory=list)
     compatibility_status: CompatibilityStatus
+    owned_categories: list[ComponentCategory] = Field(default_factory=list)
+    spending_prices: dict[ComponentCategory, int] = Field(default_factory=dict)
 
 
 class PCBuildConstraints(BaseModel):
@@ -406,6 +408,7 @@ class OptimizationResult(BaseModel):
     builds: dict[BuildObjective, RankedBuild]
     candidates_evaluated: int
     pruned_count: int
+    rejected_candidates: list[str] = Field(default_factory=list)
 
 
 class PublicStatePatch(BaseModel):

@@ -1,7 +1,7 @@
 """Graph orchestration port.
 
 Use cases depend on a small ``run`` contract instead of importing the
-Pydantic Graph runtime. This makes graph execution replaceable in tests and
+graph runtime. This makes graph execution replaceable in tests and
 leaves room for durable/background graph runners later.
 """
 

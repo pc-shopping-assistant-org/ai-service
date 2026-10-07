@@ -11,8 +11,9 @@ dependencies = [
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
     "pydantic>=2.13.4",
-    "pydantic-ai>=2.35.0",
-    "pydantic-graph>=2.35.0",
+    "langgraph>=1.0,<2",
+    "langchain-openai>=1.0,<2",
+    "langchain-google-genai>=4.0,<5",
     "pydantic-settings>=2.15.0",
     "uvicorn>=0.52.4",
 ]
@@ -45,8 +46,10 @@ training = [
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true
 warn_untyped_fields = true
-

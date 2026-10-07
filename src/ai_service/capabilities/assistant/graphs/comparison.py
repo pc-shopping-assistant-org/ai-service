@@ -1,19 +1,8 @@
-"""Deterministic graph that validates and de-duplicates comparison input."""
+"""Vendor-neutral comparison planning contracts and deterministic normalization."""
 
-from __future__ import annotations
-
-from typing import Any, cast
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from pydantic_graph import GraphBuilder
-
-
-class ComparisonState(BaseModel):
-    """State carried by the deterministic comparison graph."""
-
-    product_ids: list[UUID] = Field(default_factory=list)
-    question: str | None = None
 
 
 class ComparisonInput(BaseModel):
@@ -26,36 +15,10 @@ class ComparisonOutput(BaseModel):
     question: str | None = None
 
 
-comparison_builder = GraphBuilder(
-    name="comparison_graph",
-    state_type=ComparisonState,
-    input_type=ComparisonInput,
-    output_type=ComparisonOutput,
-)
-
-
-@comparison_builder.step
-async def capture_comparison(ctx: Any) -> ComparisonOutput:
-    state = cast(ComparisonState, ctx.state)
-    inputs = cast(ComparisonInput, ctx.inputs)
-    state.product_ids = list(dict.fromkeys(inputs.product_ids))
-    state.question = inputs.question
+def normalize_comparison(inputs: ComparisonInput) -> ComparisonOutput:
     return ComparisonOutput(
-        product_ids=state.product_ids,
-        question=state.question,
+        product_ids=list(dict.fromkeys(inputs.product_ids)), question=inputs.question,
     )
 
 
-comparison_builder.add(
-    comparison_builder.edge_from(comparison_builder.start_node).to(capture_comparison),
-    comparison_builder.edge_from(capture_comparison).to(comparison_builder.end_node),
-)
-comparison_graph = comparison_builder.build()
-
-
-__all__ = [
-    "ComparisonInput",
-    "ComparisonOutput",
-    "ComparisonState",
-    "comparison_graph",
-]
+__all__ = ["ComparisonInput", "ComparisonOutput", "normalize_comparison"]

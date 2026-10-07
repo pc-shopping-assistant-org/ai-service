@@ -94,7 +94,7 @@ Về mặt lý thuyết Khoa học Máy tính và Tối ưu hóa Tổ hợp (Ope
 flowchart TD
     subgraph UserInterface [Tầng Giao tiếp & Thu nhận Yêu cầu]
         UserPrompt["Yêu cầu tự nhiên của khách hàng\n(VD: 'Build máy 25tr chơi game 1440p, tôi có sẵn nguồn 750W')"]
-        LLMAgent["Probabilistic LLM Agent (PydanticAI)\n- Bóc tách yêu cầu khách quan\n- Nhận diện hồ sơ nhu cầu (UseCaseProfile)\n- Xác lập ConstraintSource (USER, SYSTEM, INFERRED)"]
+        LLMAgent["LLM Nodes (LangGraph + Pydantic)\n- Bóc tách yêu cầu khách quan\n- Nhận diện hồ sơ nhu cầu (UseCaseProfile)\n- Xác lập ConstraintSource (USER, SYSTEM, INFERRED)"]
         Constraints["PCBuildConstraints (Structured)\n- target_budget: 25.000.000 (USER)\n- use_case: GAMING_1440P\n- owned_parts: [PSU 750W (exclude_from_budget=True)]"]
     end
 

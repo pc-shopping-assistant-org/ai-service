@@ -19,18 +19,16 @@ from ai_service.application.use_cases.assistant import (
 from ai_service.capabilities.assistant.graphs.comparison import (
     ComparisonInput,
     ComparisonOutput,
-    ComparisonState,
-    comparison_graph,
+    normalize_comparison,
 )
 from ai_service.capabilities.assistant.graphs.shopping import (
     ShoppingInput,
     ShoppingOutput,
-    ShoppingState,
-    shopping_graph,
+    normalize_shopping,
 )
 from ai_service.config.settings import Settings, get_settings
 from ai_service.context.manager import ConversationManager
-from ai_service.infrastructure.graph.pydantic_runner import PydanticGraphRunner
+from ai_service.infrastructure.graph.langgraph_runner import LangGraphRunner
 from ai_service.services.backend_client import BackendClient
 from ai_service.services.semantic_retriever import build_catalog_retriever
 
@@ -57,13 +55,11 @@ class AssistantService(_AssistantService):
         backend = backend_client or BackendClient(runtime_settings)
         context = context_manager or ConversationManager(runtime_settings)
         catalog_retriever = retriever or build_catalog_retriever(backend, runtime_settings)
-        shopping_runner = shopping_graph_runner or PydanticGraphRunner(
-            shopping_graph,
-            state_factory=ShoppingState,
+        shopping_runner = shopping_graph_runner or LangGraphRunner(
+            normalize_shopping,
         )
-        comparison_runner = comparison_graph_runner or PydanticGraphRunner(
-            comparison_graph,
-            state_factory=ComparisonState,
+        comparison_runner = comparison_graph_runner or LangGraphRunner(
+            normalize_comparison,
         )
         super().__init__(
             backend_client=backend,

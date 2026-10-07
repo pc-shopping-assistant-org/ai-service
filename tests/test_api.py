@@ -1,15 +1,50 @@
 import json
+from collections.abc import AsyncIterator
+from uuid import UUID
 
+import httpx
 import pytest
-from fastapi.testclient import TestClient
+import pytest_asyncio
 from pydantic import ValidationError
 
+from ai_service.api.dependencies import get_assistant_service
+from ai_service.application.ports.assistant import AssistantUseCase
 from ai_service.main import app
 from ai_service.schemas.response import ApiResponse
+from ai_service.services.assistant_service import AssistantService
 
 
-def test_health_uses_canonical_envelope() -> None:
-    response = TestClient(app).get("/api/v1/health")
+@pytest_asyncio.fixture
+async def api_client() -> AsyncIterator[httpx.AsyncClient]:
+    # ASGI transport avoids TestClient's cross-thread blocking portal, and the
+    # backend stub keeps HTTP/SSE tests independent of local services and secrets.
+    class CatalogFixture:
+        async def search_products(self, query: str, limit: int = 10) -> list[dict]:
+            return []
+
+        async def get_product(self, product_id: UUID) -> dict | None:
+            return None
+
+    service = AssistantService(CatalogFixture())
+
+    async def assistant_override() -> AssistantUseCase:
+        return service
+
+    previous = app.dependency_overrides.get(get_assistant_service)
+    app.dependency_overrides[get_assistant_service] = assistant_override
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            yield client
+    finally:
+        if previous is None:
+            app.dependency_overrides.pop(get_assistant_service, None)
+        else:
+            app.dependency_overrides[get_assistant_service] = previous
+
+
+@pytest.mark.asyncio
+async def test_health_uses_canonical_envelope(api_client: httpx.AsyncClient) -> None:
+    response = await api_client.get("/api/v1/health")
 
     assert response.status_code == 200
     body = response.json()
@@ -18,8 +53,9 @@ def test_health_uses_canonical_envelope() -> None:
     assert body["errors"] == []
 
 
-def test_validation_errors_use_static_message_and_array() -> None:
-    response = TestClient(app).post("/api/v1/chat", json={"message": ""})
+@pytest.mark.asyncio
+async def test_validation_errors_use_static_message_and_array(api_client: httpx.AsyncClient) -> None:
+    response = await api_client.post("/api/v1/chat", json={"message": ""})
 
     assert response.status_code == 422
     body = response.json()
@@ -28,8 +64,9 @@ def test_validation_errors_use_static_message_and_array() -> None:
     assert body["errors"][0]["code"] == "VALIDATION_ERROR"
 
 
-def test_http_errors_use_canonical_envelope() -> None:
-    response = TestClient(app).get("/api/v1/does-not-exist")
+@pytest.mark.asyncio
+async def test_http_errors_use_canonical_envelope(api_client: httpx.AsyncClient) -> None:
+    response = await api_client.get("/api/v1/does-not-exist")
 
     assert response.status_code == 404
     body = response.json()
@@ -49,8 +86,9 @@ def test_response_defaults_to_static_success_message() -> None:
     assert response.message == "SUCCESS"
 
 
-def test_chat_stream_returns_sse_frames_with_canonical_envelopes() -> None:
-    response = TestClient(app).post("/api/v1/chat/stream", json={"message": "tìm laptop"})
+@pytest.mark.asyncio
+async def test_chat_stream_returns_sse_frames_with_canonical_envelopes(api_client: httpx.AsyncClient) -> None:
+    response = await api_client.post("/api/v1/chat/stream", json={"message": "tìm laptop"})
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")

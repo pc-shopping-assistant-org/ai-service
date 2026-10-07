@@ -419,6 +419,8 @@ def check_compatibility_status(
                 return CompatibilityStatus.UNKNOWN
             if _norm(cpu.socket) != _norm(cooler.socket):
                 return CompatibilityStatus.INCOMPATIBLE
+        else:
+            return CompatibilityStatus.UNKNOWN
 
     return CompatibilityStatus.COMPATIBLE
 
@@ -656,6 +658,7 @@ class DeterministicPCOptimizer:
         """Run deterministic constrained enumeration with early feasibility pruning."""
         budget = constraints.target_budget_vnd.value
         profile = constraints.use_case.value
+        rejected_candidates: list[str] = []
 
         owned_map: dict[ComponentCategory, Any] = {
             op.category: op for op in constraints.owned_parts
@@ -670,6 +673,9 @@ class DeterministicPCOptimizer:
         categorized: dict[ComponentCategory, list[ComponentSpec]] = {cat: [] for cat in ComponentCategory}
         for item in catalog:
             if item.category in categorized:
+                if item.category in {ComponentCategory.CPU, ComponentCategory.GPU} and item.tdp_watts is None:
+                    rejected_candidates.append(f"{item.name}: missing tdp_watts")
+                    continue
                 if (
                     constraints.preferred_gpu_brand.locked
                     and constraints.preferred_gpu_brand.value
@@ -771,7 +777,9 @@ class DeterministicPCOptimizer:
                         is_integrated=True,
                         brand=cpu.brand,
                     )
-                    available_gpus.append(igpu_spec)
+                    brand = constraints.preferred_gpu_brand
+                    if not (brand.locked and brand.value) or brand.value.upper() in (igpu_spec.brand or "").upper():
+                        available_gpus.append(igpu_spec)
 
             if not available_gpus:
                 continue
@@ -836,7 +844,11 @@ class DeterministicPCOptimizer:
                             ComponentCategory.RAM: ram,
                             ComponentCategory.GPU: gpu,
                         }
-                        power = calculate_power_estimate(temp_parts, profile)
+                        try:
+                            power = calculate_power_estimate(temp_parts, profile)
+                        except ValueError as exc:
+                            rejected_candidates.append(str(exc))
+                            continue
 
                         for case in cases:
                             # Form factor check: strict membership if supported_form_factors present, else ranking
@@ -954,6 +966,8 @@ class DeterministicPCOptimizer:
                     power_estimate=p_est,
                     evidence=evidence,
                     compatibility_status=CompatibilityStatus.COMPATIBLE,
+                    owned_categories=list(owned_map),
+                    spending_prices={cat: get_spending_price(cat, part) for cat, part in parts.items()},
                 )
 
         if not ranked_builds:
@@ -965,6 +979,7 @@ class DeterministicPCOptimizer:
             builds=ranked_builds,
             candidates_evaluated=evaluated_combinations,
             pruned_count=total_pruned_candidates,
+            rejected_candidates=list(dict.fromkeys(rejected_candidates)),
         )
 
 

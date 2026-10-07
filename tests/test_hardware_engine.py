@@ -87,11 +87,10 @@ def test_wattage_calculation(engine: LocalHardwareRuleEngine) -> None:
 
 
 def test_recommend_build(engine: LocalHardwareRuleEngine) -> None:
-    build = engine.recommend_build(budget=20_000_000, purpose=BuildPurpose.GAMING_AAA)
-    assert build.target_budget == 20_000_000
-    assert len(build.parts) >= 6
-    assert any(p.slot == ComponentCategory.GPU for p in build.parts)
-    assert build.compatibility_guaranteed is True
+    from ai_service.application.errors import BackendUnavailableError
+
+    with pytest.raises(BackendUnavailableError):
+        engine.recommend_build(budget=20_000_000, purpose=BuildPurpose.GAMING_AAA)
 
 
 def test_analyze_bottleneck_balanced(engine: LocalHardwareRuleEngine) -> None:

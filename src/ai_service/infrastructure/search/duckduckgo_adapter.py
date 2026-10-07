@@ -50,17 +50,14 @@ class DuckDuckGoSearchAdapter(WebSearchClient):
                 )
                 if res.is_success:
                     items = self._parse_html(res.text, limit=query.limit)
-                    if items:
-                        return WebSearchResult(
-                            query=query.query,
-                            category=query.category,
-                            items=items,
-                            total_results=len(items),
-                        )
+                    return WebSearchResult(
+                        query=query.query, category=query.category,
+                        items=items, total_results=len(items),
+                        note=None if items else "WEB_SEARCH_NO_RESULTS",
+                    )
         except Exception as exc:  # noqa: BLE001 - network or parsing error falls back gracefully
-            LOGGER.debug("DuckDuckGo search failed, using fallback: %s", exc)
+            LOGGER.warning("DuckDuckGo search unavailable: %s", exc)
 
-        # Fallback items when network is unavailable, preserving contract for offline integration
         return self._fallback_result(query)
 
     def _enrich_query(self, query: WebSearchQuery) -> str:
@@ -135,19 +132,10 @@ class DuckDuckGoSearchAdapter(WebSearchClient):
         return items
 
     def _fallback_result(self, query: WebSearchQuery) -> WebSearchResult:
-        default_items = [
-            WebSearchItem(
-                title=f"Thông tin tra cứu về {query.query}",
-                url="https://www.techpowerup.com",
-                snippet=f"Dữ liệu kỹ thuật, đánh giá chi tiết và các trường hợp tương thích liên quan tới {query.query}.",
-            )
-        ]
         return WebSearchResult(
             query=query.query,
             category=query.category,
-            items=default_items,
-            total_results=len(default_items),
-            note="Kết quả trả về từ bộ nhớ đệm dự phòng (chế độ offline).",
+            note="WEB_SEARCH_UNAVAILABLE",
         )
 
 

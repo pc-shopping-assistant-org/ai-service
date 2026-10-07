@@ -18,20 +18,18 @@ from ai_service.application.use_cases.assistant import AssistantService
 from ai_service.capabilities.assistant.graphs.comparison import (
     ComparisonInput,
     ComparisonOutput,
-    ComparisonState,
-    comparison_graph,
+    normalize_comparison,
 )
 from ai_service.capabilities.assistant.graphs.shopping import (
     ShoppingInput,
     ShoppingOutput,
-    ShoppingState,
-    shopping_graph,
+    normalize_shopping,
 )
 from ai_service.config.settings import Settings, get_settings
 from ai_service.context.manager import ConversationManager
-from ai_service.infrastructure.graph.pydantic_runner import PydanticGraphRunner
-from ai_service.infrastructure.providers.pydantic_ai_answer_generator import (
-    PydanticAIAnswerGenerator,
+from ai_service.infrastructure.graph.langgraph_runner import LangGraphRunner
+from ai_service.infrastructure.providers.model_answer_generator import (
+    ModelAnswerGenerator,
 )
 from ai_service.services.backend_client import BackendClient
 from ai_service.services.semantic_retriever import build_catalog_retriever
@@ -64,14 +62,12 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
     backend_client = BackendClient(runtime_settings)
     conversation_manager = ConversationManager(runtime_settings)
     catalog_retriever = build_catalog_retriever(backend_client, runtime_settings)
-    answer_generator = PydanticAIAnswerGenerator(runtime_settings)
-    shopping_graph_runner: GraphRunner[ShoppingInput, ShoppingOutput] = PydanticGraphRunner(
-        shopping_graph,
-        state_factory=ShoppingState,
+    answer_generator = ModelAnswerGenerator(runtime_settings)
+    shopping_graph_runner: GraphRunner[ShoppingInput, ShoppingOutput] = LangGraphRunner(
+        normalize_shopping,
     )
-    comparison_graph_runner: GraphRunner[ComparisonInput, ComparisonOutput] = PydanticGraphRunner(
-        comparison_graph,
-        state_factory=ComparisonState,
+    comparison_graph_runner: GraphRunner[ComparisonInput, ComparisonOutput] = LangGraphRunner(
+        normalize_comparison,
     )
     assistant = AssistantService(
         backend_client=backend_client,

@@ -113,6 +113,7 @@ class LiveSearchResponse(BaseModel):
     results_found: int
     results: list[LiveSearchResultView]
     analysis_prompt: str
+    note: str | None = None
 
 
 __all__ = [

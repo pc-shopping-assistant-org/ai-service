@@ -2,6 +2,24 @@
 
 Tài liệu này mô tả chi tiết kiến trúc tổng thể, luồng xử lý dữ liệu (data flow), phân ranh giới trách nhiệm (separation of concerns), và các module của dịch vụ **Python AI Service (`ai-service`)** thuộc hệ thống Trợ lý Mua sắm & Xây dựng Cấu hình PC (`pc-shopping-assistant-org`).
 
+## Trạng thái triển khai (2026-10-07)
+
+Source đã migrate framework; dependency/lock và runtime verification còn bị
+chặn bởi PyPI DNS (ISSUE-077). Graph hiện chỉ request-scoped; chưa có durable
+conversation threads/checkpointer. Xem README trước khi chạy/deploy.
+
+Runtime hiện tại: FastAPI → assistant use case → graph chuẩn hóa query →
+canonical catalog retriever → answer generator → JSON/SSE. PC-builder, commerce
+và web-search toolkits là thư viện đã có tests, chưa đăng ký vào agent/container.
+Sơ đồ supervisor/tool scoping và session router bên dưới là **kiến trúc mục tiêu**,
+không phải luồng chat đang chạy. Chưa có API optimize-PC hay tool-call SSE.
+ISSUE-076 theo dõi integration, catalog mapping, auth/ownership và xác nhận mutation.
+
+Compatibility chỉ chứng minh các constraint được model/test; không chứng nhận
+toàn bộ tương thích vật lý. Thiếu socket cooler là UNKNOWN; thiếu TDP thì loại
+candidate, không làm hỏng toàn bộ catalog. Không dùng commerce/web facts giả khi
+dependency lỗi. Xem README để biết các operation đang fail closed.
+
 ---
 
 ## 1. Triết lý Thiết kế Cốt lõi (Core Principles)
@@ -19,7 +37,7 @@ Dịch vụ AI Service được thiết kế theo 4 nguyên tắc kỹ thuật b
    - Mọi giao tiếp ra ngoài đều thông qua các **Outbound Ports** trừu tượng (`application/ports/`).
 
 3. **Dynamic Tool Scoping (Giảm Nhiễu cho LLM):**
-   - Thay vì cấp hàng chục công cụ vào một Agent duy nhất (gây loãng ngữ cảnh và gọi nhầm tool), hệ thống dùng **Intent Router** để phân loại ý định người dùng và chỉ nạp bộ công cụ chuyên biệt (Domain Specialist Toolkit) tương ứng cho lượt hội thoại đó.
+   - Mục tiêu integration: **Intent Router** phân loại ý định người dùng và chỉ nạp bộ công cụ chuyên biệt (Domain Specialist Toolkit) tương ứng cho lượt hội thoại đó. Chưa wiring runtime này.
 
 4. **Streaming First & Standard API Contract:**
    - Hỗ trợ Server-Sent Events (SSE) để truyền token và trạng thái thực thi theo thời gian thực tới giao diện người dùng.
@@ -34,7 +52,7 @@ Dịch vụ AI Service được thiết kế theo 4 nguyên tắc kỹ thuật b
 
 ---
 
-## 2. Sơ đồ Luồng Xử lý Tổng thể (End-to-End Pipeline)
+## 2. Sơ đồ Luồng Xử lý Mục tiêu (Chưa wiring end-to-end)
 
 ```mermaid
 flowchart TD
@@ -48,12 +66,12 @@ flowchart TD
         Router -->|2. Tra cứu giỏ hàng / Sản phẩm| Commerce_Scope[Commerce Toolkit Scoping]
         Router -->|3. Tra cứu thông số mở rộng| Search_Scope[Web Search Toolkit Scoping]
 
-        PC_Scope --> PydanticAI[PydanticAI Agent / Supervisor]
-        Commerce_Scope --> PydanticAI
-        Search_Scope --> PydanticAI
+        PC_Scope --> LangGraph[LangGraph Orchestration / LLM Nodes]
+        Commerce_Scope --> LangGraph
+        Search_Scope --> LangGraph
 
         subgraph DeterministicEngine [Deterministic PC Builder Engine]
-            PydanticAI -->|Invoke Tool: optimize_pc_build| OptimizerCore[Deterministic PC Optimizer]
+            LangGraph -->|Invoke Tool: optimize_pc_build| OptimizerCore[Deterministic PC Optimizer]
             OptimizerCore --> Pruning[Adaptive Envelope & Pareto Pruning]
             Pruning --> Enumerate[Constrained Branch-and-Bound Search]
             Enumerate --> PowerCheck[Physical Clearance & Electrical Safety Check]
@@ -67,8 +85,8 @@ flowchart TD
 
     subgraph InfrastructureAdapters [Infrastructure Ports & Adapters]
         OptimizerCore -.->|Query Catalog| CommerceAdapter[Backend Commerce Client / Spring Boot]
-        PydanticAI -.->|Semantic Search| VectorAdapter[Qdrant Vector Retriever]
-        PydanticAI -.->|Real-time Specs| SearchAdapter[Web Search Adapter]
+        LangGraph -.->|Semantic Search| VectorAdapter[Qdrant Vector Retriever]
+        LangGraph -.->|Real-time Specs| SearchAdapter[Web Search Adapter]
     end
 
     Packager -->|SSE Events / JSON Envelope| Client
@@ -83,8 +101,8 @@ ai-service/
 ├── src/ai_service/
 │   ├── api/                           # Interface Adapters (Tầng giao tiếp ngoài)
 │   │   ├── dependencies.py            # FastAPI dependency injection
-│   │   ├── routers/                   # HTTP & SSE endpoints (/api/v1/assistant, /pc-builder)
-│   │   └── sse/                       # SSE streaming protocol serializer
+│   │   ├── chat.py                    # /chat, /chat/stream, /search, /consult, /compare, /evaluate
+│   │   └── sse.py                     # SSE streaming protocol serializer
 │   ├── application/                   # Application Core (Tầng nghiệp vụ & Hợp đồng)
 │   │   ├── use_cases/                 # Orchestration use cases (AssistantUseCase)
 │   │   ├── ports/                     # Abstract interfaces (Hardware, Commerce, Search, Retriever)
@@ -127,15 +145,12 @@ ai-service/
 
 ### 4.1. Tầng Giao diện (Interface Adapters — `src/ai_service/api/`)
 
-- **FastAPI Endpoints:** Đón nhận request tại `/api/v1/assistant/chat` và `/api/v1/pc-builder/optimize`.
-- **SSE Streamer:** Chuyển đổi các sự kiện nội bộ của Agent thành luồng SSE:
-  - `event: token`: Các đoạn văn bản giải thích đang được sinh ra.
-  - `event: tool_call`: Tên công cụ và tham số Agent đang thực thi.
-  - `event: build_result`: Cấu hình hoàn chỉnh kèm `MetricEvidence` dạng JSON.
-  - `event: error`: Thông báo lỗi được ánh xạ theo key ổn định.
+- **FastAPI Endpoints:** `/api/v1/chat`, `/api/v1/chat/stream`, `/api/v1/search`, `/api/v1/consult`, `/api/v1/compare`, `/api/v1/evaluate` và `/api/v1/health`.
+- **SSE Streamer:** Mỗi frame chứa envelope chuẩn; `data.event` là `START`,
+  `DELTA`, `COMPLETED` hoặc `ERROR`. Không có tool-call/build-result event.
 - **Phong bì chuẩn API:** Ánh xạ dữ liệu trả về theo format `{data, message, errors}`. Tuyệt đối không trả về raw prose trong trường `message`.
 
-### 4.2. Tầng Quản lý Phiên & Phân luồng (Session State & Router)
+### 4.2. Tầng Quản lý Phiên & Phân luồng (Model/mục tiêu integration)
 
 - **Structured Session State:** Lưu giữ trạng thái hội thoại khách hàng, bao gồm:
   - `target_budget_vnd`: Ngân sách mục tiêu kèm `ConstraintSource` và cờ `locked`.
@@ -174,13 +189,20 @@ Nằm trọn vẹn trong `src/ai_service/capabilities/pc_builder/`:
 - Nhận `OptimizationResult` từ Core.
 - Áp dụng **Recommendation Policy**: Lựa chọn cấu hình phù hợp nhất với người dùng (mặc định là `BuildObjective.BALANCED` hoặc objective người dùng chỉ định).
 - Cung cấp danh sách `MetricEvidence` (ví dụ: `VRAM: 12GB`, `FPS ước tính: 95 FPS`, `PSU Headroom: 150W`) cho LLM.
-- **System Prompt Guardrail:** Ép buộc LLM chỉ được phát ngôn dựa trên các bằng chứng có trong `MetricEvidence`, cấm tự bịa các tính năng không có số liệu chứng minh.
+- **Explanation Context:** Snapshot giữ `price`, `spending_price`, `is_owned` và
+  evidence từ engine; tổng spending khớp tổng ngân sách. Context đã có tests.
+- **System Prompt Guardrail (mục tiêu):** Khi nối build vào LLM, chỉ cung cấp
+  evidence đã xác minh; chưa có build-explanation agent trong runtime hiện tại.
 
 ### 4.5. Tầng Hạ tầng & Thành phần Kết nối (Infrastructure Adapters)
 
-- **`BackendCommerceClient`:** Gọi REST API của backend Spring Boot để lấy danh mục linh kiện còn hàng, giá hiện hành, thông tin khuyến mãi.
-- **`LocalHardwareRuleEngine`:** Cung cấp thông số cơ sở (clearance tiêu chuẩn, socket hierarchy, benchmark mapping tĩnh khi database chưa đồng bộ).
-- **`QdrantRetriever`:** Truy vấn vector ngữ nghĩa khi người dùng hỏi các câu hỏi chung về kiến thức phần cứng hoặc chính sách bảo hành.
+- **`BackendCommerceClient`:** Đọc active catalog với contract detail đã mô tả
+  trong README. Filter nâng cao, cart/order, khuyến mãi, policies và export build
+  chưa tích hợp nên fail closed. Không tự dựng giá, voucher hay order.
+- **`LocalHardwareRuleEngine`:** Các rule/check truyền thống. `recommend_build`
+  cũ bị vô hiệu hóa; recommendation đi qua application pipeline và catalog rõ ràng.
+- **`QdrantRetriever`:** Semantic catalog retrieval; phải revalidate visibility
+  theo backend, không phải kho thông tin chính sách bảo hành tùy ý.
 - **`CompositionRoot` (`composition.py`):** Điểm duy nhất khởi tạo process-scoped dependencies, bảo đảm tính độc lập của Use Case và dễ dàng mock khi chạy unit/property tests.
 
 ---

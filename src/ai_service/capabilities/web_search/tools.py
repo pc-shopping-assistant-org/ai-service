@@ -26,7 +26,7 @@ from ai_service.infrastructure.search.duckduckgo_adapter import (
 
 
 class WebSearchTools:
-    """Executable search tools callable by PydanticAI agents to query live Internet facts."""
+    """Search operations callable by application/graph workflows for live facts."""
 
     def __init__(self, search_client: WebSearchClient | None = None) -> None:
         self.search_client = search_client or DuckDuckGoSearchAdapter()
@@ -202,18 +202,21 @@ class WebSearchTools:
             )
             for item in search_result.items
         ]
-        snippets_text = "\n".join(f"- {it.title}: {it.snippet}" for it in items_view)
+        snippets_text = "\n".join(f"- {it.title} ({it.url}): {it.snippet}" for it in items_view)
         prompt_instruction = (
             f"Dưới đây là thông tin tra cứu mới nhất từ Internet về '{topic}' ({search_result.query}):\n"
             f"{snippets_text}\n"
             f"Hãy dùng thông tin thực tế trên để trả lời khách hàng một cách khách quan, chính xác và có dẫn chứng."
         )
+        if not items_view:
+            prompt_instruction = "Không có bằng chứng từ web cho yêu cầu này. Nêu rõ giới hạn; không suy diễn hoặc bịa nguồn."
         return LiveSearchResponse(
             search_topic=topic,
             category=search_result.category.value,
             results_found=len(items_view),
             results=items_view,
             analysis_prompt=prompt_instruction,
+            note=search_result.note,
         )
 
 
