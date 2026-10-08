@@ -1,6 +1,6 @@
 """B1 candidate gate, NOT a selected/verified production invocation strategy.
 
-Run explicitly against a disposable AI_TEST_POSTGRES_DSN after pinning the
+Run explicitly against local ai_db via AI_TEST_POSTGRES_DSN after pinning the
 LangGraph/checkpointer stack. This file is outside the default unit test tree;
 the B1 gate is mandatory, never replaced by mocked saver/SQLite evidence.
 """
@@ -34,15 +34,15 @@ async def test_new_turn_uses_accepted_head_after_orphan_and_pool_restart(
     dsn = os.environ.get("AI_TEST_POSTGRES_DSN")
     if not dsn:
         pytest.fail(
-            "AI_TEST_POSTGRES_DSN must point to a disposable dedicated AI database"
+            "AI_TEST_POSTGRES_DSN must point to local development ai_db"
         )
     calls = Counter()
 
-    def extract(state: GateState):
+    async def extract(state: GateState):
         calls[(state["run_id"], "extract")] += 1
         return {"sentinels": [state["turn"]], "publication": None}
 
-    def prepare(state: GateState):
+    async def prepare(state: GateState):
         assert state["publication"] is None
         if state["pause"]:
             interrupt("orphan awaiting input")
