@@ -411,7 +411,7 @@ class AssistantService:
             name=str(row.get("name", "Sản phẩm")),
             seo_name=row.get("seoName", row.get("seo_name")),
             list_price=list_price,
-            image_url=row.get("imageUrl", row.get("image_url")),
+            image_url=row.get("mainImageUrl") or row.get("imageUrl") or row.get("image_url"),
             status=row.get("status"),
             specifications=specifications,
             description=row.get("description"),
