@@ -26,7 +26,7 @@ class LangGraphRunner[InputT: BaseModel, OutputT: BaseModel](
     """Compile once; each invocation owns its inputs and has no shared state."""
 
     def __init__(self, normalize: Callable[[InputT], OutputT]) -> None:
-        def capture(state: PlanningState) -> dict[str, BaseModel]:
+        async def capture(state: PlanningState) -> dict[str, BaseModel]:
             return {"output": normalize(cast(InputT, state["inputs"]))}
 
         builder = StateGraph(PlanningState)
