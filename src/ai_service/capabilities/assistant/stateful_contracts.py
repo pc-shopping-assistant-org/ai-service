@@ -16,7 +16,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    StrictBool,
     StrictInt,
     StringConstraints,
     field_validator,
@@ -58,9 +57,16 @@ class SparseContract(Contract):
         return value
 
 
+class BudgetScope(StrEnum):
+    BUILD_PC = "BUILD_PC"
+    FULL_SETUP = "FULL_SETUP"
+
+
 class ConstraintsPatchV1(SparseContract):
-    # No optimizer defaults here. Engine minimum budget remains a B0 policy issue.
+    # Money/use case remain unknown; BUILD_PC is the approved scope default only.
     target_budget_vnd: Operation[NonNegativeInt] | None = None
+    budget_scope: Operation[BudgetScope] | None = None
+    accessory_budget_vnd: Operation[NonNegativeInt] | None = None
     use_case: Operation[UseCaseProfile] | None = None
     target_resolution: Operation[ResolutionTier] | None = None
     target_fps: Operation[Annotated[StrictInt, Field(ge=30, le=1000)]] | None = None
@@ -75,7 +81,40 @@ class PinnedPartRefV1(Contract):
 
 class OwnedPartRefV1(Contract):
     variant_id: UUID
-    exclude_from_budget: StrictBool = True
+    exclude_from_budget: Literal[True] = True
+
+    @field_validator("exclude_from_budget", mode="before")
+    @classmethod
+    def require_true(cls, value: object) -> object:
+        if value is not True:
+            raise ValueError("V1 owned parts are always excluded from spending")
+        return value
+
+
+class AccessoryType(StrEnum):
+    MONITOR = "MONITOR"
+    MOUSE = "MOUSE"
+    KEYBOARD = "KEYBOARD"
+    HEADSET = "HEADSET"
+
+
+class AccessoryRequestV1(Contract):
+    kind: Literal["OWNED", "PINNED", "RECOMMEND"]
+    variant_id: UUID | None = None
+    quantity: Literal[1] = 1
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def require_one(cls, value: object) -> object:
+        if type(value) is not int or value != 1:
+            raise ValueError("V1 allows exactly one accessory per requested type")
+        return value
+
+    @model_validator(mode="after")
+    def validate_reference(self) -> AccessoryRequestV1:
+        if (self.kind == "RECOMMEND") != (self.variant_id is None):
+            raise ValueError("Owned/pinned require a variant; recommend has none yet")
+        return self
 
 
 class TurnPatchV1(SparseContract):
@@ -83,6 +122,7 @@ class TurnPatchV1(SparseContract):
     constraints: ConstraintsPatchV1 | None = None
     owned_parts: dict[ComponentCategory, Operation[OwnedPartRefV1]] | None = None
     pinned_parts: dict[ComponentCategory, Operation[PinnedPartRefV1]] | None = None
+    accessories: dict[AccessoryType, Operation[AccessoryRequestV1]] | None = None
 
     @field_validator("schema_version", mode="before")
     @classmethod
