@@ -31,22 +31,55 @@ adapters. PydanticAI/Pydantic Graph callers and direct dependencies were removed
 There is no second agent runtime or tool loop. Shopping/comparison use a compiled
 request-scoped LangGraph; durable conversation checkpoints are NOT implemented.
 
-Migration verification is **incomplete**: this environment cannot resolve PyPI
-DNS and has no cached LangGraph/model packages. `uv.lock` still belongs to the
-previous dependency set; do not deploy using that lock. On a network-enabled
-environment, run `uv lock`, `uv sync`, then pytest/Ruff/mypy and `uv lock --check`.
-Review the resolved dependency versions before committing the migration. Graph
-runtime and provider-construction tests must pass; do not skip them. ISSUE-077
-in the workspace tracker records this blocker.
+The installed LangGraph/model stack and resolver-generated lock are now verified:
+223 tests pass, including graph/provider, microservice catalog and core regression
+tests; Ruff, mypy (87 source files) and `uv lock --check` (140 packages) pass. This is local fixture
+verification, not live provider/backend or durable recovery acceptance.
 
-Stateful work started with B0 contracts and rejection tests in
-`capabilities/assistant/stateful_contracts.py`. Login-only and total-setup budget
-are approved; these schemas are not yet wired into routes, auth or the optimizer.
+Phase P1 adds pure multi-turn rules in `conversation_core.py`: unknown defaults,
+atomic patch merge, trusted provenance/locks, owned/pinned conflicts, explicit
+completion/hash/version reuse and invalidation, historical build preservation,
+and total-setup budget arithmetic. Nine core scenarios exercise these outcomes,
+including the real optimizer service. The module is not yet wired into chat.
+P2 remains BLOCKED (ISSUE-077): Postgres saver/driver/ORM packages are unavailable
+and there is no reachable test PostgreSQL. Do not bypass its native checkpoint gate.
+
+P0 contracts are complete: `stateful_contracts.py` (scope/refs/patch),
+`public_contracts.py` (allowlisted API/SSE), `provenance.py` (typed internal replay
+snapshots/canonical hash). Actual stateful routes, DB and replay remain pending.
+Login-only and total-setup budget
+were initially approved; the final V1 policy is BUILD_PC (default, core only)
+versus FULL_SETUP (core plus monitor/mouse/keyboard/headset, max one/type), no
+implicit budget split, owned spending zero and pinned paid. Retention is 90 days
+(orphan/debug checkpoints 7 days), cascading conversation deletion and internal
+non-publishing replay. These policies are not yet wired into runtime/cleanup;
+owned false is now rejected by the V1 schema. See workspace contracts.
 The B1 native PostgreSQL gate is explicit and mandatory:
 `uv run pytest -q integration_tests/test_accepted_head_postgres.py`, using a
-disposable `AI_TEST_POSTGRES_DSN`. It is a candidate invocation experiment, not
+local `ai_db` through `AI_TEST_POSTGRES_DSN` (owner-approved). It is a candidate invocation experiment, not
 proof of persisted conversations or a selected production adapter. See
 `docs/04-ai/stateful-chat-contracts.md` in the workspace for acceptance and gaps.
+
+#### Local AI PostgreSQL
+
+Use the existing microservices compose, not an additional PostgreSQL container:
+
+```sh
+cd ../backend
+docker compose up -d postgres
+# Also handles a volume initialized before ai_db was added. Does not delete data.
+docker compose exec -T -e POSTGRES_MULTIPLE_DATABASES=ai_db postgres \
+  bash /docker-entrypoint-initdb.d/init-multiple-databases.sh
+cd ../ai-service
+export AI_TEST_POSTGRES_DSN='postgresql://postgres:postgres@127.0.0.1:5432/ai_db'
+UV_CACHE_DIR=/tmp/pc-shopping-uv-cache uv run pytest -q \
+  integration_tests/test_accepted_head_postgres.py
+```
+
+The DSN uses existing local compose defaults; replace credentials if customized.
+The gate bootstraps saver tables and writes random experiment threads in `ai_db`;
+it does not clear the database. Use local development data, never production.
+Provisioning the database alone does not implement or verify P2 persistence.
 
 ### Grounding and toolkit integration status
 
@@ -92,8 +125,12 @@ until an LLM provider/model is configured.
 
 ## Environment
 
-All settings use the `AI_` prefix. `AI_BACKEND_API_URL` should point at the
-backend API's `/api/v1` root. `AI_PROVIDER=fallback` and an empty
+All settings use the `AI_` prefix. `AI_BACKEND_API_URL` points at the catalog
+API root: host microservice `http://localhost:8082` (the `.env.example` value),
+Compose `http://host.docker.internal:8082`, or legacy monolith
+`http://localhost:8080/api/v1`. The client appends `/products`; do not add that
+path to the base URL. Existing `.env` files must be adjusted explicitly rather
+than overwritten. `AI_PROVIDER=fallback` and an empty
 `AI_MODEL_NAME` are the safe local defaults; no provider call is made in that
 mode. Set `AI_PROVIDER=openai` or `AI_PROVIDER=gemini` to use the built-in
 lazy provider adapters, then inject `AI_OPENAI_API_KEY` or `AI_GEMINI_API_KEY`

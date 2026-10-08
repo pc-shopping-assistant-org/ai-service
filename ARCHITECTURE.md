@@ -4,9 +4,11 @@ Tài liệu này mô tả chi tiết kiến trúc tổng thể, luồng xử lý
 
 ## Trạng thái triển khai (2026-10-07)
 
-Source đã migrate framework; dependency/lock và runtime verification còn bị
-chặn bởi PyPI DNS (ISSUE-077). Graph hiện chỉ request-scoped; chưa có durable
-conversation threads/checkpointer. Xem README trước khi chạy/deploy.
+Framework migration/P0 contracts đã pass local regression: 221 tests, Ruff, mypy (87 files)
+và lock check (133 packages). Graph hiện chỉ request-scoped; chưa có durable
+conversation threads/checkpointer. P0 public/provenance và P1 core thuần đã có tests, chưa
+wiring vào chat. P2 bị chặn bởi thiếu Postgres saver/driver/ORM và test DB
+(ISSUE-077); không coi unit tests là bằng chứng restart/recovery. Xem README.
 
 Runtime hiện tại: FastAPI → assistant use case → graph chuẩn hóa query →
 canonical catalog retriever → answer generator → JSON/SSE. PC-builder, commerce
