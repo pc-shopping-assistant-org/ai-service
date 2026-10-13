@@ -2,17 +2,24 @@ from uuid import uuid4
 
 import pytest
 from test_explicit_user_admission import draft
+from test_flexible_contracts import pending_proposal
 from test_flexible_publication import base_snapshot
 from test_react_graph import Budget
 from test_react_tools import Catalog, context
 
 from ai_service.capabilities.assistant.react.actions import FlexibleDecision
+from ai_service.capabilities.assistant.react.contracts import CompletionRequirement
+from ai_service.capabilities.assistant.react.outcomes import TaskOutcome
+from ai_service.capabilities.assistant.react.published_state import (
+    FlexiblePublishedState,
+)
 from ai_service.capabilities.assistant.react.snapshot_publication import (
     FlexiblePublicationInput,
     revalidate_flexible_publication,
 )
 from ai_service.capabilities.assistant.react.tools import ToolDispatcher
 from ai_service.capabilities.assistant.react.turn_contracts import TurnRequestV2
+from ai_service.capabilities.assistant.requirements.contracts import requirements_hash
 from ai_service.capabilities.assistant.requirements.resolver import Draft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.assistant.stateful_contracts import CheckpointRefV1
@@ -20,6 +27,152 @@ from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
 )
 from ai_service.infrastructure.graph.flexible import build_flexible_graph
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("registered", [False, True])
+async def test_confirmation_then_explicit_edit_replays_in_order_without_mutating_head(
+    registered,
+):
+    canonical, owner, conversation, pending, confirmation = pending_proposal()
+    ctx, products, service = context(canonical), Catalog(), PCBuildApplicationService()
+    ctx.account_id, ctx.conversation_id = owner, conversation
+    tasks = [CompletionRequirement(kind="ANSWER")]
+    accepted = base_snapshot(ctx)
+    accepted.flexible = FlexiblePublishedState(
+        conversation_id=conversation,
+        task_message_id=uuid4(),
+        task_message="Tư vấn RAM",
+        status="WAITING_INPUT",
+        waiting_message="Xác nhận RAM 16GB?",
+        waiting_tasks=[TaskOutcome(task=tasks[0], status="UNRESOLVED")],
+        pending_proposal=pending,
+    )
+    before = accepted.model_dump(mode="json")
+    request = TurnRequestV2(
+        conversation_id=conversation,
+        request_id=uuid4(),
+        expected_revision=13,
+        message="RAM 32GB",
+        confirmation=confirmation,
+    )
+    binding = FlexiblePublicationInput.for_request(accepted, request)
+    observed_hashes = []
+    edit = draft()
+    edit.items[0].target_id = pending.patch.set_requirements[0].id
+
+    class Extractor:
+        async def extract_tasks(self, message):
+            assert message == accepted.flexible.task_message
+            return TaskDraftBatch(
+                tasks=[
+                    {
+                        "kind": "ANSWER",
+                        "start": 0,
+                        "end": len(message),
+                        "quote": message,
+                    }
+                ]
+            )
+
+        async def extract(self, message, state):
+            assert message == request.message
+            ram = next(
+                item for item in state.requirements.values() if item.subject == "RAM"
+            )
+            assert ram.value.amount == 16
+            observed_hashes.append(requirements_hash(state))
+            return edit
+
+    class Model:
+        async def decide(self, message, transcript, allowed, repair, context=None):
+            assert accepted.model_dump(mode="json") == before
+            observed_hashes.append(requirements_hash(context.requirements))
+            ram = next(
+                item
+                for item in context.requirements.requirements.values()
+                if item.subject == "RAM"
+            )
+            if ram.value.amount == 16:
+                return FlexibleDecision(
+                    action={
+                        "kind": "PROPOSE_REQUIREMENTS",
+                        "draft": edit.model_dump(),
+                    }
+                )
+            assert ram.value.amount == 32
+            if not transcript:
+                return FlexibleDecision(
+                    action={
+                        "kind": "CALL_TOOL",
+                        "call": {
+                            "call_id": "fresh",
+                            "name": "search_catalog",
+                            "arguments": {"query": "RAM"},
+                        },
+                    }
+                )
+            return FlexibleDecision(
+                action={
+                    "kind": "FINAL_ANSWER",
+                    "answer": {
+                        "text": "Untrusted",
+                        "evidence_refs": transcript[-1].result.evidence_refs,
+                    },
+                }
+            )
+
+    graph = build_flexible_graph(
+        Model(),
+        ToolDispatcher(products, service),
+        ctx,
+        [] if registered else tasks,
+        Budget(),
+        conversation_revision=13,
+        publication=binding,
+        user_extractor=Extractor(),
+        task_extractor=Extractor() if registered else None,
+        task_catalog=products if registered else None,
+    )
+    values = await graph.ainvoke(request.execution_input())
+    published = binding.prepare(values, ctx, tasks, service, 13)
+    assert accepted.model_dump(mode="json") == before
+    assert len({requirements_hash(canonical), *observed_hashes}) == 3
+    ram = next(
+        item
+        for item in published.requirement_state.requirements.values()
+        if item.subject == "RAM"
+    )
+    assert ram.value.amount == 32 and len(values["user_receipts"]) == 1
+    assert published.flexible.status == "COMPLETED"
+    with pytest.raises(ValueError):
+        binding.prepare(dict(values) | {"user_receipts": []}, ctx, tasks, service, 13)
+    if registered:
+
+        def revalidate(candidate):
+            return revalidate_flexible_publication(
+                candidate,
+                accepted,
+                request,
+                owner=owner,
+                run_id=ctx.run_id,
+                base_ref=CheckpointRefV1(
+                    thread_id=conversation, checkpoint_id="fixture-base"
+                ),
+                service=service,
+            )
+
+        assert revalidate(values) == published
+        forged = dict(values) | {"task_resolution": dict(values["task_resolution"])}
+        forged["task_resolution"]["requirements"] = [
+            dict(values["task_resolution"]["requirements"][0])
+            | {"product_ids": [str(uuid4())]}
+        ]
+        with pytest.raises(
+            ValueError, match="Registration cannot replace accepted continuation tasks"
+        ):
+            revalidate(forged)
+        assert accepted.model_dump(mode="json") == before
 
 
 @pytest.mark.asyncio

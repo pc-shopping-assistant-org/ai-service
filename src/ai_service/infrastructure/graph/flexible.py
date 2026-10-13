@@ -193,7 +193,12 @@ def build_flexible_graph(
         if publication
         else None
     )
-    turn_input = publication.turn_input(trusted, tasks) if publication else {}
+    bootstrap_tasks = tasks
+    if registering and publication and publication.accepted.flexible:
+        bootstrap_tasks = [
+            row.task for row in publication.accepted.flexible.task_outcomes
+        ]
+    turn_input = publication.turn_input(trusted, bootstrap_tasks) if publication else {}
 
     def registered_tasks(state: FlexibleState) -> list[CompletionRequirement]:
         if registering:

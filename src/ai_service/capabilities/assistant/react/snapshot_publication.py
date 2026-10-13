@@ -602,7 +602,10 @@ def revalidate_flexible_publication(
     ):
         raise ValueError("Saved build must come from the exact accepted checkpoint")
     binding = FlexiblePublicationInput.for_request(accepted, request, owner=owner)
-    binding.turn_input(ctx, execution.required)
+    bootstrap_tasks = execution.required
+    if execution.registered and binding.accepted.flexible:
+        bootstrap_tasks = [row.task for row in binding.accepted.flexible.task_outcomes]
+    binding.turn_input(ctx, bootstrap_tasks)
     tasks = execution.required
     if execution.discard_only:
         if not binding.discard_pending:
@@ -678,6 +681,18 @@ def revalidate_flexible_publication(
             if any(actual.get(key) != identity for key, identity in expected.items()):
                 raise ValueError("Registration dropped an accepted product selection")
         tasks = resolution.requirements
+        if (
+            binding.accepted.flexible
+            and binding.accepted.flexible.status == "WAITING_INPUT"
+            and binding.accepted.flexible.pending_task_resolution is None
+            and not binding.discard_pending
+            and [row.model_dump(exclude={"constraints_revision"}) for row in tasks]
+            != [
+                row.model_dump(exclude={"constraints_revision"})
+                for row in bootstrap_tasks
+            ]
+        ):
+            raise ValueError("Registration cannot replace accepted continuation tasks")
     elif (
         binding.accepted.flexible is None
         or binding.accepted.flexible.status != "WAITING_INPUT"
