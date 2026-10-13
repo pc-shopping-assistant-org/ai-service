@@ -6,6 +6,7 @@ from uuid import UUID
 from ai_service.application.ports.stateful_conversation import (
     AcceptedCheckpointReader,
     ConversationInitializer,
+    ConversationNotFound,
     ConversationRecord,
     InvalidConversationCursor,
     StatefulConversationStore,
@@ -53,6 +54,41 @@ class StatefulConversationService:
     async def get(self, account_id: UUID, conversation_id: UUID) -> ConversationViewV1:
         # Authorize before any framework lookup. No thread selector from HTTP.
         return await self._view(await self.store.get(account_id, conversation_id))
+
+    async def list(
+        self, account_id: UUID, limit: int = 20, cursor: str | None = None
+    ) -> PageV1[ConversationViewV1] | PageV1[ConversationViewV2]:
+        if not 1 <= limit <= 100:
+            raise ValueError("Limit must be between 1 and 100")
+        before = None
+        if cursor is not None:
+            try:
+                cursor_id = UUID(cursor)
+            except ValueError:
+                raise InvalidConversationCursor() from None
+            try:
+                previous = await self.store.get(account_id, cursor_id)
+            except ConversationNotFound:
+                raise InvalidConversationCursor() from None
+            before = (previous.updated_at, previous.id)
+        rows = await self.store.list_owned(account_id, limit, before)
+        more = False
+        if len(rows) == limit:
+            last = rows[-1]
+            more = bool(
+                await self.store.list_owned(account_id, 1, (last.updated_at, last.id))
+            )
+        views = [await self._view(row) for row in rows]
+        next_cursor = str(rows[-1].id) if more else None
+        if self.view_version == 2:
+            return PageV1[ConversationViewV2](
+                items=[
+                    ConversationViewV2.model_validate(view.model_dump())
+                    for view in views
+                ],
+                next_cursor=next_cursor,
+            )
+        return PageV1[ConversationViewV1](items=views, next_cursor=next_cursor)
 
     async def messages(
         self, account_id: UUID, conversation_id: UUID, limit: int, cursor: str | None
@@ -112,8 +148,23 @@ class StatefulConversationService:
 class StatefulRunService:
     """Commit admission before waking the process-owned executor; no HTTP task."""
 
-    def __init__(self, store: StatefulRunStore, wake: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        store: StatefulRunStore,
+        wake: Callable[[], None],
+        cancel_signal: Callable[[UUID], bool] | None = None,
+    ) -> None:
         self.store, self.wake = store, wake
+        self.cancel_signal = cancel_signal
+
+    async def cancel(
+        self, owner: UUID, conversation_id: UUID, run_id: UUID
+    ) -> RunViewV1:
+        result = await self.store.cancel(owner, conversation_id, run_id)
+        if self.cancel_signal is not None:
+            self.cancel_signal(run_id)
+        self.wake()
+        return result
 
     async def submit(self, owner: UUID, request: TurnRequest) -> RunViewV1:
         result = await self.store.submit(owner, request)

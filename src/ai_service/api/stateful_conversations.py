@@ -57,7 +57,7 @@ async def stateful_exception_handler(
     request: Request, exc: StatefulApiError
 ) -> JSONResponse:
     details = {
-        400: "Invalid message cursor for this conversation",
+        400: "Invalid cursor for this owner or conversation",
         401: "Authentication is required",
         404: "Conversation not found",
         503: "Stateful service is unavailable",
@@ -111,6 +111,24 @@ async def create_conversation(
         data=await runtime.conversations.create(owner, body.title),
         message=ResponseMessage.AI_CONVERSATION_CREATED,
     )
+
+
+@router.get(
+    "",
+    response_model=ApiResponse[PageV1[ConversationViewV1]],
+    responses={400: {"model": ErrorResponse}},
+)
+async def list_conversations(
+    owner: Annotated[UUID, Depends(account_id)],
+    runtime: Annotated[StatefulResources, Depends(resources)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Query(max_length=36)] = None,
+) -> ApiResponse[PageV1[ConversationViewV1] | PageV1[ConversationViewV2]]:
+    try:
+        data = await runtime.conversations.list(owner, limit, cursor)
+    except InvalidConversationCursor:
+        raise StatefulApiError(400, ResponseMessage.VALIDATION_ERROR) from None
+    return ApiResponse(data=data, message=ResponseMessage.AI_CONVERSATIONS_LISTED)
 
 
 @router.get(
@@ -228,6 +246,27 @@ async def get_run(
     return ApiResponse(data=run, message=ResponseMessage.AI_RUN_RETRIEVED)
 
 
+@router.post(
+    "/{conversation_id}/runs/{run_id}/cancel",
+    status_code=202,
+    response_model=ApiResponse[RunViewV1],
+    responses={404: {"model": ErrorResponse}},
+)
+async def cancel_run(
+    conversation_id: UUID,
+    run_id: UUID,
+    owner: Annotated[UUID, Depends(account_id)],
+    runtime: Annotated[StatefulResources, Depends(resources)],
+) -> ApiResponse[RunViewV1]:
+    if runtime.runs is None:
+        raise StatefulApiError(503, ResponseMessage.HTTP_ERROR)
+    try:
+        run = await runtime.runs.cancel(owner, conversation_id, run_id)
+    except RunAdmissionError as exc:
+        raise admission_error(exc) from None
+    return ApiResponse(data=run, message=ResponseMessage.AI_RUN_CANCEL_REQUESTED)
+
+
 def create_stateful_router(version: int = 1) -> APIRouter:
     if version == 1:
         return router
@@ -244,6 +283,8 @@ def create_stateful_router(version: int = 1) -> APIRouter:
             status_code=route.status_code,
             response_model=ApiResponse[ConversationViewV2]
             if route.endpoint in (create_conversation, get_conversation)
+            else ApiResponse[PageV1[ConversationViewV2]]
+            if route.endpoint is list_conversations
             else route.response_model,
             responses=route.responses,
             tags=route.tags,

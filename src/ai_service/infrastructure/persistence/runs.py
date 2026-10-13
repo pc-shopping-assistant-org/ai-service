@@ -256,6 +256,72 @@ class PostgresRunCoordinator:
             raise RunAdmissionError("AI_CONVERSATION_NOT_FOUND")
         return self._view(row)
 
+    async def cancel(
+        self, owner: UUID, conversation_id: UUID, run_id: UUID
+    ) -> RunViewV1:
+        async with self.engine.begin() as conn:
+            conversation = (
+                (
+                    await conn.execute(
+                        select(conversations)
+                        .where(
+                            conversations.c.id == conversation_id,
+                            conversations.c.account_id == owner,
+                        )
+                        .with_for_update()
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if conversation is None:
+                raise RunAdmissionError("AI_CONVERSATION_NOT_FOUND")
+            run = (
+                (
+                    await conn.execute(
+                        select(agent_runs)
+                        .where(
+                            agent_runs.c.id == run_id,
+                            agent_runs.c.conversation_id == conversation_id,
+                        )
+                        .with_for_update()
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if run is None:
+                raise RunAdmissionError("AI_CONVERSATION_NOT_FOUND")
+            if run["status"] in {
+                "COMPLETED",
+                "WAITING_INPUT",
+                "FAILED_TERMINAL",
+                "CANCELLED",
+            }:
+                return self._view(run)
+            values: dict[str, Any] = {"cancel_requested": True}
+            if run["status"] == "PENDING" and run["execution_id"] is None:
+                values.update(status="CANCELLED", finished_at=func.clock_timestamp())
+                if conversation["active_run_id"] == run_id:
+                    await conn.execute(
+                        update(conversations)
+                        .where(conversations.c.id == conversation_id)
+                        .values(active_run_id=None)
+                    )
+            row = (
+                (
+                    await conn.execute(
+                        update(agent_runs)
+                        .where(agent_runs.c.id == run_id)
+                        .values(**values)
+                        .returning(*agent_runs.c)
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            return self._view(row)
+
     async def claim_pending(self, worker_id: UUID, limit: int) -> list[ExecutionClaim]:
         if not 1 <= limit <= 32:
             raise ValueError("Invalid executor claim limit")
@@ -746,7 +812,7 @@ class PostgresRunCoordinator:
             )
         values = (
             await self._publication(claim, run)
-            if outcome.status == "COMPLETED"
+            if outcome.status == "COMPLETED" and not run["cancel_requested"]
             else None
         )
         async with self.engine.begin() as conn:
@@ -755,6 +821,9 @@ class PostgresRunCoordinator:
                 await conn.execute(select(func.clock_timestamp()))
             ).scalar_one()
             status = "CANCELLED" if outcome.status == "CANCELLED" else "FAILED_TERMINAL"
+            if run["cancel_requested"]:
+                values = None
+                status = "CANCELLED"
             if (
                 outcome.status == "FAILED"
                 and outcome.failure is not None
@@ -812,7 +881,7 @@ class PostgresRunCoordinator:
                     executor_stop_evidence=evidence.model_dump(mode="json"),
                     finished_at=now,
                     error={"code": "AI_RUN_FAILED"}
-                    if outcome.status == "FAILED"
+                    if outcome.status == "FAILED" and status != "CANCELLED"
                     else None,
                 )
             )

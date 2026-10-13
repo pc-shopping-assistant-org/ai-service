@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import create_async_engine
 from test_flexible_managed_build_postgres import CountingService, Products, hardware
 
@@ -19,6 +19,9 @@ from ai_service.capabilities.assistant.react.snapshot_publication import (
 from ai_service.capabilities.assistant.react.tools import ToolDispatcher
 from ai_service.capabilities.assistant.react.turn_contracts import TurnRequestV2
 from ai_service.capabilities.assistant.recovery_policy import RetryFailure
+from ai_service.capabilities.assistant.requirements.proposals import (
+    ProposalConfirmation,
+)
 from ai_service.capabilities.assistant.requirements.resolver import Draft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.assistant.stateful_contracts import CheckpointRefV1
@@ -72,10 +75,22 @@ def user_draft():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("recover", [False, True])
-@pytest.mark.parametrize("read_first", [False, True])
+@pytest.mark.parametrize(
+    "recover,read_first,confirm_then_edit,terminal_boundary",
+    [
+        (recover, read_first, confirm_then_edit, None)
+        for recover in (False, True)
+        for read_first in (False, True)
+        for confirm_then_edit in (False, True)
+    ]
+    + [
+        (False, False, True, "CANCEL"),
+        (False, False, True, "REVISION_CONFLICT"),
+        (False, False, True, "CANCEL_DURING_PUBLISH"),
+    ],
+)
 async def test_user_requirements_publish_without_confirmation_and_survive_recovery(
-    postgres_dsn, recover, read_first
+    postgres_dsn, recover, read_first, confirm_then_edit, terminal_boundary
 ):
     engine = create_async_engine(
         postgres_dsn.replace("postgresql://", "postgresql+psycopg://", 1),
@@ -93,6 +108,22 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
         asyncio.Event(),
         [],
     )
+    message = MESSAGE
+    failures = []
+    edits_committed = asyncio.Event()
+
+    def current_draft(state):
+        result = user_draft()
+        if message != MESSAGE:
+            result.items[0].value.amount = 25_000_000
+            for item in result.items:
+                source = state.goals if item.target == "GOAL" else state.requirements
+                item.target_id = next(
+                    row.id
+                    for row in source.values()
+                    if row.subject == item.subject and row.predicate == item.predicate
+                )
+        return result
 
     class Extractor:
         calls = 0
@@ -123,8 +154,15 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
         async def extract(self, message, state):
             async def generate():
                 self.calls += 1
-                assert message == MESSAGE and not state.requirements
-                return user_draft()
+                assert message == request.message
+                if confirm_then_edit:
+                    assert (
+                        next(iter(state.requirements.values())).value.amount
+                        == 30_000_000
+                    )
+                else:
+                    assert not state.requirements
+                return current_draft(state)
 
             fingerprint = canonical_hash(
                 {"message": message, "state": state.model_dump(mode="json")}
@@ -156,13 +194,26 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                     action={
                         "kind": "PROPOSE_REQUIREMENTS",
                         "draft": user_draft().model_dump(),
+                        "source_text": MESSAGE if confirm_then_edit else None,
+                    }
+                )
+            if (
+                confirm_then_edit
+                and next(iter(context.requirements.requirements.values())).value.amount
+                == 30_000_000
+            ):
+                return FlexibleDecision(
+                    action={
+                        "kind": "PROPOSE_REQUIREMENTS",
+                        "draft": current_draft(context.requirements).model_dump(),
                     }
                 )
             if not transcript:
                 if recover and not self.failed:
                     self.failed = True
                     raise ExecutionFailed(RetryFailure.UPSTREAM_TIMEOUT)
-                if recover:
+                if recover or confirm_then_edit:
+                    edits_committed.set()
                     await gate.wait()
                 return FlexibleDecision(
                     action={
@@ -204,6 +255,38 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                 auto_recovery=recover,
             )
             reader = PostgresAcceptedCheckpointReader(saver)
+            original_stopped = coordinator.stopped
+
+            async def recorded_stopped(claim, evidence, outcome):
+                try:
+                    await original_stopped(claim, evidence, outcome)
+                except BaseException as error:
+                    failures.append(repr(error))
+                    raise
+
+            coordinator.stopped = recorded_stopped
+            if terminal_boundary in {"REVISION_CONFLICT", "CANCEL_DURING_PUBLISH"}:
+                original_publication = coordinator._publication
+
+                async def racing_publication(claim, run):
+                    values = await original_publication(claim, run)
+                    if run["base_revision"] == 1:
+                        if terminal_boundary == "CANCEL_DURING_PUBLISH":
+                            await coordinator.cancel(
+                                owner, conversation.id, claim.run_id
+                            )
+                            return values
+                        # Only this fixture's row: a competing revision lands after
+                        # native validation but before the final locked CAS check.
+                        async with engine.begin() as conn:
+                            await conn.execute(
+                                update(conversations)
+                                .where(conversations.c.id == conversation.id)
+                                .values(revision=2)
+                            )
+                    return values
+
+                coordinator._publication = racing_publication
 
             async def factory(claim):
                 request, head = await coordinator.load(claim)
@@ -238,9 +321,20 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                     flow, accepted_versions={FLEXIBLE_GRAPH_VERSION}
                 )
 
+            execution = ConversationExecution(
+                coordinator, factory, FLEXIBLE_GRAPH_VERSION
+            )
+
+            async def recorded_execution(claim, children):
+                try:
+                    await execution(claim, children)
+                except BaseException as error:
+                    failures.append(repr(error))
+                    raise
+
             executor = ManagedExecutor(
                 coordinator,
-                ConversationExecution(coordinator, factory, FLEXIBLE_GRAPH_VERSION),
+                recorded_execution,
                 worker_id=uuid4(),
                 poll_seconds=0.02,
             )
@@ -253,6 +347,87 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
             )
             submitted = await coordinator.submit(owner, request)
             executor.wake()
+            if confirm_then_edit:
+                for _ in range(200):
+                    view = await coordinator.get(
+                        owner, conversation.id, submitted.run_id
+                    )
+                    if view.status == "WAITING_INPUT" or executor.last_error:
+                        break
+                    await asyncio.sleep(0.02)
+                assert view.status == "WAITING_INPUT", executor.last_error
+                waiting_head = await store.get(owner, conversation.id)
+                waiting = await reader.read(
+                    CheckpointRefV1(
+                        thread_id=waiting_head.id,
+                        checkpoint_id=waiting_head.accepted_checkpoint_id,
+                    )
+                )
+                pending = waiting.flexible.pending_proposal
+                assert (
+                    waiting_head.revision == 1
+                    and not waiting.requirement_state.requirements
+                )
+                message = MESSAGE.replace("30000000", "25000000")
+                request = TurnRequestV2(
+                    conversation_id=conversation.id,
+                    request_id=uuid4(),
+                    expected_revision=1,
+                    message=message,
+                    confirmation=ProposalConfirmation(
+                        proposal_id=pending.proposal_id,
+                        proposal_hash=pending.proposal_hash,
+                        target_revision=pending.target_revision,
+                        base_requirements_hash=pending.base_requirements_hash,
+                    ),
+                )
+                submitted = await coordinator.submit(owner, request)
+                executor.wake()
+                if not recover:
+                    await asyncio.wait_for(edits_committed.wait(), timeout=5)
+                    held = await store.get(owner, conversation.id)
+                    assert (
+                        held.revision == 1
+                        and held.accepted_checkpoint_id
+                        == waiting_head.accepted_checkpoint_id
+                    )
+                    assert held.active_run_id == submitted.run_id
+                    if terminal_boundary == "CANCEL":
+                        assert await executor.stop(grace_seconds=5)
+                        view = await coordinator.get(
+                            owner, conversation.id, submitted.run_id
+                        )
+                        assert view.status == "CANCELLED"
+                        after = await store.get(owner, conversation.id)
+                        assert after.revision == 1 and after.active_run_id is None
+                        assert (
+                            after.accepted_checkpoint_id
+                            == waiting_head.accepted_checkpoint_id
+                        )
+                        snapshot = await reader.read(
+                            CheckpointRefV1(
+                                thread_id=after.id,
+                                checkpoint_id=after.accepted_checkpoint_id,
+                            )
+                        )
+                        assert snapshot == waiting and service.calls == 0
+                        async with engine.connect() as conn:
+                            persisted = (
+                                (
+                                    await conn.execute(
+                                        select(conversation_messages).where(
+                                            conversation_messages.c.conversation_id
+                                            == conversation.id
+                                        )
+                                    )
+                                )
+                                .mappings()
+                                .all()
+                            )
+                        assert len(persisted) == 3
+                        assert sum(row["role"] == "assistant" for row in persisted) == 1
+                        return
+                    gate.set()
             if recover:
                 for _ in range(200):
                     view = await coordinator.get(
@@ -263,7 +438,10 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                     await asyncio.sleep(0.02)
                 assert view.status == "RECOVERING", executor.last_error
                 held = await store.get(owner, conversation.id)
-                assert held.revision == 0 and held.active_run_id == submitted.run_id
+                assert (
+                    held.revision == int(confirm_then_edit)
+                    and held.active_run_id == submitted.run_id
+                )
                 original = await reader.read(
                     CheckpointRefV1(
                         thread_id=held.id, checkpoint_id=held.accepted_checkpoint_id
@@ -276,17 +454,57 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                 gate.set()
             for _ in range(200):
                 view = await coordinator.get(owner, conversation.id, submitted.run_id)
-                if view.status == "COMPLETED" or executor.last_error:
+                if view.status in {"COMPLETED", "CANCELLED"} or executor.last_error:
                     break
                 await asyncio.sleep(0.02)
-            assert view.status == "COMPLETED", executor.last_error
+            if terminal_boundary in {"REVISION_CONFLICT", "CANCEL_DURING_PUBLISH"}:
+                conflict = terminal_boundary == "REVISION_CONFLICT"
+                if conflict:
+                    assert executor.last_error == "STOP_ACK_NOT_PERSISTED"
+                    assert any(
+                        "PUBLICATION_CONFLICT" in failure for failure in failures
+                    )
+                else:
+                    assert view.status == "CANCELLED" and not executor.last_error
+                after = await store.get(owner, conversation.id)
+                assert after.revision == (2 if conflict else 1)
+                assert after.active_run_id == (submitted.run_id if conflict else None)
+                assert (
+                    after.accepted_checkpoint_id == waiting_head.accepted_checkpoint_id
+                )
+                snapshot = await reader.read(
+                    CheckpointRefV1(
+                        thread_id=after.id, checkpoint_id=after.accepted_checkpoint_id
+                    )
+                )
+                assert snapshot == waiting and service.calls == 1
+                async with engine.connect() as conn:
+                    persisted = (
+                        (
+                            await conn.execute(
+                                select(conversation_messages).where(
+                                    conversation_messages.c.conversation_id
+                                    == conversation.id
+                                )
+                            )
+                        )
+                        .mappings()
+                        .all()
+                    )
+                assert len(persisted) == 3
+                assert sum(row["role"] == "assistant" for row in persisted) == 1
+                return
+            assert view.status == "COMPLETED", failures
             head = await store.get(owner, conversation.id)
             accepted = await reader.read(
                 CheckpointRefV1(
                     thread_id=head.id, checkpoint_id=head.accepted_checkpoint_id
                 )
             )
-            assert head.revision == 1 and head.active_run_id is None
+            assert (
+                head.revision == 1 + int(confirm_then_edit)
+                and head.active_run_id is None
+            )
             assert (
                 len(accepted.requirement_state.requirements)
                 == len(accepted.requirement_state.goals)
@@ -297,6 +515,14 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                 and accepted.flexible.status == "COMPLETED"
             )
             assert 0 < accepted.public_build.total_spending_vnd <= 30_000_000
+            if confirm_then_edit:
+                assert (
+                    next(
+                        iter(accepted.requirement_state.requirements.values())
+                    ).value.amount
+                    == 25_000_000
+                )
+                assert accepted.public_build.total_spending_vnd <= 25_000_000
             assert (
                 service.calls == sum(extractor.calls for extractor in extractors) == 1
             )
@@ -308,8 +534,15 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                 )
             )
             ledger = terminal.checkpoint["channel_values"]["ledger"]
-            assert len(ledger) == (2 if read_first else 1)
-            if read_first:
+            if confirm_then_edit:
+                receipts = terminal.checkpoint["channel_values"]["user_receipts"]
+                assert len(receipts) == 1
+                assert (
+                    receipts[0]["proposed"]["draft"]["items"][0]["value"]["amount"]
+                    == 25_000_000
+                )
+            assert len(ledger) == (2 if read_first and not confirm_then_edit else 1)
+            if read_first and not confirm_then_edit:
                 assert ledger[0]["call"]["call_id"] == "before"
                 assert ledger[0]["result"]["constraints_revision"] == 0
                 assert (
@@ -331,7 +564,7 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                     .mappings()
                     .all()
                 )
-            assert len(messages) == 2
+            assert len(messages) == 2 + 2 * int(confirm_then_edit)
     finally:
         gate.set()
         if executor:

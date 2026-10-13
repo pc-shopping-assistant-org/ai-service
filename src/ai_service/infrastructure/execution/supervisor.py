@@ -120,6 +120,12 @@ class ManagedExecutor:
             entry[1].cancel()
         return True
 
+    def cancel_run(self, run_id: UUID) -> bool:
+        for execution_id, (claim, _) in list(self._active.items()):
+            if claim.run_id == run_id:
+                return self.cancel(execution_id)
+        return False  # Other worker / claim-registration race: durable flag wins.
+
     async def _heartbeat(self, claim: ExecutionClaim) -> None:
         while True:
             await asyncio.sleep(self.heartbeat_seconds)

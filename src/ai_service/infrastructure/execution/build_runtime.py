@@ -274,7 +274,7 @@ async def open_build_runtime(
     )
     try:
         await executor.start()
-        yield StatefulRunService(coordinator, executor.wake)
+        yield StatefulRunService(coordinator, executor.wake, executor.cancel_run)
     finally:
         # Shutdown may exceed grace, but live CPU/checkpoint work must not lose
         # its clients/DB beneath it or be reported stopped merely on a timeout.

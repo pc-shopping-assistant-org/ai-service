@@ -186,6 +186,10 @@ class RunAdmissionError(ValueError):
 
 
 class StatefulRunStore(Protocol):
+    async def cancel(
+        self, owner: UUID, conversation_id: UUID, run_id: UUID
+    ) -> RunViewV1: ...
+
     async def submit(self, owner: UUID, request: TurnRequest) -> RunViewV1: ...
 
     async def get(
