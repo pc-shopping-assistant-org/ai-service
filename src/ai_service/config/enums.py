@@ -31,4 +31,14 @@ class EmbeddingProviderKind(StrEnum):
     HASH = "hash"
 
 
-__all__ = ["AIProvider", "EmbeddingProviderKind", "RetrievalBackend"]
+class StatefulReactVersion(StrEnum):
+    V1 = "v1"
+    V2 = "v2"
+
+
+__all__ = [
+    "AIProvider",
+    "EmbeddingProviderKind",
+    "RetrievalBackend",
+    "StatefulReactVersion",
+]

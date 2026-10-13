@@ -140,6 +140,7 @@ class ConsultationStateV1(Contract):
     )
     explanation: CompletionMarkerV1[str] = Field(default_factory=CompletionMarkerV1)
     last_successful_build: OptimizationResult | None = None
+    published_build_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     build_stale: bool = False
 
     @field_validator("schema_version", mode="before")
@@ -160,7 +161,11 @@ class ConsultationStateV1(Contract):
             and not self.last_successful_build.builds
         ):
             raise ValueError("Historical successful build must contain builds")
-        if self.build_stale and self.last_successful_build is None:
+        if (
+            self.build_stale
+            and self.last_successful_build is None
+            and self.published_build_hash is None
+        ):
             raise ValueError("Stale build requires a historical successful build")
         return self
 

@@ -159,11 +159,124 @@ def parse_turn_patch(payload: str) -> TurnPatchV1:
     )
 
 
+class ClarificationSelectionV1(Contract):
+    item_index: NonNegativeInt
+    variant_id: UUID
+
+
+class ClarificationReplyV1(Contract):
+    pending_message_id: UUID
+    selections: list[ClarificationSelectionV1] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def unique_items(self) -> ClarificationReplyV1:
+        if len({item.item_index for item in self.selections}) != len(self.selections):
+            raise ValueError("Duplicate clarification selection")
+        return self
+
+
+class TaskProductSelectionV1(Contract):
+    task_index: NonNegativeInt
+    subject_index: NonNegativeInt
+    product_id: UUID
+
+
+class TaskClarificationReplyV1(Contract):
+    pending_message_id: UUID
+    constraints_revision: NonNegativeInt
+    selections: list[TaskProductSelectionV1] = Field(min_length=1, max_length=40)
+
+    @model_validator(mode="after")
+    def unique_subjects(self) -> TaskClarificationReplyV1:
+        keys = {(item.task_index, item.subject_index) for item in self.selections}
+        if len(keys) != len(self.selections):
+            raise ValueError("Duplicate task clarification selection")
+        return self
+
+
+QuantityUnit = Literal["VND", "GB", "TB", "GiB", "TiB", "W", "FPS"]
+
+
+class UnitSelectionV1(Contract):
+    item_index: NonNegativeInt
+    unit: QuantityUnit
+    start: NonNegativeInt
+    end: StrictInt = Field(gt=0)
+    quote: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=4000)]
+
+    @model_validator(mode="after")
+    def valid_span(self) -> UnitSelectionV1:
+        if self.end <= self.start or self.end - self.start != len(self.quote):
+            raise ValueError("Invalid unit confirmation evidence span")
+        return self
+
+
+class UnitClarificationReplyV1(Contract):
+    pending_message_id: UUID
+    constraints_revision: NonNegativeInt
+    selections: list[UnitSelectionV1] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def unique_items(self) -> UnitClarificationReplyV1:
+        if len({item.item_index for item in self.selections}) != len(self.selections):
+            raise ValueError("Duplicate unit clarification selection")
+        return self
+
+
+class PendingActionV1(Contract):
+    action: Literal["DISCARD", "REPLACE"]
+    pending_message_id: UUID
+    constraints_revision: NonNegativeInt
+
+
 class TurnRequestV1(Contract):
     conversation_id: UUID
     request_id: UUID
     expected_revision: NonNegativeInt
     message: Annotated[Text, Field(max_length=4000)]
+    clarification_reply: ClarificationReplyV1 | None = None
+    task_clarification_reply: TaskClarificationReplyV1 | None = None
+    unit_clarification_reply: UnitClarificationReplyV1 | None = None
+    pending_action: PendingActionV1 | None = None
+
+    @model_validator(mode="after")
+    def one_clarification_kind(self) -> TurnRequestV1:
+        if self.pending_action is not None and any(
+            reply is not None
+            for reply in (
+                self.clarification_reply,
+                self.task_clarification_reply,
+                self.unit_clarification_reply,
+            )
+        ):
+            raise ValueError("Cannot combine pending action with a clarification reply")
+        if (
+            self.clarification_reply is not None
+            or self.unit_clarification_reply is not None
+        ) and self.task_clarification_reply is not None:
+            raise ValueError("Choose one clarification reply kind")
+        return self
+
+    def execution_input(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "message": self.message,
+            "message_id": str(self.request_id),
+        }
+        if self.clarification_reply is not None:
+            payload["clarification_reply"] = self.clarification_reply.model_dump(
+                mode="json"
+            )
+        if self.task_clarification_reply is not None:
+            payload["task_clarification_reply"] = (
+                self.task_clarification_reply.model_dump(mode="json")
+            )
+        if self.unit_clarification_reply is not None:
+            payload["unit_clarification_reply"] = (
+                self.unit_clarification_reply.model_dump(mode="json")
+            )
+        if self.pending_action is not None:
+            payload["pending_action"] = self.pending_action.model_dump(mode="json")
+        return payload
 
 
 class CheckpointRefV1(Contract):
@@ -186,10 +299,8 @@ class ConversationHeadV1(Contract):
     @model_validator(mode="after")
     def validate_accepted_reference(self) -> ConversationHeadV1:
         ref = self.accepted_checkpoint_ref
-        if (self.revision == 0) != (ref is None):
-            raise ValueError(
-                "Revision zero has no accepted head; published revisions require one"
-            )
+        if self.revision > 0 and ref is None:
+            raise ValueError("Published revisions require an accepted head")
         if ref is not None and (
             ref.thread_id != self.conversation_id or ref.checkpoint_ns != ""
         ):

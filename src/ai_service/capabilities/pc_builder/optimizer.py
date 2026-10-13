@@ -10,6 +10,14 @@ from typing import Any
 from uuid import UUID, uuid5
 
 from ai_service.application.ports.hardware import ComponentCategory, ComponentSpec
+from ai_service.capabilities.pc_builder.compatibility import (
+    case_supported_form_factors,
+    check_case_form_factor,
+)
+from ai_service.capabilities.pc_builder.errors import (
+    CaseSupportMetadataError,
+    NoFeasibleBuildError,
+)
 from ai_service.capabilities.pc_builder.pruning import (
     get_candidate_pool,
     pareto_prune_all_objectives,
@@ -20,6 +28,7 @@ from ai_service.capabilities.pc_builder.schemas import (
     CompatibilityStatus,
     MetricEvidence,
     OptimizationResult,
+    OptimizerSearchTrace,
     PCBuildConstraints,
     PowerEstimate,
     RankedBuild,
@@ -31,6 +40,7 @@ from ai_service.capabilities.pc_builder.schemas import (
 SYNTHETIC_NAMESPACE = UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
 STANDARD_PSU_SIZES = [450, 500, 550, 600, 650, 750, 850, 1000, 1200]
+POWER_SIZING_POLICY_VERSION = "eng-power-sizing-v1"
 
 FORM_FACTOR_RANKS: dict[str, int] = {
     "MINIITX": 1,
@@ -299,7 +309,9 @@ def calculate_power_estimate(
     platform_watts = 65.0
     sustained_peak = cpu_peak + gpu_peak + platform_watts
 
-    if gpu_tdp >= 280:
+    if gpu is not None and gpu.is_integrated:
+        transient_factor = 0.0
+    elif gpu_tdp >= 280:
         transient_factor = 0.30
     elif gpu_tdp >= 180:
         transient_factor = 0.20
@@ -368,22 +380,9 @@ def check_compatibility_status(
 
     # 3. Mainboard Form Factor vs Case: must be known and supported
     if mb and case:
-        if not mb.form_factor:
-            return CompatibilityStatus.UNKNOWN
-        mb_ff = _norm(mb.form_factor)
-        if case.supported_form_factors:
-            supported = [_norm(s) for s in case.supported_form_factors]
-            if mb_ff not in supported:
-                return CompatibilityStatus.INCOMPATIBLE
-        elif case.form_factor:
-            mb_rank = FORM_FACTOR_RANKS.get(mb_ff)
-            case_rank = FORM_FACTOR_RANKS.get(_norm(case.form_factor))
-            if mb_rank is None or case_rank is None:
-                return CompatibilityStatus.UNKNOWN
-            if mb_rank > case_rank:
-                return CompatibilityStatus.INCOMPATIBLE
-        else:
-            return CompatibilityStatus.UNKNOWN
+        case_status = check_case_form_factor(mb, case)
+        if case_status != CompatibilityStatus.COMPATIBLE:
+            return case_status
 
     # 4. GPU Length vs Case Max GPU Length (dedicated GPU only)
     if gpu and case and not gpu.is_integrated:
@@ -659,6 +658,9 @@ class DeterministicPCOptimizer:
         budget = constraints.target_budget_vnd.value
         profile = constraints.use_case.value
         rejected_candidates: list[str] = []
+        missing_case_support = False
+        metadata_rejections = 0
+        scoring_rejections = 0
 
         owned_map: dict[ComponentCategory, Any] = {
             op.category: op for op in constraints.owned_parts
@@ -673,7 +675,11 @@ class DeterministicPCOptimizer:
         categorized: dict[ComponentCategory, list[ComponentSpec]] = {cat: [] for cat in ComponentCategory}
         for item in catalog:
             if item.category in categorized:
+                pin = constraints.pinned_parts.get(item.category)
+                if pin is not None and item.id != pin:
+                    continue
                 if item.category in {ComponentCategory.CPU, ComponentCategory.GPU} and item.tdp_watts is None:
+                    metadata_rejections += 1
                     rejected_candidates.append(f"{item.name}: missing tdp_watts")
                     continue
                 if (
@@ -704,8 +710,8 @@ class DeterministicPCOptimizer:
                     ):
                         continue
                     if item.category == ComponentCategory.CASE:
-                        supported = [_norm(s) for s in (item.supported_form_factors or [item.form_factor or ""])]
-                        if supported and pref_ff not in supported:
+                        supported = case_supported_form_factors(item)
+                        if supported is not None and pref_ff not in supported:
                             continue
 
                 categorized[item.category].append(item)
@@ -723,6 +729,13 @@ class DeterministicPCOptimizer:
                     continue
                 else:
                     raise ValueError(f"Owned part for category '{cat}' must specify a valid ComponentSpec.")
+
+            if cat in constraints.pinned_parts:
+                # Hard pins bypass dominance pruning, not budget/compatibility rules.
+                pruned_pools[cat] = [item for item in items if item.price <= budget]
+                if not pruned_pools[cat]:
+                    rejected_candidates.append(f"{cat}: pinned variant unavailable or over budget")
+                continue
 
             pool = get_candidate_pool(items, budget, cat, profile)
             if self.enable_pruning:
@@ -757,8 +770,16 @@ class DeterministicPCOptimizer:
 
         # Deterministic constrained enumeration with early budget and compatibility pruning
         for cpu in cpus:
+            if cpu.has_integrated_graphics and (
+                cpu.integrated_graphics_score is None or cpu.integrated_graphics_power_watts is None
+            ):
+                metadata_rejections += 1
+            if cpu.includes_stock_cooler and (
+                cpu.stock_cooler_height_mm is None or cpu.stock_cooler_score is None
+            ):
+                metadata_rejections += 1
             # Build GPU options: dedicated catalog GPUs plus iGPU only if CPU has integrated graphics
-            if ComponentCategory.GPU in owned_map:
+            if ComponentCategory.GPU in owned_map or ComponentCategory.GPU in constraints.pinned_parts:
                 available_gpus = list(catalog_gpus)
             else:
                 available_gpus = list(catalog_gpus)
@@ -788,7 +809,7 @@ class DeterministicPCOptimizer:
             available_gpus.sort(key=lambda c: (get_spending_price(ComponentCategory.GPU, c), stable_component_id(c)))
 
             # Build Cooler options: aftermarket catalog coolers plus stock cooler only if CPU includes one
-            if ComponentCategory.COOLER in owned_map:
+            if ComponentCategory.COOLER in owned_map or ComponentCategory.COOLER in constraints.pinned_parts:
                 available_coolers = list(catalog_coolers)
             else:
                 available_coolers = list(catalog_coolers)
@@ -819,6 +840,8 @@ class DeterministicPCOptimizer:
 
             for mb in mainboards:
                 # Socket check
+                if not cpu.socket or not mb.socket:
+                    metadata_rejections += 1
                 if not cpu.socket or not mb.socket or _norm(cpu.socket) != _norm(mb.socket):
                     continue
                 sub_1 = get_spending_price(ComponentCategory.CPU, cpu) + get_spending_price(ComponentCategory.MAINBOARD, mb)
@@ -827,6 +850,8 @@ class DeterministicPCOptimizer:
 
                 for ram in rams:
                     # RAM type check
+                    if not mb.ram_type or not ram.ram_type:
+                        metadata_rejections += 1
                     if not mb.ram_type or not ram.ram_type or _norm(mb.ram_type) != _norm(ram.ram_type):
                         continue
                     sub_2 = sub_1 + get_spending_price(ComponentCategory.RAM, ram)
@@ -847,20 +872,21 @@ class DeterministicPCOptimizer:
                         try:
                             power = calculate_power_estimate(temp_parts, profile)
                         except ValueError as exc:
+                            metadata_rejections += 1
                             rejected_candidates.append(str(exc))
                             continue
 
                         for case in cases:
-                            # Form factor check: strict membership if supported_form_factors present, else ranking
-                            if case.supported_form_factors:
-                                if _norm(mb.form_factor) not in [_norm(s) for s in case.supported_form_factors]:
-                                    continue
-                            elif case.form_factor:
-                                mb_rank = FORM_FACTOR_RANKS.get(_norm(mb.form_factor))
-                                case_rank = FORM_FACTOR_RANKS.get(_norm(case.form_factor))
-                                if mb_rank is None or case_rank is None or mb_rank > case_rank:
-                                    continue
-                            else:
+                            sub_4 = sub_3 + get_spending_price(ComponentCategory.CASE, case)
+                            if sub_4 > budget:
+                                break
+                            case_status = check_case_form_factor(mb, case)
+                            if case_supported_form_factors(case) is None:
+                                missing_case_support = True
+                                rejected_candidates.append(f"{case.name}: CASE_SUPPORT_METADATA_REQUIRED")
+                            if case_status != CompatibilityStatus.COMPATIBLE:
+                                if case_status == CompatibilityStatus.UNKNOWN:
+                                    metadata_rejections += 1
                                 continue
 
                             # Dedicated GPU length check
@@ -871,10 +897,6 @@ class DeterministicPCOptimizer:
                                 and gpu.gpu_length_mm > case.max_gpu_length_mm
                             ):
                                 continue
-
-                            sub_4 = sub_3 + get_spending_price(ComponentCategory.CASE, case)
-                            if sub_4 > budget:
-                                break
 
                             for cooler in available_coolers:
                                 # Cooler height check
@@ -922,6 +944,8 @@ class DeterministicPCOptimizer:
                                             full_parts, power.minimum_capacity_watts
                                         )
                                         if compat_status != CompatibilityStatus.COMPATIBLE:
+                                            if compat_status == CompatibilityStatus.UNKNOWN:
+                                                metadata_rejections += 1
                                             continue
 
                                         evaluated_combinations += 1
@@ -939,6 +963,7 @@ class DeterministicPCOptimizer:
                                                 total_spending=total_spending,
                                             )
                                             if breakdown.total_score < 0.0:
+                                                scoring_rejections += 1
                                                 # Reject build with missing required scoring metric
                                                 continue
 
@@ -970,17 +995,26 @@ class DeterministicPCOptimizer:
                     spending_prices={cat: get_spending_price(cat, part) for cat, part in parts.items()},
                 )
 
-        if not ranked_builds:
-            raise ValueError(f"No compatible build configuration found within budget {budget:,} VND.")
-
-        return OptimizationResult(
+        result = OptimizationResult(
             target_budget_vnd=budget,
             use_case=profile,
             builds=ranked_builds,
             candidates_evaluated=evaluated_combinations,
             pruned_count=total_pruned_candidates,
             rejected_candidates=list(dict.fromkeys(rejected_candidates)),
+            search_trace=OptimizerSearchTrace(
+                enumeration_complete=True,
+                pruned_candidates=total_pruned_candidates,
+                metadata_rejections=metadata_rejections,
+                scoring_rejections=scoring_rejections,
+                pool_variant_ids={cat: [part.id for part in parts] for cat, parts in pruned_pools.items()},
+            ),
         )
+        if not ranked_builds:
+            if missing_case_support:
+                raise CaseSupportMetadataError()
+            raise NoFeasibleBuildError(result)
+        return result
 
 
 __all__ = [

@@ -20,6 +20,8 @@ from ai_service.application.ports.hardware import (
     UpgradePathReport,
     WattageReport,
 )
+from ai_service.capabilities.pc_builder.compatibility import check_case_form_factor
+from ai_service.capabilities.pc_builder.schemas import CompatibilityStatus
 
 STANDARD_PSU_SIZES = [450, 550, 650, 750, 850, 1000, 1200, 1600]
 
@@ -102,30 +104,21 @@ class LocalHardwareRuleEngine(HardwareRuleEngine):
         if mainboards and cases:
             mb = mainboards[0]
             case = cases[0]
-            mb_ff = _norm_form_factor(mb.form_factor or mb.extra_specs.get("form_factor"))
-            case_supported = [
-                _norm_form_factor(s)
-                for s in (case.supported_form_factors or case.extra_specs.get("supported_form_factors", []))
-            ]
-            case_ff = _norm_form_factor(case.form_factor or case.extra_specs.get("form_factor"))
-            if case_ff and case_ff not in case_supported:
-                case_supported.append(case_ff)
-
-            if mb_ff:
-                mb_rank = FORM_FACTOR_HIERARCHY.get(mb_ff)
-                case_ranks = [FORM_FACTOR_HIERARCHY[s] for s in case_supported if s in FORM_FACTOR_HIERARCHY]
-                max_case_rank = max(case_ranks) if case_ranks else None
-
-                if max_case_rank and mb_rank and mb_rank > max_case_rank:
-                    issues.append(
-                        CompatibilityIssue(
-                            level="ERROR",
-                            category="FORM_FACTOR_MISMATCH",
-                            components_involved=[mb.name, case.name],
-                            message=f"Kích thước bo mạch chủ ({mb_ff.upper()}) quá lớn so với vỏ case ({case_ff.upper() if case_ff else 'vỏ case'}).",
-                            suggestion=f"Chọn vỏ case hỗ trợ kích thước {mb_ff.upper()} trở lên.",
-                        )
+            status = check_case_form_factor(mb, case)
+            if status != CompatibilityStatus.COMPATIBLE:
+                unknown = status == CompatibilityStatus.UNKNOWN
+                issues.append(
+                    CompatibilityIssue(
+                        level="ERROR",
+                        category="FORM_FACTOR_UNKNOWN" if unknown else "FORM_FACTOR_MISMATCH",
+                        components_involved=[mb.name, case.name],
+                        message=(
+                            "Thiếu thông tin form factor mainboard hoặc danh sách hỗ trợ của case."
+                            if unknown else "Case không khai báo hỗ trợ form factor của mainboard."
+                        ),
+                        suggestion="Kiểm tra danh sách form factor được nhà sản xuất case hỗ trợ.",
                     )
+                )
 
         # 4. GPU Length vs Case Max GPU Length
         if gpus and cases:

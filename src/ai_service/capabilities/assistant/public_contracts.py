@@ -136,13 +136,57 @@ class TurnResultV1(Contract):
         return self
 
 
+class ClarificationOptionV1(Contract):
+    variant_id: UUID
+    sku: Text
+    name: Text
+
+
+class ClarificationItemV1(Contract):
+    item_index: NonNegativeInt
+    reason: Text
+    options: list[ClarificationOptionV1] = Field(default_factory=list, max_length=20)
+    quantity_amount: NonNegativeInt | None = None
+    unit_options: list[Literal["VND", "GB", "TB", "GiB", "TiB", "W", "FPS"]] = Field(
+        default_factory=list, max_length=7
+    )
+
+
+class PublicClarificationV1(Contract):
+    pending_message_id: UUID
+    constraints_revision: NonNegativeInt
+    items: list[ClarificationItemV1] = Field(min_length=1, max_length=100)
+
+
+class TaskProductOptionV1(Contract):
+    product_id: UUID
+    name: Text
+
+
+class TaskClarificationItemV1(Contract):
+    task_index: NonNegativeInt
+    subject_index: NonNegativeInt | None = None
+    mention: Text
+    reason: Text
+    options: list[TaskProductOptionV1] = Field(default_factory=list, max_length=100)
+
+
+class PublicTaskClarificationV1(Contract):
+    pending_message_id: UUID
+    constraints_revision: NonNegativeInt
+    items: list[TaskClarificationItemV1] = Field(min_length=1, max_length=40)
+
+
 class ConversationViewV1(Contract):
     conversation_id: UUID
+    readiness: Literal["INITIALIZING", "READY"]
     revision: NonNegativeInt
     title: Text | None
     updated_at: AwareDatetime
     state: PublicConsultationV1
     build: PublicBuildV1 | None = None
+    clarification: PublicClarificationV1 | None = None
+    task_clarification: PublicTaskClarificationV1 | None = None
 
 
 class ConversationCreateV1(Contract):

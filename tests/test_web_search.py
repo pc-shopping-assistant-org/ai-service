@@ -78,6 +78,48 @@ def test_duckduckgo_html_parsing(search_adapter: DuckDuckGoSearchAdapter) -> Non
     assert "solid 1080p performance" in items[0].snippet
 
 
+def test_duckduckgo_current_markup_preserves_organic_titles_and_urls(search_adapter):
+    # Current HTML endpoint: result__a, arbitrary attribute order, nested text.
+    markup = '''
+    <h2 class="result__title"><a rel="nofollow" class="result__a"
+      href="https://duckduckgo.com/y.js?ad_domain=shop.example&amp;u3=ad">Ad</a></h2>
+    <a class="result__snippet" href="https://duckduckgo.com/y.js?ad_domain=shop.example">Buy now</a>
+    <h2 class="result__title"><a rel="nofollow" class="result__a"
+      href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.techpowerup.com%2Freview%2Frtx-4070%3Fq%3DA%252FB&amp;rut=tracking">
+      RTX <b>4070 Super</b> &amp; Review</a></h2>
+    <a href="//duckduckgo.com/l/?uddg=ignored" class="result__snippet">Measured <b>1440p</b> performance.</a>
+    <h2 class="result__title"><a href="https://example.org/specs" class="result__a">Official specifications</a></h2>
+    <a class="result__snippet" href="https://example.org/specs">Dimensions and power.</a>
+    '''
+    items = search_adapter._parse_html(markup, limit=2)
+    assert [(item.title, item.url, item.snippet) for item in items] == [
+        (
+            "RTX 4070 Super & Review",
+            "https://www.techpowerup.com/review/rtx-4070?q=A%2FB",
+            "Measured 1440p performance.",
+        ),
+        ("Official specifications", "https://example.org/specs", "Dimensions and power."),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status,html,expected_note",
+    [
+        (202, '<form id="challenge-form">Verify you are human</form>', "WEB_SEARCH_UNAVAILABLE"),
+        (200, '<form id="challenge-form">Verify you are human</form>', "WEB_SEARCH_UNAVAILABLE"),
+        (200, '<div class="no-results">No results found</div>', "WEB_SEARCH_NO_RESULTS"),
+    ],
+)
+async def test_search_distinguishes_challenge_and_empty_results(monkeypatch, status, html, expected_note):
+    original = httpx.AsyncClient
+    transport = httpx.MockTransport(lambda request: httpx.Response(status, text=html, request=request))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(transport=transport, **kwargs))
+    result = await DuckDuckGoSearchAdapter().search(WebSearchQuery(query="GPU benchmark"))
+    assert result.items == []
+    assert result.note == expected_note
+
+
 @pytest.mark.asyncio
 async def test_search_hardware_compatibility(search_tools: WebSearchTools) -> None:
     args = HardwareCompatibilitySearchArgs(

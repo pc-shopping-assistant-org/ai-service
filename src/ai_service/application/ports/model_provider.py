@@ -10,3 +10,6 @@ class ModelProvider(Protocol):
 
     def create_model(self) -> object:
         """Create a provider model lazily, on the first generation request."""
+
+    async def aclose(self) -> None:
+        """Close owned clients after all model executions have drained."""

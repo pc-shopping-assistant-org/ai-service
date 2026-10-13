@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 from ai_service.application.ports.hardware import (
     ComponentCategory,
@@ -385,6 +393,19 @@ class PCBuildConstraints(BaseModel):
         default_factory=lambda: ConstraintValue[str | None](value=None, source=ConstraintSource.DEFAULT)
     )
     owned_parts: list[OwnedComponent] = Field(default_factory=list)
+    pinned_parts: dict[ComponentCategory, UUID] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_part_bindings(self) -> PCBuildConstraints:
+        categories = [part.category for part in self.owned_parts]
+        if len(categories) != len(set(categories)):
+            raise ValueError("Duplicate owned slot")
+        if set(categories) & self.pinned_parts.keys():
+            raise ValueError("A slot cannot be both owned and pinned")
+        for part in self.owned_parts:
+            if part.component is not None and part.component.category != part.category:
+                raise ValueError("Owned component category must match its slot")
+        return self
 
     @field_validator("target_fps")
     @classmethod
@@ -398,6 +419,18 @@ class PCBuildConstraints(BaseModel):
         return [p.category for p in self.owned_parts]
 
 
+class OptimizerSearchTrace(BaseModel):
+    """Observed execution diagnostics, not a claim about the entire backend catalog."""
+
+    model_config = CORE_CONFIG
+    algorithm_version: Literal["deterministic-enumeration-v3"] = "deterministic-enumeration-v3"
+    enumeration_complete: StrictBool
+    pruned_candidates: StrictInt = Field(ge=0)
+    metadata_rejections: StrictInt = Field(ge=0)
+    scoring_rejections: StrictInt = Field(ge=0)
+    pool_variant_ids: dict[ComponentCategory, list[UUID | None]]
+
+
 class OptimizationResult(BaseModel):
     """Output from the deterministic multi-objective PC optimization engine."""
 
@@ -409,6 +442,7 @@ class OptimizationResult(BaseModel):
     candidates_evaluated: int
     pruned_count: int
     rejected_candidates: list[str] = Field(default_factory=list)
+    search_trace: OptimizerSearchTrace | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class PublicStatePatch(BaseModel):

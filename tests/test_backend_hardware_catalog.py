@@ -1,0 +1,229 @@
+from uuid import uuid4
+
+import httpx
+import pytest
+from test_backend_product_catalog import Budget
+
+from ai_service.application.errors import BackendUnavailableError
+from ai_service.capabilities.assistant.requirements.contracts import (
+    CanonicalRequirementState,
+)
+from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.infrastructure.commerce.hardware_catalog import (
+    BackendRequirementCatalog,
+    HardwareCatalogMapping,
+)
+
+
+@pytest.mark.asyncio
+async def test_variant_capacity_price_stock_and_visibility_are_canonical():
+    category, product, capacity_option, first, second = (uuid4() for _ in range(5))
+    other_capacity_option = uuid4()
+    variants = [
+        {
+            "id": str(first),
+            "productId": str(product),
+            "sku": "RAM-32",
+            "price": 2_000_000,
+            "quantity": 0,
+            "status": "ACTIVE",
+            "options": [
+                {"id": str(capacity_option), "name": "Capacity", "value": "32"}
+            ],
+        },
+        {
+            "id": str(second),
+            "productId": str(product),
+            "sku": "RAM-64",
+            "price": 3_000_000,
+            "quantity": 5,
+            "status": "ACTIVE",
+            "options": [
+                {"id": str(other_capacity_option), "name": "Capacity", "value": "64"}
+            ],
+        },
+        {
+            "id": str(uuid4()),
+            "productId": str(product),
+            "sku": "HIDDEN",
+            "price": 1,
+            "quantity": 1,
+            "status": "DELETED",
+        },
+    ]
+
+    def respond(request):
+        assert request.url.path == "/products/snapshot"
+        data = {
+            "items": [
+                {
+                    "id": str(product),
+                    "name": "RAM",
+                    "categoryId": str(category),
+                    "status": "ACTIVE",
+                    "specifications": {"ram_type": "DDR5", "capacity_gb": 16},
+                    "variants": variants,
+                }
+            ],
+            "hasNext": False,
+            "nextCursor": None,
+        }
+        return httpx.Response(
+            200, json={"data": data, "message": "SUCCESS", "errors": []}
+        )
+
+    budget = Budget()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        catalog = BackendRequirementCatalog(
+            client,
+            "https://catalog.test",
+            budget,
+            HardwareCatalogMapping(
+                categories={category: "RAM"},
+                option_fields={
+                    capacity_option: "capacity_gb",
+                    other_capacity_option: "capacity_gb",
+                },
+            ),
+        )
+        rows = await catalog.load(Draft(items=[]), CanonicalRequirementState())
+        assert [row.variant_id for row in rows] == [first, second]
+        assert [row.component.capacity_gb for row in rows] == [32, 64]
+        assert [row.component.price for row in rows] == [2_000_000, 3_000_000]
+        assert [row.quantity for row in rows] == [0, 5]
+        assert rows[0].component.socket is None
+        assert rows[0].component.performance_score is None
+        assert rows[0].evidence_refs != rows[1].evidence_refs
+        variants[0]["options"][0]["id"] = str(uuid4())
+        with pytest.raises(BackendUnavailableError, match="mapping"):
+            await catalog.load(Draft(items=[]), CanonicalRequirementState())
+    assert budget.calls == ["TOOL_IO"] * 2
+
+
+@pytest.mark.asyncio
+async def test_candidate_scan_uses_all_pages_and_rejects_truncation():
+    category, p1, p2 = uuid4(), uuid4(), uuid4()
+
+    def respond(request):
+        assert request.url.path == "/products/snapshot"
+        cursor = request.url.params.get("cursor")
+        identity = p1 if cursor is None else p2
+        data = {
+            "items": [
+                {
+                    "id": str(identity),
+                    "name": "GPU",
+                    "categoryId": str(category),
+                    "status": "ACTIVE",
+                    "specifications": {},
+                    "variants": [
+                        {
+                            "id": str(identity),
+                            "productId": str(identity),
+                            "sku": str(identity),
+                            "price": 1_000_000,
+                            "quantity": 1,
+                            "status": "ACTIVE",
+                        }
+                    ],
+                }
+            ],
+            "hasNext": cursor is None,
+            "nextCursor": str(p1) if cursor is None else None,
+        }
+        return httpx.Response(
+            200, json={"data": data, "message": "SUCCESS", "errors": []}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        catalog = BackendRequirementCatalog(
+            client,
+            "https://catalog.test",
+            Budget(),
+            HardwareCatalogMapping(categories={category: "GPU"}),
+        )
+        assert (
+            len(await catalog.load(Draft(items=[]), CanonicalRequirementState())) == 2
+        )
+        bounded = BackendRequirementCatalog(
+            client,
+            "https://catalog.test",
+            Budget(),
+            HardwareCatalogMapping(categories={category: "GPU"}),
+            max_rows=1,
+        )
+        with pytest.raises(BackendUnavailableError, match="bound"):
+            await bounded.load(Draft(items=[]), CanonicalRequirementState())
+
+
+@pytest.mark.asyncio
+async def test_backend_snapshot_flows_into_real_optimizer_and_satisfaction(
+    realistic_catalog,
+):
+    from test_requirement_graph import Extractor, graph_input
+
+    from ai_service.capabilities.assistant.requirements.verifier import (
+        SatisfactionReport,
+    )
+    from ai_service.infrastructure.graph.requirement_build import (
+        build_requirement_graph,
+    )
+
+    categories = {part.category: uuid4() for part in realistic_catalog}
+    details = {}
+    for index, part in enumerate(realistic_catalog):
+        product_id, variant_id = uuid4(), uuid4()
+        specs = part.model_dump(
+            mode="json",
+            exclude={"id", "name", "category", "price", "extra_specs"},
+            exclude_none=True,
+        )
+        specs.update(part.extra_specs)
+        details[str(product_id)] = {
+            "id": str(product_id),
+            "name": part.name,
+            "status": "ACTIVE",
+            "categoryId": str(categories[part.category]),
+            "specifications": specs,
+            "variants": [
+                {
+                    "id": str(variant_id),
+                    "productId": str(product_id),
+                    "sku": f"SKU-{index}",
+                    "price": part.price,
+                    "quantity": 1,
+                    "status": "ACTIVE",
+                }
+            ],
+        }
+
+    def respond(request):
+        assert request.url.path == "/products/snapshot"
+        data = {
+            "items": list(details.values()),
+            "hasNext": False,
+            "nextCursor": None,
+        }
+        return httpx.Response(
+            200, json={"data": data, "message": "SUCCESS", "errors": []}
+        )
+
+    budget = Budget()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        catalog = BackendRequirementCatalog(
+            client,
+            "https://catalog.test",
+            budget,
+            HardwareCatalogMapping(
+                categories={
+                    identifier: category for category, identifier in categories.items()
+                }
+            ),
+        )
+        result = await build_requirement_graph(Extractor(), catalog).ainvoke(
+            graph_input()
+        )
+    assert result["outcome"] == "BUILT"
+    assert SatisfactionReport.model_validate(result["satisfaction"]).hard_satisfied
+    assert result["public_build"]["total_spending_vnd"] <= 30_000_000
+    assert len(budget.calls) == 1

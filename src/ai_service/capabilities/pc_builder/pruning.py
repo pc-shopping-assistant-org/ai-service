@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ai_service.application.ports.hardware import ComponentCategory, ComponentSpec
+from ai_service.capabilities.pc_builder.compatibility import case_supported_form_factors
 from ai_service.capabilities.pc_builder.schemas import BuildObjective, UseCaseProfile
 
 
@@ -353,9 +354,9 @@ def dominates(
 
     # Case supported form factors: better must support at least all form factors that worse supports
     if better.category == ComponentCategory.CASE:
-        w_supported = {_norm_str(s) for s in (worse.supported_form_factors or [worse.form_factor or ""])}
-        b_supported = {_norm_str(s) for s in (better.supported_form_factors or [better.form_factor or ""])}
-        if not w_supported.issubset(b_supported):
+        w_supported = case_supported_form_factors(worse)
+        b_supported = case_supported_form_factors(better)
+        if w_supported is None or b_supported is None or not w_supported.issubset(b_supported):
             return False
 
     # 3. Dimensions evaluation

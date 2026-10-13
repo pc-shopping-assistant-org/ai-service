@@ -91,6 +91,8 @@ class OptimizerInputV1(Contract):
 
     @model_validator(mode="after")
     def require_explicit_constraints(self) -> OptimizerInputV1:
+        if self.pinned_parts != self.constraints.pinned_parts:
+            raise ValueError("Replay pins must match optimizer hard constraints")
         for name in ("target_budget_vnd", "use_case"):
             if name not in self.constraints.model_fields_set:
                 raise ValueError("Replay input cannot rely on optimizer defaults")

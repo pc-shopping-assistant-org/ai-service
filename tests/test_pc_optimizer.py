@@ -831,7 +831,7 @@ def test_cooler_socket_compatibility() -> None:
         ComponentCategory.MAINBOARD: ComponentSpec(name="B650 MB", category=ComponentCategory.MAINBOARD, price=3_000_000, socket="AM5", ram_type="DDR5", form_factor="ATX"),
         ComponentCategory.RAM: ComponentSpec(name="DDR5 RAM", category=ComponentCategory.RAM, price=1_000_000, ram_type="DDR5", capacity_gb=16, performance_score=75),
         ComponentCategory.GPU: ComponentSpec(name="RTX 4060", category=ComponentCategory.GPU, price=7_000_000, tdp_watts=115, gpu_length_mm=240, vram_gb=8, performance_score=76),
-        ComponentCategory.CASE: ComponentSpec(name="Case", category=ComponentCategory.CASE, price=1_000_000, form_factor="ATX", max_gpu_length_mm=300, max_cooler_height_mm=160),
+        ComponentCategory.CASE: ComponentSpec(name="Case", category=ComponentCategory.CASE, price=1_000_000, form_factor="ATX", supported_form_factors=["ATX"], max_gpu_length_mm=300, max_cooler_height_mm=160),
         # Intel-only cooler
         ComponentCategory.COOLER: ComponentSpec(name="LGA Cooler Only", category=ComponentCategory.COOLER, price=500_000, cooler_height_mm=140, performance_score=75, supported_sockets=["LGA1700"]),
         ComponentCategory.STORAGE: ComponentSpec(name="NVMe", category=ComponentCategory.STORAGE, price=1_000_000, capacity_gb=1000, performance_score=75),

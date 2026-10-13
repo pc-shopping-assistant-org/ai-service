@@ -6,17 +6,29 @@ Pure business orchestration without LLM or UI coupling.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+
+from pydantic import JsonValue, TypeAdapter
 
 from ai_service.application.ports.hardware import ComponentSpec
 from ai_service.capabilities.pc_builder.application.recommendation_policy import (
+    DEFAULT_OBJECTIVE_BY_PROFILE,
+    FALLBACK_OBJECTIVE_ORDER,
+    RECOMMENDATION_POLICY_VERSION,
     RecommendationDecision,
     choose_recommended_build,
 )
-from ai_service.capabilities.pc_builder.optimizer import DeterministicPCOptimizer
+from ai_service.capabilities.pc_builder.optimizer import (
+    FIXED_CATEGORY_ORDER,
+    POWER_SIZING_POLICY_VERSION,
+    SCORING_POLICIES,
+    DeterministicPCOptimizer,
+)
+from ai_service.capabilities.pc_builder.pruning import DEFAULT_ENVELOPES
 from ai_service.capabilities.pc_builder.schemas import (
     BuildObjective,
     OptimizationResult,
+    OptimizerSearchTrace,
     PCBuildConstraints,
 )
 
@@ -34,6 +46,49 @@ class PCBuildApplicationService:
 
     def __init__(self, optimizer: DeterministicPCOptimizer | None = None) -> None:
         self._optimizer = optimizer or DeterministicPCOptimizer()
+
+    def configuration_snapshot(self) -> JsonValue:
+        """Capture live tunable policy for reuse hashes, not a full replay artifact.
+
+        Algorithm/calibration code changes also require an implementation-version
+        change. These captured knobs are the same ones used by build_pc.
+        """
+        return TypeAdapter(JsonValue).validate_python(
+            {
+                "enable_pruning": self._optimizer.enable_pruning,
+                "algorithm_version": OptimizerSearchTrace.model_fields["algorithm_version"].default,
+                "pruning_version": "compatibility-aware-pareto-v2",
+                "case_compatibility_version": "explicit-support-v1",
+                "power_sizing_version": POWER_SIZING_POLICY_VERSION,
+                "platform_policy": dict(self._optimizer.platform_policy),
+                "scoring": [
+                    {
+                        "profile": profile.value,
+                        "objective": objective.value,
+                        "weights": dict(weights),
+                    }
+                    for (profile, objective), weights in sorted(
+                        SCORING_POLICIES.items()
+                    )
+                ],
+                "envelopes": {
+                    profile.value: {
+                        category.value: asdict(envelope)
+                        for category, envelope in categories.items()
+                    }
+                    for profile, categories in DEFAULT_ENVELOPES.items()
+                },
+                "category_order": [category.value for category in FIXED_CATEGORY_ORDER],
+                "recommendation_version": RECOMMENDATION_POLICY_VERSION,
+                "default_objectives": {
+                    profile.value: objective.value
+                    for profile, objective in DEFAULT_OBJECTIVE_BY_PROFILE.items()
+                },
+                "fallback_objectives": [
+                    objective.value for objective in FALLBACK_OBJECTIVE_ORDER
+                ],
+            }
+        )
 
     def build_pc(
         self,
