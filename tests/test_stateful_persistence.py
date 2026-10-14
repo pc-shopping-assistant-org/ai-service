@@ -17,6 +17,7 @@ def test_application_schema_preserves_scoped_execution_and_message_invariants():
         "conversation_messages",
         "agent_call_budgets",
         "agent_call_attempts",
+        "agent_run_events",
     }
     assert "revision = 0 OR accepted_checkpoint_id IS NOT NULL" in sql
     assert "UNIQUE (conversation_id, request_id)" in sql
@@ -25,6 +26,16 @@ def test_application_schema_preserves_scoped_execution_and_message_invariants():
     assert "FAILED_RETRYABLE" in sql and "FAILED_TERMINAL" in sql
     slot = next(c for c in metadata.tables["conversations"].foreign_key_constraints)
     assert slot.deferrable and slot.initially == "DEFERRED" and slot.use_alter
+    event_sql = str(
+        CreateTable(metadata.tables["agent_run_events"]).compile(
+            dialect=postgresql.dialect()
+        )
+    )
+    assert "UNIQUE (run_id, sequence)" in event_sql
+    assert "UNIQUE (run_id, dedup_key)" in event_sql
+    assert "COALESCE(" in event_sql and "false" in event_sql
+    assert "payload->'data'->>'sequence' = sequence::text" in event_sql
+    assert "REFERENCES agent_runs (conversation_id, id) ON DELETE CASCADE" in event_sql
 
 
 def test_migration_uses_application_metadata_not_framework_tables():

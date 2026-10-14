@@ -217,6 +217,7 @@ class StatefulErrorCode(StrEnum):
     INPUT_REQUIRED = "AI_INPUT_REQUIRED"
     RUN_FAILED = "AI_RUN_FAILED"
     STREAM_INTERRUPTED = "AI_STREAM_INTERRUPTED"
+    RUN_CANCELLED = "AI_RUN_CANCELLED"
 
 
 class EventIdentityV1(Contract):

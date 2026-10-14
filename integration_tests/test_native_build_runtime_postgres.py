@@ -18,16 +18,17 @@ from ai_service.main import create_app
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "react_enabled,version,retry",
+    "react_enabled,version,retry,selected",
     [
-        (False, "v1", False),
-        (True, "v1", False),
-        (True, "v2", False),
-        (True, "v2", True),
+        (False, "v1", False, False),
+        (True, "v1", False, False),
+        (True, "v2", False, False),
+        (True, "v2", True, False),
+        (True, "v2", False, True),
     ],
 )
 async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
-    postgres_dsn, monkeypatch, react_enabled, version, retry
+    postgres_dsn, monkeypatch, react_enabled, version, retry, selected
 ):
     owner = uuid4()
     product_id = uuid4()
@@ -36,6 +37,7 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
     web_settings = []
     failures = []
     backend_calls = []
+    conversation_contexts = []
     from ai_service.infrastructure.execution.conversation import ConversationExecution
 
     execute = ConversationExecution.__call__
@@ -80,6 +82,10 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
         async def ainvoke(self, messages):
             calls.append(True)
             if react_enabled and not isinstance(messages[0], tuple):
+                if version == "v2":
+                    instruction = messages[0].content
+                    context_json = json.loads(instruction.rsplit("\n", 1)[-1])
+                    conversation_contexts.append(context_json.get("history", []))
                 read_only = messages[1].content == "Find GPU"
                 results = [
                     json.loads(m.content)
@@ -92,8 +98,16 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                         tool_calls=[
                             {
                                 "id": "search" if read_only else "build",
-                                "name": "search_catalog" if read_only else "build_pc",
-                                "args": {"query": "GPU"} if read_only else {},
+                                "name": "get_product_details"
+                                if selected
+                                else "search_catalog"
+                                if read_only
+                                else "build_pc",
+                                "args": {"product_id": str(product_id)}
+                                if selected
+                                else {"query": "GPU"}
+                                if read_only
+                                else {},
                             }
                         ],
                     )
@@ -114,6 +128,12 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                                         "text": "Catalog result",
                                         "evidence_refs": result["evidence_refs"],
                                         "build_ref": None,
+                                        "explanation": {
+                                            "text": "Đối chiếu thông số và nhu cầu trước khi quyết định chọn linh kiện.",
+                                            "evidence_refs": result["evidence_refs"],
+                                        }
+                                        if selected
+                                        else None,
                                     },
                                 }
                             }
@@ -189,6 +209,29 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
 
     def respond(request):
         backend_calls.append(request.url.path)
+        if request.url.path == f"/products/{product_id}":
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "id": str(product_id),
+                        "name": "Canonical GPU",
+                        "status": "ACTIVE",
+                        "specifications": {"vram_gb": 8},
+                        "variants": [
+                            {
+                                "id": str(uuid4()),
+                                "productId": str(product_id),
+                                "price": 8_000_000,
+                                "quantity": 1,
+                                "status": "ACTIVE",
+                            }
+                        ],
+                    },
+                    "message": "SUCCESS",
+                    "errors": [],
+                },
+            )
         if request.url.path == "/products":
             return httpx.Response(
                 200,
@@ -210,6 +253,9 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                 },
             )
         assert request.url.path == "/products/snapshot"
+        assert version != "v2", (
+            "Read-only V2 turns must not preload optimizer candidates"
+        )
         return httpx.Response(
             200,
             json={
@@ -273,6 +319,11 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                         if version == "v2"
                         else "Build 30 triệu gaming",
                         **({"schema_version": 2} if version == "v2" else {}),
+                        **(
+                            {"selected_product_ids": [str(product_id)]}
+                            if selected
+                            else {}
+                        ),
                     },
                 )
                 assert accepted.status_code == 202
@@ -303,10 +354,28 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                 else:
                     assert messages[-1]["content"].startswith("INFEASIBLE")
                 assert (
-                    len(calls) == (4 if retry else 3 if react_enabled else 1)
+                    len(calls)
+                    == (2 if selected else 4 if retry else 3 if react_enabled else 1)
                     and closed == []
                 )
                 if react_enabled:
+                    if version == "v2":
+                        stream = await client.get(path + f"/runs/{run_id}/events")
+                        assert stream.status_code == 200
+                        assert (
+                            "event: completed" in stream.text
+                            and "id: " not in stream.text
+                        )
+                        if selected:
+                            assert "Nhận định tư vấn" in messages[-1]["content"]
+                            completed = json.loads(
+                                stream.text.strip()
+                                .split("\n\n")[-1]
+                                .split("data: ", 1)[1]
+                            )
+                            assert completed["data"]["result"]["products"][0][
+                                "id"
+                            ] == str(product_id)
                     accepted = await client.post(
                         path + "/runs",
                         json={
@@ -315,6 +384,11 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                             "expected_revision": 1,
                             "message": "Find GPU",
                             **({"schema_version": 2} if version == "v2" else {}),
+                            **(
+                                {"selected_product_ids": [str(product_id)]}
+                                if selected
+                                else {}
+                            ),
                         },
                     )
                     assert accepted.status_code == 202
@@ -338,10 +412,15 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                     assert "8,000,000 VND" in messages[-1]["content"]
                     view = await client.get(path)
                     assert view.json()["data"]["revision"] == 2
-                    assert len(calls) == (7 if retry else 6)
+                    assert len(calls) == (4 if selected else 7 if retry else 6)
+                    if version == "v2":
+                        last_context = conversation_contexts[-1]
+                        assert len(last_context) == 1
+                        assert last_context[0]["user_text"] == "Find GPU"
+                        assert "8,000,000 VND" in last_context[0]["assistant_text"]
                     if retry:
                         assert len(failures) == 1
-                        assert backend_calls.count("/products/snapshot") == 2
+                        assert backend_calls.count("/products/snapshot") == 0
                         assert backend_calls.count("/products") == 2
         assert closed == [True] and app.state.stateful is None
     finally:

@@ -4,11 +4,15 @@ from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import Field, StrictInt
 
+from ai_service.api.sse import run_event_frames
+from ai_service.application.ports.run_events import (
+    EventHistoryUnavailable,
+)
 from ai_service.application.ports.stateful_conversation import (
     ConversationNotFound,
     InvalidConversationCursor,
@@ -48,9 +52,12 @@ bearer = HTTPBearer(auto_error=False)
 
 
 class StatefulApiError(Exception):
-    def __init__(self, status_code: int, message: ResponseMessage) -> None:
+    def __init__(
+        self, status_code: int, message: ResponseMessage, field: str | None = None
+    ) -> None:
         self.status_code = status_code
         self.message = message
+        self.field = field
 
 
 async def stateful_exception_handler(
@@ -63,6 +70,7 @@ async def stateful_exception_handler(
         503: "Stateful service is unavailable",
         422: "Conversation ID must match the route",
         409: "Run admission conflicts with the current conversation or request",
+        410: "Persisted event history is unavailable; reload the run",
     }
     payload = ApiResponse[None](
         data=None,
@@ -71,7 +79,8 @@ async def stateful_exception_handler(
             ErrorDetail(
                 code=exc.message.value,
                 message=details[exc.status_code],
-                field={400: "cursor", 422: "conversation_id"}.get(exc.status_code),
+                field=exc.field
+                or {400: "cursor", 422: "conversation_id"}.get(exc.status_code),
             )
         ],
     )
@@ -267,6 +276,38 @@ async def cancel_run(
     return ApiResponse(data=run, message=ResponseMessage.AI_RUN_CANCEL_REQUESTED)
 
 
+@router.get(
+    "/{conversation_id}/runs/{run_id}/events",
+    response_model=None,
+    response_class=StreamingResponse,
+    responses={
+        200: {"content": {"text/event-stream": {"schema": {"type": "string"}}}},
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        410: {"model": ErrorResponse},
+    },
+)
+async def run_events(
+    conversation_id: UUID,
+    run_id: UUID,
+    owner: Annotated[UUID, Depends(account_id)],
+    runtime: Annotated[StatefulResources, Depends(resources)],
+) -> StreamingResponse:
+    if runtime.events is None:
+        raise StatefulApiError(503, ResponseMessage.HTTP_ERROR)
+    try:
+        subscription = await runtime.events.open(owner, conversation_id, run_id)
+    except RunAdmissionError as exc:
+        raise admission_error(exc) from None
+    except EventHistoryUnavailable:
+        raise StatefulApiError(410, ResponseMessage.AI_STREAM_INTERRUPTED) from None
+    return StreamingResponse(
+        run_event_frames(subscription),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
+
+
 def create_stateful_router(version: int = 1) -> APIRouter:
     if version == 1:
         return router
@@ -287,6 +328,7 @@ def create_stateful_router(version: int = 1) -> APIRouter:
             if route.endpoint is list_conversations
             else route.response_model,
             responses=route.responses,
+            response_class=route.response_class,
             tags=route.tags,
             name=route.name,
         )

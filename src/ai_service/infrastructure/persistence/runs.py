@@ -73,6 +73,7 @@ from .accepted_state import PostgresAcceptedCheckpointReader
 from .call_attempts import PostgresAttemptLedger
 from .checkpoint_lineage import require_checkpoint_lineage
 from .checkpoint_reconciliation import reconcile_stopped_checkpoint
+from .lifecycle_events import emit_start, emit_terminal
 from .retry_cleanup import cleanup_stopped_retries
 from .schema import agent_call_budgets, agent_runs, conversation_messages, conversations
 
@@ -230,6 +231,7 @@ class PostgresRunCoordinator:
                     content=request.message,
                 )
             )
+            await emit_start(conn, row)
             return self._view(row)
 
     async def get(self, owner: UUID, conversation_id: UUID, run_id: UUID) -> RunViewV1:
@@ -320,6 +322,8 @@ class PostgresRunCoordinator:
                 .mappings()
                 .one()
             )
+            if row["status"] == "CANCELLED":
+                await emit_terminal(conn, row, "CANCELLED", conversation["revision"])
             return self._view(row)
 
     async def claim_pending(self, worker_id: UUID, limit: int) -> list[ExecutionClaim]:
@@ -884,6 +888,13 @@ class PostgresRunCoordinator:
                     if outcome.status == "FAILED" and status != "CANCELLED"
                     else None,
                 )
+            )
+            await emit_terminal(
+                conn,
+                run,
+                status,
+                conversation["revision"] + (1 if values is not None else 0),
+                values,
             )
             if status != "FAILED_RETRYABLE":
                 await conn.execute(

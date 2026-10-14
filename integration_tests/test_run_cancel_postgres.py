@@ -16,6 +16,7 @@ from ai_service.infrastructure.graph.initial_root import NativeConversationIniti
 from ai_service.infrastructure.persistence.conversations import (
     PostgresConversationStore,
 )
+from ai_service.infrastructure.persistence.events import PostgresRunEventStore
 from ai_service.infrastructure.persistence.runs import PostgresRunCoordinator
 from ai_service.infrastructure.persistence.schema import (
     agent_runs,
@@ -96,6 +97,12 @@ async def test_cancel_owner_idempotency_and_shared_thread_drained_before_release
                 busy = await store.get(owner, conversation.id)
                 assert busy.active_run_id == submitted.run_id and busy.revision == 0
                 assert busy.accepted_checkpoint_id == head.accepted_checkpoint_id
+                current_events = await PostgresRunEventStore(engine).read(
+                    owner, conversation.id, submitted.run_id
+                )
+                assert [item.envelope.data.event for item in current_events] == [
+                    "START"
+                ]
                 assert (
                     await service.cancel(owner, conversation.id, submitted.run_id)
                 ).status == "RUNNING"
@@ -142,6 +149,11 @@ async def test_cancel_owner_idempotency_and_shared_thread_drained_before_release
             assert row["cancel_requested"] and row["error"] is None
             assert bool(row["executor_stop_evidence"]) == running
             assert len(messages) == 1 and messages[0]["role"] == "user"
+            events = await PostgresRunEventStore(engine).read(
+                owner, conversation.id, submitted.run_id
+            )
+            assert [item.envelope.data.event for item in events] == ["START", "ERROR"]
+            assert events[-1].envelope.data.code.value == "AI_RUN_CANCELLED"
     finally:
         release.set()
         if executor:

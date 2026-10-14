@@ -42,6 +42,7 @@ from ai_service.infrastructure.persistence.accepted_state import (
 from ai_service.infrastructure.persistence.conversations import (
     PostgresConversationStore,
 )
+from ai_service.infrastructure.persistence.events import PostgresRunEventStore
 from ai_service.infrastructure.persistence.runs import PostgresRunCoordinator
 from ai_service.infrastructure.persistence.schema import (
     conversation_messages,
@@ -87,10 +88,11 @@ def user_draft():
         (False, False, True, "CANCEL"),
         (False, False, True, "REVISION_CONFLICT"),
         (False, False, True, "CANCEL_DURING_PUBLISH"),
+        (False, False, True, "EVENT_WRITE_FAILURE"),
     ],
 )
 async def test_user_requirements_publish_without_confirmation_and_survive_recovery(
-    postgres_dsn, recover, read_first, confirm_then_edit, terminal_boundary
+    postgres_dsn, recover, read_first, confirm_then_edit, terminal_boundary, monkeypatch
 ):
     engine = create_async_engine(
         postgres_dsn.replace("postgresql://", "postgresql+psycopg://", 1),
@@ -111,6 +113,23 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
     message = MESSAGE
     failures = []
     edits_committed = asyncio.Event()
+    if terminal_boundary == "EVENT_WRITE_FAILURE":
+        from ai_service.infrastructure.persistence import lifecycle_events
+
+        original_append = lifecycle_events.append_run_event
+
+        async def fail_after_event_insert(conn, run_id, key, payload):
+            event = await original_append(conn, run_id, key, payload)
+            if (
+                payload["event"] == "COMPLETED"
+                and payload["result"]["run"]["base_revision"] == 1
+            ):
+                raise RuntimeError("Scripted failure after terminal event insert")
+            return event
+
+        monkeypatch.setattr(
+            lifecycle_events, "append_run_event", fail_after_event_insert
+        )
 
     def current_draft(state):
         result = user_draft()
@@ -457,17 +476,32 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                 if view.status in {"COMPLETED", "CANCELLED"} or executor.last_error:
                     break
                 await asyncio.sleep(0.02)
-            if terminal_boundary in {"REVISION_CONFLICT", "CANCEL_DURING_PUBLISH"}:
-                conflict = terminal_boundary == "REVISION_CONFLICT"
+            if terminal_boundary in {
+                "REVISION_CONFLICT",
+                "CANCEL_DURING_PUBLISH",
+                "EVENT_WRITE_FAILURE",
+            }:
+                conflict = terminal_boundary in {
+                    "REVISION_CONFLICT",
+                    "EVENT_WRITE_FAILURE",
+                }
                 if conflict:
                     assert executor.last_error == "STOP_ACK_NOT_PERSISTED"
                     assert any(
-                        "PUBLICATION_CONFLICT" in failure for failure in failures
+                        (
+                            "terminal event insert"
+                            if terminal_boundary == "EVENT_WRITE_FAILURE"
+                            else "PUBLICATION_CONFLICT"
+                        )
+                        in failure
+                        for failure in failures
                     )
                 else:
                     assert view.status == "CANCELLED" and not executor.last_error
                 after = await store.get(owner, conversation.id)
-                assert after.revision == (2 if conflict else 1)
+                assert after.revision == (
+                    2 if terminal_boundary == "REVISION_CONFLICT" else 1
+                )
                 assert after.active_run_id == (submitted.run_id if conflict else None)
                 assert (
                     after.accepted_checkpoint_id == waiting_head.accepted_checkpoint_id
@@ -493,6 +527,12 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                     )
                 assert len(persisted) == 3
                 assert sum(row["role"] == "assistant" for row in persisted) == 1
+                events = await PostgresRunEventStore(engine).read(
+                    owner, conversation.id, submitted.run_id
+                )
+                assert [item.envelope.data.event for item in events] == (
+                    ["START"] if conflict else ["START", "ERROR"]
+                )
                 return
             assert view.status == "COMPLETED", failures
             head = await store.get(owner, conversation.id)
@@ -565,6 +605,18 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                     .all()
                 )
             assert len(messages) == 2 + 2 * int(confirm_then_edit)
+            events = await PostgresRunEventStore(engine).read(
+                owner, conversation.id, submitted.run_id
+            )
+            assert [item.envelope.data.event for item in events] == [
+                "START",
+                "DELTA",
+                "COMPLETED",
+            ]
+            result = events[-1].envelope.data.result
+            assert result.schema_version == 2 and result.revision == head.revision
+            assert result.flexible.answer == accepted.flexible.assistant_message
+            assert result.build == accepted.public_build
     finally:
         gate.set()
         if executor:

@@ -20,7 +20,7 @@ If cloning ai-service alone, clone docs beside it (workspace ai-service/ and doc
 Legacy chat/search/consult/compare/evaluate are request-scoped. Stateful conversation
 create/get and guided/ReAct execution are opt-in; recovery and SSE remain unfinished.
 Create now persists an empty accepted native root before returning READY at revision
-zero. Run `uv run alembic upgrade head` (0003_initial_root) before enabling it.
+zero. Run `uv run alembic upgrade head` (0005_event_payload) before enabling it.
 Source helpers/tests do not prove complete runtime. Status/evidence has dated gates.
 
 ## Run locally

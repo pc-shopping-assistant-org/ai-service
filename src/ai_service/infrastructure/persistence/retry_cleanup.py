@@ -12,6 +12,7 @@ from ai_service.capabilities.assistant.recovery_policy import (
 )
 from ai_service.capabilities.assistant.stateful_contracts import ExecutionStopEvidenceV1
 
+from .lifecycle_events import emit_terminal
 from .schema import agent_runs, conversations
 
 logger = logging.getLogger(__name__)
@@ -101,4 +102,10 @@ async def cleanup_stopped_retries(engine: AsyncEngine, limit: int) -> None:
                 update(conversations)
                 .where(conversations.c.id == owner["id"])
                 .values(active_run_id=None, updated_at=now)
+            )
+            await emit_terminal(
+                conn,
+                run,
+                "CANCELLED" if run["cancel_requested"] else "FAILED_TERMINAL",
+                owner["revision"],
             )
