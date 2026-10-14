@@ -1,24 +1,19 @@
-# Capability slices
+# Capabilities
 
-New AI features should be added as a vertical slice under this package rather
-than as another global `service.py` or `utils.py` module:
+Business logic theo feature; không chứa HTTP routes hoặc sở hữu provider/DB clients.
 
-```text
-capabilities/<feature>/
-├── domain.py       # pure business state/value rules (optional)
-├── schemas.py      # feature input/output models (transport-neutral)
-├── graph.py        # vendor-neutral planning contracts/functions, when needed
-├── use_case.py     # application orchestration; depends on ports only
-├── tools.py        # deterministic capability operations, when needed
-└── README.md       # capability invariants and flow
-```
+| Package | Vai trò |
+| --- | --- |
+| `assistant/requirements/` | Draft, resolve, atomic merge, compiler và satisfaction verifier |
+| `assistant/react/` | Actions, state-aware tools, ledger, grounding và public projection |
+| `pc_builder/` | Deterministic optimizer, compatibility, scoring và build application service |
+| `web_search/` | Search/read contracts và query presets |
+| `shopping_assistant/` | Commerce helpers; không mặc nhiên là tools đã expose |
 
-The HTTP layer may map the feature schemas to the public API envelope, but it
-must not construct an agent, provider, graph or database client. Put those
-bindings in `infrastructure/composition.py` and expose only an inbound port to
-the route.
+LangGraph V2 ở `infrastructure/graph/flexible.py`; runtime wiring ở
+`infrastructure/execution/build_runtime.py`. Application gọi qua ports, không
+cho model truy cập trực tiếp DB hoặc tự publish state.
 
-The current assistant planning contracts live in
-`capabilities/assistant/graphs/`; LangGraph execution lives in
-`infrastructure/graph/`. The old `ai_service.graphs` modules remain
-thin compatibility re-exports while existing integrations migrate.
+Thêm feature vào package sở hữu rule; không tạo global `utils.py`/`service.py`.
+Tên `graphs/` trong assistant hiện phục vụ request-scoped planning cũ, không phải
+stateful ReAct runtime. [Architecture](../../../../docs/02-architecture/ai-architecture.md).
