@@ -12,7 +12,15 @@ from ai_service.application.ports.stateful_conversation import (
     ConversationRecord,
     InvalidConversationCursor,
 )
+from ai_service.capabilities.assistant.limits import (
+    MAX_DIALOGUE_CHARS,
+    MAX_DIALOGUE_TURNS,
+)
 from ai_service.capabilities.assistant.public_contracts import MessageViewV1, PageV1
+from ai_service.capabilities.assistant.react.contracts import (
+    DialogueTurn,
+)
+from ai_service.capabilities.assistant.stateful_contracts import RunStatus
 from ai_service.infrastructure.persistence.schema import (
     agent_runs,
     conversation_messages,
@@ -23,6 +31,56 @@ from ai_service.infrastructure.persistence.schema import (
 class PostgresConversationStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
+
+    async def dialogue(
+        self,
+        account_id: UUID,
+        conversation_id: UUID,
+        revision: int,
+    ) -> list[DialogueTurn]:
+        owned = await self.get(account_id, conversation_id)
+        if owned.revision != revision:
+            raise ValueError("Dialogue must match the accepted conversation revision")
+        async with self.engine.connect() as connection:
+            rows = (
+                (
+                    await connection.execute(
+                        select(
+                            agent_runs.c.request_payload,
+                            conversation_messages.c.content,
+                        )
+                        .join(
+                            conversation_messages,
+                            conversation_messages.c.run_id == agent_runs.c.id,
+                        )
+                        .where(
+                            agent_runs.c.conversation_id == conversation_id,
+                            agent_runs.c.kind == "CHAT",
+                            agent_runs.c.status.in_(
+                                [RunStatus.COMPLETED, RunStatus.WAITING_INPUT]
+                            ),
+                            agent_runs.c.base_revision < revision,
+                            conversation_messages.c.role == "assistant",
+                        )
+                        .order_by(agent_runs.c.base_revision.desc())
+                        .limit(MAX_DIALOGUE_TURNS)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        turns: list[DialogueTurn] = []
+        size = 0
+        for row in rows:
+            turn = DialogueTurn(
+                user_text=row["request_payload"]["message"],
+                assistant_text=row["content"],
+            )
+            size += len(turn.user_text) + len(turn.assistant_text)
+            if size > MAX_DIALOGUE_CHARS:
+                break  # Keep complete recent turns; never cut a message mid-meaning.
+            turns.append(turn)
+        return list(reversed(turns))
 
     async def messages(
         self, account_id: UUID, conversation_id: UUID, limit: int, after: UUID | None

@@ -23,6 +23,7 @@ from pydantic import (
 )
 
 from ai_service.application.ports.hardware import ComponentCategory, ResolutionTier
+from ai_service.capabilities.assistant.limits import MAX_TURN_MESSAGE_CHARS
 from ai_service.capabilities.pc_builder.schemas import UseCaseProfile
 
 NonNegativeInt = Annotated[StrictInt, Field(ge=0)]
@@ -233,7 +234,7 @@ class TurnRequestV1(Contract):
     conversation_id: UUID
     request_id: UUID
     expected_revision: NonNegativeInt
-    message: Annotated[Text, Field(max_length=4000)]
+    message: Annotated[Text, Field(max_length=MAX_TURN_MESSAGE_CHARS)]
     clarification_reply: ClarificationReplyV1 | None = None
     task_clarification_reply: TaskClarificationReplyV1 | None = None
     unit_clarification_reply: UnitClarificationReplyV1 | None = None

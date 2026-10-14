@@ -13,7 +13,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import JsonValue, ValidationError
 
 from ai_service.application.call_attempts import AttemptBoundary, AttemptKind
-from ai_service.capabilities.assistant.provenance import canonical_hash
+from ai_service.capabilities.assistant.provenance import CatalogRowV1, canonical_hash
 from ai_service.capabilities.assistant.react.actions import (
     ActionKind,
     AskClarificationAction,
@@ -76,6 +76,7 @@ from ai_service.capabilities.assistant.requirements.admission import (
 from ai_service.capabilities.assistant.requirements.amendment import PendingAmender
 from ai_service.capabilities.assistant.requirements.build import (
     ClarificationExtractor,
+    RequirementCatalog,
     RequirementExtractor,
 )
 from ai_service.capabilities.assistant.requirements.compiler import compile_requirements
@@ -93,6 +94,7 @@ from ai_service.capabilities.assistant.requirements.proposals import (
 from ai_service.capabilities.assistant.requirements.quantity_clarification import (
     UnitClarificationExtractor,
 )
+from ai_service.capabilities.assistant.requirements.resolver import Draft
 from ai_service.capabilities.assistant.requirements.tasks import (
     TaskDraftBatch,
     TaskExtractor,
@@ -123,6 +125,7 @@ class FlexibleModel(Protocol):
 
 
 class FlexibleState(TypedDict, total=False):
+    catalog_context: dict[str, Any] | None
     message: str
     working_requirements: dict[str, Any]
     pending_proposal: dict[str, Any] | None
@@ -169,6 +172,7 @@ def build_flexible_graph(
     amender: PendingAmender | None = None,
     task_amender: TaskAmender | None = None,
     user_extractor: RequirementExtractor | None = None,
+    catalog_loader: RequirementCatalog | None = None,
 ) -> CompiledStateGraph:
     trusted = ToolContext.model_validate(context.model_dump())
     tasks = [CompletionRequirement.model_validate(t.model_dump()) for t in required]
@@ -233,8 +237,18 @@ def build_flexible_graph(
             raise ValueError("REACT_STATE_TOO_LARGE")
         return update
 
-    def current(state: FlexibleState) -> ToolContext:
+    def base_context(state: FlexibleState) -> ToolContext:
         value = trusted.model_copy(deep=True)
+        catalog_context = state.get("catalog_context")
+        if catalog_context is not None:
+            value.catalog = [
+                CatalogRowV1.model_validate(row) for row in catalog_context["rows"]
+            ]
+            value.catalog_ready = True
+        return value
+
+    def current(state: FlexibleState) -> ToolContext:
+        value = base_context(state)
         value.requirements = CanonicalRequirementState.model_validate(
             state.get("working_requirements", trusted.requirements.model_dump())
         )
@@ -319,6 +333,19 @@ def build_flexible_graph(
             if state.get("message") != publication.request_message:
                 raise ValueError("Graph request differs from the stored request")
             state = cast(FlexibleState, dict(state) | bound_input)
+        # New turns do not inherit the prior run's optimizer snapshot. Native
+        # resume skips initialization and keeps its own committed snapshot.
+        state = cast(
+            FlexibleState,
+            dict(state)
+            | {
+                "catalog_context": {
+                    "rows": [row.model_dump(mode="json") for row in trusted.catalog]
+                }
+                if trusted.catalog_ready
+                else None
+            },
+        )
         ctx = current(state)
         if not ctx.execution_allowed or not ctx.read_catalog_allowed:
             raise ValueError("REACT_EXECUTION_NOT_AUTHORIZED")
@@ -337,6 +364,11 @@ def build_flexible_graph(
             "answer": {},
             "clarification": None,
             "phase": "STARTED",
+            "catalog_context": {
+                "rows": [row.model_dump(mode="json") for row in trusted.catalog]
+            }
+            if trusted.catalog_ready
+            else None,
             "free_resolution_reply": None,
             "user_receipts": [],
             "free_task_reply": None,
@@ -423,6 +455,32 @@ def build_flexible_graph(
                 confirmation=None,
             )
         return bounded(state, update)
+
+    async def load_catalog(state: FlexibleState) -> dict[str, Any]:
+        ctx = base_context(state)
+        if ctx.catalog_ready or catalog_loader is None:
+            return {}
+        rows = await catalog_loader.load(Draft(items=[]), current(state).requirements)
+        ctx.catalog = [CatalogRowV1.model_validate(row.model_dump()) for row in rows]
+        ctx.catalog_ready = True
+        update: dict[str, Any] = {
+            "catalog_context": {
+                "rows": [row.model_dump(mode="json") for row in ctx.catalog]
+            }
+        }
+        if publication:
+            update["publication_context"] = FlexibleExecutionContext(
+                context=ctx,
+                required=tasks,
+                registered=registering,
+                discard_only=publication.discard_pending,
+            ).model_dump(mode="json")
+        return bounded(state, update)
+
+    async def prepare_agent(state: FlexibleState) -> dict[str, Any]:
+        if any(task.kind == "BUILD" for task in registered_tasks(state)):
+            return await load_catalog(state)
+        return {}
 
     def begin(state: FlexibleState) -> dict[str, Any]:
         return initialize(state, turn_input)
@@ -848,6 +906,10 @@ def build_flexible_graph(
     builder.add_node("validate_action", validate)
     builder.add_node("execute_tool", execute)
     builder.add_node("resolve_proposal", resolve)
+    builder.add_node("load_proposal_catalog", load_catalog)
+    builder.add_node("prepare_agent", prepare_agent)
+    builder.add_edge("load_proposal_catalog", "resolve_proposal")
+    builder.add_edge("prepare_agent", "agent")
     builder.add_node("interpret_reply", interpret_reply)
     builder.add_node("amend_pending", amend_reply)
     terminal = END
@@ -857,7 +919,7 @@ def build_flexible_graph(
             assert publication is not None
             snapshot = publication.prepare(
                 state,
-                trusted,
+                base_context(state),
                 registered_tasks(state),
                 dispatcher.service,
                 conversation_revision,
@@ -870,7 +932,7 @@ def build_flexible_graph(
         builder.add_node(terminal, prepare)
         builder.add_edge(terminal, END)
     builder.add_edge(START, "begin_turn")
-    start_agent = "agent"
+    start_agent = "prepare_agent"
     if registering:
         start_agent = "register_request"
         builder.add_node(start_agent, register)
@@ -892,7 +954,7 @@ def build_flexible_graph(
                 builder.add_edge("interpret_task_reply", "resolve_registered_tasks")
         else:
             builder.add_edge(start_agent, "resolve_registered_tasks")
-        builder.add_edge("resolve_registered_tasks", "agent")
+        builder.add_edge("resolve_registered_tasks", "prepare_agent")
     builder.add_conditional_edges(
         "begin_turn",
         lambda s: s["phase"],
@@ -924,7 +986,7 @@ def build_flexible_graph(
         {
             "REPAIR": "agent",
             "TOOL_PENDING": "execute_tool",
-            "RESOLVE_PROPOSAL": "resolve_proposal",
+            "RESOLVE_PROPOSAL": "load_proposal_catalog",
             "WAITING_INPUT": terminal,
             "READY_TO_PUBLISH": terminal,
         },

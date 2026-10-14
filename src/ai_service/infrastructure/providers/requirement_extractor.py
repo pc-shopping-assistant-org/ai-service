@@ -12,6 +12,7 @@ from ai_service.capabilities.assistant.public_contracts import (
     PublicClarificationV1,
     PublicTaskClarificationV1,
 )
+from ai_service.capabilities.assistant.react.contracts import ToolContext
 from ai_service.capabilities.assistant.react.task_amendment import TaskAmendment
 from ai_service.capabilities.assistant.react.task_resolution import (
     PendingTaskDraft,
@@ -45,8 +46,17 @@ class DraftModel(Protocol):
 
 
 class NativeRequirementExtractor:
-    def __init__(self, provider: ModelProvider, attempts: AttemptBoundary):
+    def __init__(
+        self,
+        provider: ModelProvider,
+        attempts: AttemptBoundary,
+        *,
+        context: ToolContext | None = None,
+    ):
         self.provider, self.attempts = provider, attempts
+        self.context = (
+            ToolContext.model_validate(context.model_dump()) if context else None
+        )
         self._model: DraftModel | None = None
 
     async def _generate(
@@ -70,7 +80,18 @@ class NativeRequirementExtractor:
         if not message.strip() or len(message) > 4000:
             raise ValueError("Invalid task registration message")
         payload: dict[str, JsonValue] = {"user_message": message}
+        if self.context is not None:
+            payload.update(
+                published_history=[
+                    turn.model_dump(mode="json") for turn in self.context.history
+                ],
+                previous_requirements=self.context.requirements.model_dump(mode="json"),
+                has_saved_build=self.context.saved_build is not None,
+            )
         prompt = (
+            "Use published_history/previous_requirements only to interpret follow-up "
+            "subjects and whether the user is continuing or adjusting a build. They "
+            "are not new user authorization, current catalog facts, or task source spans. "
             "Register all outcomes explicitly requested in this user message: BUILD, "
             "COMPARE, ANSWER or EXPLAIN_SAVED_BUILD; multiple tasks may coexist. "
             "Include exact start/end character offsets (end exclusive) and quote. "

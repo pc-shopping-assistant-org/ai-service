@@ -11,6 +11,13 @@ from ai_service.application.ports.web_search import (
     WebExtractionStatus,
     WebPageReadStatus,
 )
+from ai_service.capabilities.assistant.limits import (
+    MAX_DIALOGUE_CHARS,
+    MAX_DIALOGUE_TURNS,
+    MAX_SELECTED_PRODUCTS,
+    MAX_TURN_MESSAGE_CHARS,
+    MIN_COMPARISON_PRODUCTS,
+)
 from ai_service.capabilities.assistant.provenance import CatalogRowV1, canonical_hash
 from ai_service.capabilities.assistant.public_contracts import PublicBuildV1
 from ai_service.capabilities.assistant.requirements.build import BuildReceipt
@@ -49,7 +56,9 @@ class ProductDetailsArgs(Contract):
 
 
 class CompareProductsArgs(Contract):
-    product_ids: list[UUID] = Field(min_length=2, max_length=5)
+    product_ids: list[UUID] = Field(
+        min_length=MIN_COMPARISON_PRODUCTS, max_length=MAX_SELECTED_PRODUCTS
+    )
     question: Text | None = Field(default=None, max_length=1000)
 
     @model_validator(mode="after")
@@ -111,7 +120,9 @@ class DetailsResult(Contract):
 
 class ComparisonResult(Contract):
     tool: Literal["compare_products"] = "compare_products"
-    products: list[ProductEvidence] = Field(min_length=2, max_length=5)
+    products: list[ProductEvidence] = Field(
+        min_length=MIN_COMPARISON_PRODUCTS, max_length=MAX_SELECTED_PRODUCTS
+    )
 
     @model_validator(mode="after")
     def distinct_products(self) -> "ComparisonResult":
@@ -280,7 +291,9 @@ class SavedBuildEvidence(Contract):
 class CompletionRequirement(Contract):
     kind: Literal["BUILD", "COMPARE", "ANSWER", "EXPLAIN_SAVED_BUILD"]
     constraints_revision: NonNegativeInt | None = None
-    product_ids: list[UUID] = Field(default_factory=list, max_length=5)
+    product_ids: list[UUID] = Field(
+        default_factory=list, max_length=MAX_SELECTED_PRODUCTS
+    )
     saved_build_ref: Text | None = None
 
     @model_validator(mode="after")
@@ -293,10 +306,18 @@ class CompletionRequirement(Contract):
             )
         if (
             self.kind == "COMPARE"
-            and not 2 <= len(set(self.product_ids)) == len(self.product_ids) <= 5
+            and not MIN_COMPARISON_PRODUCTS
+            <= len(set(self.product_ids))
+            == len(self.product_ids)
+            <= MAX_SELECTED_PRODUCTS
         ):
             raise ValueError("Comparison completion requires 2..5 distinct products")
         return self
+
+
+class DialogueTurn(Contract):
+    user_text: Text
+    assistant_text: Text
 
 
 class ToolContext(Contract):
@@ -309,7 +330,12 @@ class ToolContext(Contract):
     execution_allowed: bool
     catalog_ready: bool = True
     saved_build: SavedBuildEvidence | None = None
-    task_message: Text | None = Field(default=None, max_length=4000)
+    history: list[DialogueTurn] = Field(
+        default_factory=list,
+        max_length=MAX_DIALOGUE_TURNS,
+        exclude_if=lambda value: not value,
+    )
+    task_message: Text | None = Field(default=None, max_length=MAX_TURN_MESSAGE_CHARS)
     requested_tasks: TaskDraftBatch | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -319,6 +345,11 @@ class ToolContext(Contract):
 
     @model_validator(mode="after")
     def saved_snapshot_scope(self) -> "ToolContext":
+        if (
+            sum(len(turn.user_text) + len(turn.assistant_text) for turn in self.history)
+            > MAX_DIALOGUE_CHARS
+        ):
+            raise ValueError("Dialogue context exceeds its bound")
         if self.saved_build and (
             self.saved_build.source_ref.thread_id != self.conversation_id
             or self.saved_build.source_ref.checkpoint_ns
@@ -340,6 +371,13 @@ class ProductReview(Contract):
     verdict: Text = Field(max_length=2000)
 
 
+class ConsultationExplanation(Contract):
+    """Evidence-linked interpretation, not a new machine-verified fact source."""
+
+    text: Text = Field(max_length=3000)
+    evidence_refs: list[Text] = Field(min_length=1, max_length=20)
+
+
 class AnswerCandidate(Contract):
     schema_version: Literal[1] = 1
     text: Text = Field(max_length=8000)
@@ -348,6 +386,9 @@ class AnswerCandidate(Contract):
     clarification_fields: list[Text] = Field(default_factory=list, max_length=100)
     web_excerpts: list[WebExcerpt] = Field(default_factory=list, max_length=8)
     review: ProductReview | None = None
+    explanation: ConsultationExplanation | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class ValidatedAnswer(Contract):

@@ -194,7 +194,10 @@ async def test_confirmed_merge_keeps_old_ledger_but_hides_stale_pairs_from_model
 
 
 @pytest.mark.asyncio
-async def test_flexible_build_uses_real_optimizer_and_trusted_task(realistic_catalog):
+@pytest.mark.parametrize("lazy", [False, True])
+async def test_flexible_build_uses_real_optimizer_and_trusted_task(
+    realistic_catalog, lazy
+):
     from test_requirement_pipeline import rows, state
 
     class Builder:
@@ -224,16 +227,32 @@ async def test_flexible_build_uses_real_optimizer_and_trusted_task(realistic_cat
             )
 
     trusted = context(state(), rows(realistic_catalog))
-    result = await graph(
+    loaded = []
+
+    class Loader:
+        async def load(self, draft, requirements):
+            loaded.append(True)
+            return trusted.catalog
+
+    runtime = (
+        trusted.model_copy(update={"catalog": [], "catalog_ready": False})
+        if lazy
+        else trusted
+    )
+    result = await build_flexible_graph(
         Builder(),
-        Catalog(),
-        trusted,
-        required=[
+        ToolDispatcher(Catalog(), PCBuildApplicationService()),
+        runtime,
+        [
             CompletionRequirement(
                 kind="BUILD", constraints_revision=trusted.requirements.revision
             )
         ],
+        Budget(),
+        conversation_revision=0,
+        catalog_loader=Loader() if lazy else None,
     ).ainvoke({"message": "Build PC"})
+    assert loaded == ([True] if lazy else [])
     assert result["phase"] == "READY_TO_PUBLISH"
     assert result["ledger"][0]["result"]["result"]["receipt"]["outcome"] == "BUILT"
     assert "Every game" not in result["answer"]["text"]

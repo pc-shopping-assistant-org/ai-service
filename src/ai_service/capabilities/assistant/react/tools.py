@@ -380,6 +380,23 @@ def validate_answer(
                 raise ValueError(
                     "Saved build completion requires the exact authorized snapshot"
                 )
+        elif task.product_ids:
+            products = [
+                product
+                for payload in selected_results
+                for product in (
+                    [payload.product]
+                    if isinstance(payload, DetailsResult)
+                    else payload.products
+                    if isinstance(payload, (CatalogResult, ComparisonResult))
+                    else []
+                )
+                if product.evidence_ref in selected
+            ]
+            if not set(task.product_ids) <= {
+                product.product_id for product in products
+            }:
+                raise ValueError("Answer must cover the selected canonical products")
         elif not selected_results and saved is None:
             raise ValueError("Answer completion requires typed evidence")
     lines: list[str] = []
@@ -549,6 +566,16 @@ def validate_answer(
 
     if not lines:
         raise ValueError("Answer completion has no renderable evidence")
+    if candidate.explanation is not None:
+        refs = candidate.explanation.evidence_refs
+        if len(set(refs)) != len(refs) or not set(refs) <= selected:
+            raise ValueError("Explanation must cite selected canonical evidence")
+        # Facts/financial output above remain canonical. This is explicitly an
+        # LLM interpretation; reference validation is not a factuality guarantee.
+        lines.append(
+            "Nhận định tư vấn (diễn giải, không phải số liệu benchmark):\n"
+            + candidate.explanation.text
+        )
     return ValidatedAnswer(
         text="\n".join(lines),
         status="COMPLETED",

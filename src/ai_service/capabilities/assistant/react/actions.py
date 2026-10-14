@@ -85,6 +85,7 @@ class FinalAnswerAction(FinalAnswerPayload):
             or self.answer.web_excerpts
             or self.answer.review
             or self.answer.clarification_fields
+            or self.answer.explanation is not None
         ):
             raise ValueError(
                 "Task answers own their evidence, not the aggregate candidate"

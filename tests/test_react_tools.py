@@ -57,6 +57,39 @@ class Catalog:
         return self.product if product_id == self.product.product_id else None
 
 
+@pytest.mark.asyncio
+async def test_consultation_explanation_keeps_canonical_facts_and_bound_sources():
+    catalog, trusted = Catalog(), context()
+    result = await ToolDispatcher(catalog, PCBuildApplicationService()).execute(
+        ToolCall(
+            call_id="details",
+            name="get_product_details",
+            arguments={"product_id": str(catalog.product.product_id)},
+        ),
+        trusted,
+    )
+    explanation = {
+        "text": "Lựa chọn này cần cân nhắc cùng nhu cầu và các linh kiện bạn đã có.",
+        "evidence_refs": result.evidence_refs,
+    }
+    candidate = AnswerCandidate(
+        text="unused narration",
+        evidence_refs=result.evidence_refs,
+        explanation=explanation,
+    )
+    answer = validate_answer(
+        candidate, [result], trusted, [CompletionRequirement(kind="ANSWER")]
+    )
+    assert "8,000,000 VND" in answer.text and explanation["text"] in answer.text
+    assert "unused narration" not in answer.text
+    forged = candidate.model_copy(deep=True)
+    forged.explanation.evidence_refs = ["catalog:unread"]
+    with pytest.raises(ValueError, match="Explanation"):
+        validate_answer(
+            forged, [result], trusted, [CompletionRequirement(kind="ANSWER")]
+        )
+
+
 def test_state_aware_exposure_keeps_reads_and_requires_compiled_build(
     realistic_catalog,
 ):

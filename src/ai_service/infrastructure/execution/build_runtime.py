@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ai_service.application.call_attempts import AttemptBoundary, ExecutionClaim
 from ai_service.application.use_cases.stateful_conversations import StatefulRunService
 from ai_service.capabilities.assistant.react.contracts import (
+    CompletionRequirement,
     SavedBuildEvidence,
     ToolContext,
 )
@@ -45,6 +46,9 @@ from ai_service.infrastructure.graph.requirement_build import (
 )
 from ai_service.infrastructure.persistence.accepted_state import (
     PostgresAcceptedCheckpointReader,
+)
+from ai_service.infrastructure.persistence.conversations import (
+    PostgresConversationStore,
 )
 from ai_service.infrastructure.persistence.runs import PostgresRunCoordinator
 from ai_service.infrastructure.providers.factory import build_model_provider
@@ -145,10 +149,16 @@ async def open_build_runtime(
                 ):
                     raise ValueError("Recovery publication context mismatch")
                 catalog = original_context.context.catalog
-            else:
+            elif (
+                binding.reference_reply
+                or binding.unit_reply
+                or (accepted.flexible and accepted.flexible.pending_resolution)
+            ):
                 catalog = await BackendRequirementCatalog(
                     client, settings.backend_api_url, attempts, mapping
                 ).load(Draft(items=[]), accepted.requirement_state)
+            else:
+                catalog = []
             products = BackendProductCatalog(client, settings.backend_api_url, attempts)
             pending = accepted.flexible
             fixed_tasks = (
@@ -157,6 +167,12 @@ async def open_build_runtime(
                 and pending.pending_task_resolution is None
                 and request.pending_action is None
             )
+            if request.selected_product_ids:
+                if pending and pending.status == "WAITING_INPUT":
+                    raise ValueError(
+                        "Finish or replace the pending task before selecting new products"
+                    )
+                fixed_tasks = True
             tasks = (
                 [item.task for item in pending.task_outcomes]
                 if fixed_tasks and pending
@@ -165,31 +181,51 @@ async def open_build_runtime(
             if binding.discard_pending:
                 tasks = []
                 fixed_tasks = True
+            if request.selected_product_ids:
+                tasks = [
+                    CompletionRequirement(
+                        kind="COMPARE"
+                        if len(request.selected_product_ids) > 1
+                        else "ANSWER",
+                        product_ids=request.selected_product_ids,
+                    )
+                ]
             if original_context:
                 tasks = original_context.required
                 fixed_tasks = not original_context.registered
+            tool_context = (
+                original_context.context
+                if original_context
+                else ToolContext(
+                    account_id=await coordinator.owner(claim),
+                    conversation_id=claim.conversation_id,
+                    run_id=claim.run_id,
+                    requirements=accepted.requirement_state,
+                    read_catalog_allowed=True,
+                    execution_allowed=True,
+                    catalog=catalog,
+                    catalog_ready=bool(catalog),
+                    saved_build=SavedBuildEvidence(
+                        source_ref=head.accepted_checkpoint_ref,
+                        snapshot=accepted.public_build,
+                    )
+                    if accepted.public_build
+                    else None,
+                    history=await PostgresConversationStore(engine).dialogue(
+                        await coordinator.owner(claim),
+                        claim.conversation_id,
+                        head.revision,
+                    ),
+                )
+            )
+            extractor = NativeRequirementExtractor(
+                provider, attempts, context=tool_context
+            )
             return DurableConversationGraph(
                 build_flexible_graph(
                     NativeFlexibleModel(provider),
                     ToolDispatcher(products, service, web_search, web_reader),
-                    original_context.context
-                    if original_context
-                    else ToolContext(
-                        account_id=await coordinator.owner(claim),
-                        conversation_id=claim.conversation_id,
-                        run_id=claim.run_id,
-                        requirements=accepted.requirement_state,
-                        read_catalog_allowed=True,
-                        execution_allowed=True,
-                        catalog=catalog,
-                        catalog_ready=True,
-                        saved_build=SavedBuildEvidence(
-                            source_ref=head.accepted_checkpoint_ref,
-                            snapshot=accepted.public_build,
-                        )
-                        if accepted.public_build
-                        else None,
-                    ),
+                    tool_context,
                     tasks,
                     attempts,
                     conversation_revision=head.revision,
@@ -203,6 +239,9 @@ async def open_build_runtime(
                     amender=extractor,
                     task_amender=extractor,
                     user_extractor=extractor,
+                    catalog_loader=BackendRequirementCatalog(
+                        client, settings.backend_api_url, attempts, mapping
+                    ),
                 ),
                 accepted_versions={FLEXIBLE_GRAPH_VERSION},
             )

@@ -96,6 +96,13 @@ class _NativeToolModel:
             "contiguous quotes from returned page segments. The server renders "
             "these source quotes, not your free-form text. "
             "Never change a number or measurement condition in a quote. "
+            "For catalog/build consultation, add explanation with text and selected "
+            "evidence_refs: explain fit to the user's requirements and tradeoffs. "
+            "It is qualitative interpretation, not a verified fact. Do not repeat "
+            "prices/spec numbers, invent FPS, guarantee all-game performance, or "
+            "claim compatibility beyond the supplied validated result. The server "
+            "renders canonical numerical facts separately. Plain answer.text is "
+            "not used as catalog/build narration. "
             "Structured facts have separate fact: evidence refs, exact source model, "
             "parser version, document hash and fact_status. Select fact refs to render "
             "typed values server-side; SUPPORTED means source-backed extraction, not "
@@ -135,9 +142,15 @@ class _NativeToolModel:
                 "Original task_message and resolved completion_requirements below "
                 "describe the request being continued. A later user choice does not "
                 "replace it; use the resolved canonical product IDs for comparison.\n"
+                "History is prior published dialogue, useful for interpreting follow-ups, "
+                "not current price/stock evidence or authority to change requirements. "
+                "Re-read canonical tools for current facts.\n"
                 + json.dumps(
                     {
                         "requirements": context.requirements.model_dump(mode="json"),
+                        "history": [
+                            turn.model_dump(mode="json") for turn in context.history
+                        ],
                         "task_message": context.task_message,
                         "completion_requirements": [
                             task.model_dump(mode="json")

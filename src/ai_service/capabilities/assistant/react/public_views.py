@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import Field
 
 from ai_service.capabilities.assistant.conversation_core import Digest
+from ai_service.capabilities.assistant.limits import MAX_PUBLIC_PRODUCTS
 from ai_service.capabilities.assistant.provenance import CatalogRowV1
 from ai_service.capabilities.assistant.public_contracts import (
     ClarificationItemV1,
@@ -13,6 +14,8 @@ from ai_service.capabilities.assistant.public_contracts import (
     ConversationViewV1,
     PublicClarificationV1,
     PublicTaskClarificationV1,
+    RunCompletedV1,
+    TurnResultV1,
 )
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
@@ -21,6 +24,7 @@ from ai_service.capabilities.assistant.requirements.contracts import (
 )
 from ai_service.capabilities.assistant.requirements.resolver import PendingDraft
 from ai_service.capabilities.assistant.requirements.units import UnresolvedQuantityValue
+from ai_service.capabilities.assistant.schemas import ProductCard
 from ai_service.capabilities.assistant.stateful_contracts import (
     Contract,
     NonNegativeInt,
@@ -28,6 +32,7 @@ from ai_service.capabilities.assistant.stateful_contracts import (
 )
 
 from .actions import FinalOutcome
+from .contracts import CatalogResult, ComparisonResult, DetailsResult, ToolRecord
 from .outcomes import AnswerReason
 from .published_state import FlexiblePublishedState
 from .task_resolution import public_task_options
@@ -80,6 +85,48 @@ class PublicFlexibleStateV2(Contract):
 class ConversationViewV2(ConversationViewV1):
     schema_version: Literal[2] = 2
     flexible: PublicFlexibleStateV2 | None = None
+
+
+class TurnResultV2(TurnResultV1):
+    schema_version: Literal[2] = 2
+    flexible: PublicFlexibleStateV2 | None = None
+    products: list[ProductCard] = Field(
+        default_factory=list, max_length=MAX_PUBLIC_PRODUCTS
+    )
+
+
+def public_tool_products(
+    records: list[ToolRecord], evidence_refs: list[str]
+) -> list[ProductCard]:
+    """Only products actually selected by the validated final answer."""
+    selected = set(evidence_refs)
+    products = {}
+    for record in records:
+        result = record.result
+        if result is None or result.status != "COMPLETED":
+            continue
+        payload = result.result
+        items = (
+            [payload.product]
+            if isinstance(payload, DetailsResult)
+            else payload.products
+            if isinstance(payload, (CatalogResult, ComparisonResult))
+            else []
+        )
+        for item in items:
+            if item.evidence_ref in selected:
+                products[item.product_id] = ProductCard(
+                    id=item.product_id,
+                    name=item.name,
+                    list_price=item.price_vnd,
+                    specifications=item.specifications,
+                    status="ACTIVE",
+                )
+    return list(products.values())[:20]
+
+
+class RunCompletedV2(RunCompletedV1):
+    result: TurnResultV2
 
 
 def public_resolution_options(

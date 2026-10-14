@@ -586,6 +586,13 @@ def revalidate_flexible_publication(
         values.get("publication_context")
     )
     ctx = execution.context
+    if request.selected_product_ids:
+        selected_task = CompletionRequirement(
+            kind="COMPARE" if len(request.selected_product_ids) > 1 else "ANSWER",
+            product_ids=request.selected_product_ids,
+        )
+        if execution.registered or execution.required != [selected_task]:
+            raise ValueError("Selected-product task differs from stored request")
     if (
         ctx.account_id != owner
         or ctx.run_id != run_id
@@ -693,7 +700,7 @@ def revalidate_flexible_publication(
             ]
         ):
             raise ValueError("Registration cannot replace accepted continuation tasks")
-    elif (
+    elif not request.selected_product_ids and (
         binding.accepted.flexible is None
         or binding.accepted.flexible.status != "WAITING_INPUT"
     ):

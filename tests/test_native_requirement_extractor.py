@@ -1,6 +1,10 @@
+import json
+
 import pytest
 from pydantic import ValidationError
+from test_react_tools import context
 
+from ai_service.capabilities.assistant.react.contracts import DialogueTurn
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
 )
@@ -8,6 +12,31 @@ from ai_service.capabilities.assistant.requirements.resolver import Draft
 from ai_service.infrastructure.providers.requirement_extractor import (
     NativeRequirementExtractor,
 )
+
+
+@pytest.mark.asyncio
+async def test_task_registration_receives_published_context_for_follow_up():
+    trusted = context()
+    trusted.history = [
+        DialogueTurn(
+            user_text="Build PC gaming", assistant_text="Cấu hình đã được đề xuất."
+        )
+    ]
+    message = "Tăng RAM"
+    provider = Provider(
+        {
+            "tasks": [
+                {"kind": "BUILD", "start": 0, "end": len(message), "quote": message}
+            ]
+        }
+    )
+    await NativeRequirementExtractor(provider, Budget(), context=trusted).extract_tasks(
+        message
+    )
+    payload = json.loads(provider.model.messages[-1][1])
+    assert payload["published_history"][0]["user_text"] == "Build PC gaming"
+    assert payload["user_message"] == message
+    assert "account_id" not in payload and "catalog" not in payload
 
 
 class Model:
