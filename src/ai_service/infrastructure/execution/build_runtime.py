@@ -21,6 +21,9 @@ from ai_service.capabilities.assistant.react.snapshot_publication import (
 )
 from ai_service.capabilities.assistant.react.tools import ToolDispatcher
 from ai_service.capabilities.assistant.react.turn_contracts import TurnRequestV2
+from ai_service.capabilities.assistant.requirements.catalog_policy import (
+    draft_needs_catalog,
+)
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
 )
@@ -150,9 +153,11 @@ async def open_build_runtime(
                     raise ValueError("Recovery publication context mismatch")
                 catalog = original_context.context.catalog
             elif (
-                binding.reference_reply
-                or binding.unit_reply
-                or (accepted.flexible and accepted.flexible.pending_resolution)
+                accepted.flexible
+                and accepted.flexible.pending_resolution
+                and draft_needs_catalog(
+                    accepted.flexible.pending_resolution.draft.resolution.draft
+                )
             ):
                 catalog = await BackendRequirementCatalog(
                     client, settings.backend_api_url, attempts, mapping

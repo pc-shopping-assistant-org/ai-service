@@ -79,7 +79,11 @@ from ai_service.capabilities.assistant.requirements.build import (
     RequirementCatalog,
     RequirementExtractor,
 )
-from ai_service.capabilities.assistant.requirements.compiler import compile_requirements
+from ai_service.capabilities.assistant.requirements.catalog_policy import (
+    build_clarification_reasons,
+    build_needs_catalog,
+    draft_needs_catalog,
+)
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
 )
@@ -478,9 +482,17 @@ def build_flexible_graph(
         return bounded(state, update)
 
     async def prepare_agent(state: FlexibleState) -> dict[str, Any]:
-        if any(task.kind == "BUILD" for task in registered_tasks(state)):
+        if (
+            any(task.kind == "BUILD" for task in registered_tasks(state))
+            and build_needs_catalog(current(state).requirements)
+        ):
             return await load_catalog(state)
         return {}
+
+    async def load_proposal_catalog(state: FlexibleState) -> dict[str, Any]:
+        action = FlexibleDecision.model_validate(state["decision"]).action
+        assert isinstance(action, ProposeRequirementsAction)
+        return await load_catalog(state) if draft_needs_catalog(action.draft) else {}
 
     def begin(state: FlexibleState) -> dict[str, Any]:
         return initialize(state, turn_input)
@@ -759,10 +771,9 @@ def build_flexible_graph(
                         "phase": "WAITING_INPUT",
                     },
                 )
-            mapping = compile_requirements(ctx.requirements, ctx.catalog).mapping
-            missing = {
-                item.reason for item in mapping if item.status == "NEEDS_CLARIFICATION"
-            }
+            missing = build_clarification_reasons(
+                ctx.requirements, ctx.catalog, catalog_ready=ctx.catalog_ready
+            )
             if (
                 not any(task.kind == "BUILD" for task in ctx.completion_requirements)
                 or not set(action.missing_fields) <= missing
@@ -906,7 +917,7 @@ def build_flexible_graph(
     builder.add_node("validate_action", validate)
     builder.add_node("execute_tool", execute)
     builder.add_node("resolve_proposal", resolve)
-    builder.add_node("load_proposal_catalog", load_catalog)
+    builder.add_node("load_proposal_catalog", load_proposal_catalog)
     builder.add_node("prepare_agent", prepare_agent)
     builder.add_edge("load_proposal_catalog", "resolve_proposal")
     builder.add_edge("prepare_agent", "agent")
@@ -998,8 +1009,8 @@ def build_flexible_graph(
         {
             "REPAIR": "agent",
             "WAITING_INPUT": terminal,
-            "REQUIREMENTS_UNCHANGED": "agent",
-            "REQUIREMENTS_ACCEPTED": "agent",
+            "REQUIREMENTS_UNCHANGED": "prepare_agent",
+            "REQUIREMENTS_ACCEPTED": "prepare_agent",
         },
     )
     return builder.compile(checkpointer=checkpointer)

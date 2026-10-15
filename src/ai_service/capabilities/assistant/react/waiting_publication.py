@@ -15,7 +15,9 @@ from ai_service.application.ports.stateful_conversation import (
 )
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.requirements.amendment import PendingAmendment
-from ai_service.capabilities.assistant.requirements.compiler import compile_requirements
+from ai_service.capabilities.assistant.requirements.catalog_policy import (
+    build_clarification_reasons,
+)
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
     requirements_hash,
@@ -233,11 +235,9 @@ def prepare_waiting_publication(
     action = FlexibleDecision.model_validate(values.get("decision")).action
     if isinstance(action, AskClarificationAction):
         checked = AskClarificationAction.model_validate(values.get("clarification"))
-        missing = {
-            mapping.reason
-            for mapping in compile_requirements(state, context.catalog).mapping
-            if mapping.status == "NEEDS_CLARIFICATION"
-        }
+        missing = build_clarification_reasons(
+            state, context.catalog, catalog_ready=context.catalog_ready
+        )
         if (
             checked != action
             or not any(task.kind == "BUILD" for task in tasks)
