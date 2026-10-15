@@ -131,7 +131,7 @@ class FindAlternativesArgs(BaseModel):
     slot: ComponentCategory = Field(description="Component slot to replace (e.g. MAINBOARD, GPU, RAM, COOLER).")
     required_socket: str | None = Field(default=None, description="CPU/Mainboard socket to match (e.g. LGA1700, AM5).")
     required_ram_type: str | None = Field(default=None, description="RAM standard to match (e.g. DDR4, DDR5).")
-    max_price: int | None = Field(default=None, description="Upper price ceiling in VND.")
+    max_price: int | None = Field(default=None, ge=0, description="Upper price ceiling in VND.")
     limit: int = Field(default=5, ge=1, le=10)
 
 
@@ -142,7 +142,7 @@ class AlternativeComponentView(BaseModel):
     name: str
     price: int
     specs_summary: str
-    in_stock: bool = True
+    in_stock: bool | None = None
 
 
 class FindAlternativesOutput(BaseModel):

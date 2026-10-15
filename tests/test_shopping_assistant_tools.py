@@ -17,6 +17,9 @@ from ai_service.capabilities.shopping_assistant.schemas import (
     TrackOrderArgs,
 )
 from ai_service.capabilities.shopping_assistant.tools import ShoppingAssistantTools
+from ai_service.infrastructure.commerce.backend_commerce_client import (
+    BackendCommerceClient,
+)
 
 
 @pytest.fixture
@@ -36,7 +39,7 @@ def commerce_tools(monkeypatch: pytest.MonkeyPatch) -> ShoppingAssistantTools:
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx.MockTransport(respond), **kwargs,
     ))
-    return ShoppingAssistantTools()
+    return ShoppingAssistantTools(BackendCommerceClient())
 
 
 @pytest.mark.asyncio

@@ -25,16 +25,13 @@ from ai_service.capabilities.shopping_assistant.schemas import (
     QueryStorePoliciesArgs,
     TrackOrderArgs,
 )
-from ai_service.infrastructure.commerce.backend_commerce_client import (
-    BackendCommerceClient,
-)
 
 
 class ShoppingAssistantTools:
     """Executable commerce operations callable by application/graph workflows."""
 
-    def __init__(self, commerce_client: CommerceClient | None = None) -> None:
-        self.commerce_client = commerce_client or BackendCommerceClient()
+    def __init__(self, commerce_client: CommerceClient) -> None:
+        self.commerce_client = commerce_client
 
     async def search_catalog_with_filters(self, args: FilterCatalogArgs) -> list[dict[str, Any]]:
         """Tìm kiếm sản phẩm đa tiêu chí với các bộ lọc thông minh (Alibaba / Taobao style).

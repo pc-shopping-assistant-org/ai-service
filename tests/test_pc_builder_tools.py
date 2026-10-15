@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from ai_service.application.ports.hardware import (
     BuildPurpose,
     ComponentCategory,
@@ -10,10 +12,11 @@ from ai_service.capabilities.pc_builder.schemas import (
     RecommendBuildArgs,
 )
 from ai_service.capabilities.pc_builder.tools import PCBuilderTools
+from ai_service.infrastructure.hardware.rule_engine import LocalHardwareRuleEngine
 
 
 def test_pc_builder_tools_check_compatibility() -> None:
-    tools = PCBuilderTools()
+    tools = PCBuilderTools(LocalHardwareRuleEngine())
     args = CheckCompatibilityArgs(
         components=[
             ComponentSpec(name="i5-13400F", category=ComponentCategory.CPU, socket="LGA1700"),
@@ -25,7 +28,7 @@ def test_pc_builder_tools_check_compatibility() -> None:
 
 
 def test_pc_builder_tools_calculate_wattage() -> None:
-    tools = PCBuilderTools()
+    tools = PCBuilderTools(LocalHardwareRuleEngine())
     args = CalculateWattageArgs(
         components=[
             ComponentSpec(name="i7-14700K", category=ComponentCategory.CPU, tdp_watts=253),
@@ -39,22 +42,23 @@ def test_pc_builder_tools_calculate_wattage() -> None:
 
 
 def test_pc_builder_tools_recommend_build(realistic_catalog: list[ComponentSpec]) -> None:
-    tools = PCBuilderTools()
+    tools = PCBuilderTools(LocalHardwareRuleEngine())
     args = RecommendBuildArgs(budget_vnd=15_000_000, purpose=BuildPurpose.GAMING_ESPORTS)
     result = tools.recommend_pc_build(args, realistic_catalog)
     assert result.recommendation.build.total_price <= args.budget_vnd
     assert len(result.recommendation.build.parts) == 8
 
 
-def test_pc_builder_tools_find_alternatives() -> None:
-    tools = PCBuilderTools()
+def test_pc_builder_tools_find_alternatives(realistic_catalog: list[ComponentSpec]) -> None:
+    tools = PCBuilderTools(LocalHardwareRuleEngine())
     args = FindAlternativesArgs(
         slot=ComponentCategory.MAINBOARD,
         required_socket="AM5",
         required_ram_type="DDR5",
         limit=3,
     )
-    result = tools.find_compatible_alternatives(args)
+    catalog = [part.model_copy(update={"id": uuid4()}) for part in realistic_catalog]
+    result = tools.find_compatible_alternatives(args, catalog)
     assert len(result.alternatives) > 0
     assert any("B650" in a.name for a in result.alternatives)
 
@@ -63,7 +67,7 @@ def test_pc_builder_tools_bottleneck() -> None:
     from ai_service.application.ports.hardware import ResolutionTier
     from ai_service.capabilities.pc_builder.schemas import AnalyzeBottleneckArgs
 
-    tools = PCBuilderTools()
+    tools = PCBuilderTools(LocalHardwareRuleEngine())
     res = tools.analyze_bottleneck_balance(
         AnalyzeBottleneckArgs(
             cpu_name="Ryzen 5 7600",
@@ -77,7 +81,7 @@ def test_pc_builder_tools_bottleneck() -> None:
 def test_pc_builder_tools_upgrade_path() -> None:
     from ai_service.capabilities.pc_builder.schemas import AssessUpgradePathArgs
 
-    tools = PCBuilderTools()
+    tools = PCBuilderTools(LocalHardwareRuleEngine())
     res = tools.assess_upgrade_path(
         AssessUpgradePathArgs(
             socket="LGA1700",
@@ -92,7 +96,7 @@ def test_pc_builder_tools_upgrade_path() -> None:
 def test_pc_builder_tools_peripherals() -> None:
     from ai_service.capabilities.pc_builder.schemas import RecommendPeripheralsArgs
 
-    tools = PCBuilderTools()
+    tools = PCBuilderTools(LocalHardwareRuleEngine())
     res = tools.recommend_monitor_and_peripherals(
         RecommendPeripheralsArgs(
             gpu_name="GeForce RTX 4080 SUPER",

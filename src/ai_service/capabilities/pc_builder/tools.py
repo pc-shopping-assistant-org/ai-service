@@ -8,6 +8,7 @@ from ai_service.application.errors import BackendUnavailableError
 from ai_service.application.ports.hardware import (
     BottleneckReport,
     CompatibilityReport,
+    ComponentCategory,
     ComponentSpec,
     HardwareRuleEngine,
     PeripheralRecommendation,
@@ -34,7 +35,9 @@ from ai_service.capabilities.pc_builder.schemas import (
     RecommendBuildArgs,
     RecommendPeripheralsArgs,
 )
-from ai_service.infrastructure.hardware.rule_engine import LocalHardwareRuleEngine
+
+ALTERNATIVES_FOUND_MESSAGE = "CATALOG_ALTERNATIVES_FOUND"
+ALTERNATIVES_EMPTY_MESSAGE = "CATALOG_ALTERNATIVES_EMPTY"
 
 
 class PCBuilderTools:
@@ -42,10 +45,10 @@ class PCBuilderTools:
 
     def __init__(
         self,
-        rule_engine: HardwareRuleEngine | None = None,
+        rule_engine: HardwareRuleEngine,
         application_service: PCBuildApplicationService | None = None,
     ) -> None:
-        self.rule_engine = rule_engine or LocalHardwareRuleEngine()
+        self.rule_engine = rule_engine
         self.application_service = application_service or PCBuildApplicationService()
 
     def build_pc(
@@ -124,73 +127,56 @@ class PCBuilderTools:
             raise BackendUnavailableError("PC recommendation requires a canonical component catalog")
         return self.build_pc_from_args(args, catalog)
 
-    def find_compatible_alternatives(self, args: FindAlternativesArgs) -> FindAlternativesOutput:
-        """Tìm linh kiện thay thế tương thích khi một linh kiện bị hết hàng hoặc vượt ngân sách.
+    def find_compatible_alternatives(
+        self, args: FindAlternativesArgs, catalog: list[ComponentSpec] | None = None,
+    ) -> FindAlternativesOutput:
+        """Filter canonical candidates by requested standards, not full-build compatibility.
 
-        Lọc theo cùng chuẩn socket, chuẩn RAM hoặc phân khúc giá.
+        The caller supplies active canonical rows, as for recommend_pc_build.
+        ComponentSpec carries no stock evidence; availability remains unknown.
         """
-        # Catalog of standard fallback components indexed by socket/specs
-        alternatives: list[AlternativeComponentView] = []
-        sock = (args.required_socket or "").upper().replace(" ", "").replace("-", "")
-        ram = (args.required_ram_type or "").upper()
+        if catalog is None:
+            raise BackendUnavailableError("Alternatives require a canonical component catalog")
 
-        if args.slot == "MAINBOARD":
-            if "AM5" in sock:
-                alternatives = [
-                    AlternativeComponentView(name="MSI PRO B650M-A WIFI", price=3600000, specs_summary="Socket AM5, DDR5, mATX"),
-                    AlternativeComponentView(name="Gigabyte B650M GAMING PLUS", price=3250000, specs_summary="Socket AM5, DDR5, mATX"),
-                    AlternativeComponentView(name="ASRock B650M Pro RS", price=3400000, specs_summary="Socket AM5, 4 khe DDR5"),
-                ]
-            elif "LGA1700" in sock:
-                if ram == "DDR4":
-                    alternatives = [
-                        AlternativeComponentView(name="MSI PRO B760M-P DDR4", price=2450000, specs_summary="LGA1700, 4 khe DDR4"),
-                        AlternativeComponentView(name="ASUS PRIME B760M-K D4", price=2350000, specs_summary="LGA1700, DDR4 giá tốt"),
-                        AlternativeComponentView(name="ASRock H610M-HDV/M.2", price=1600000, specs_summary="LGA1700, DDR4 tiết kiệm"),
-                    ]
-                else:
-                    alternatives = [
-                        AlternativeComponentView(name="MSI B760M GAMING PLUS WIFI", price=3500000, specs_summary="LGA1700, DDR5, Wi-Fi"),
-                        AlternativeComponentView(name="ASUS TUF GAMING B760M-PLUS", price=4100000, specs_summary="LGA1700, DDR5 cao cấp"),
-                    ]
-            else:
-                alternatives = [
-                    AlternativeComponentView(name="MSI B760M-E DDR4", price=2300000, specs_summary="Bo mạch chủ chuẩn phổ thông"),
-                    AlternativeComponentView(name="Gigabyte B650M D3HP", price=2900000, specs_summary="Bo mạch chủ AM5 phổ thông"),
-                ]
-        elif args.slot == "RAM":
-            if ram == "DDR4":
-                alternatives = [
-                    AlternativeComponentView(name="Kingston Fury Beast 16GB (2x8GB) 3200MHz", price=950000, specs_summary="DDR4 3200 CL16"),
-                    AlternativeComponentView(name="Corsair Vengeance LPX 16GB (2x8GB) 3200MHz", price=1050000, specs_summary="DDR4 3200 tản nhôm"),
-                ]
-            else:
-                alternatives = [
-                    AlternativeComponentView(name="Kingston Fury Beast 32GB (2x16GB) 5600MHz", price=2600000, specs_summary="DDR5 5600 CL36"),
-                    AlternativeComponentView(name="Corsair Vengeance 32GB (2x16GB) 6000MHz", price=2900000, specs_summary="DDR5 6000 CL30"),
-                ]
-        elif args.slot == "GPU":
-            alternatives = [
-                AlternativeComponentView(name="GeForce RTX 4060 8GB GDDR6", price=7800000, specs_summary="8GB GDDR6, DLSS 3, 115W"),
-                AlternativeComponentView(name="AMD Radeon RX 6600 8GB", price=5300000, specs_summary="8GB GDDR6, 1080p gaming"),
-                AlternativeComponentView(name="GeForce RTX 4070 SUPER 12GB", price=16800000, specs_summary="12GB GDDR6X, 2K/4K max settings"),
-            ]
-        else:
-            alternatives = [
-                AlternativeComponentView(name="Linh kiện tương đương tiêu chuẩn", price=1500000, specs_summary="Chất lượng và thông số đảm bảo"),
-            ]
+        def normalized(value: str | None) -> str:
+            return (value or "").strip().upper().replace(" ", "").replace("-", "")
 
-        if args.max_price:
-            filtered = [alt for alt in alternatives if alt.price <= args.max_price]
-            if filtered:
-                alternatives = filtered
+        candidates = []
+        for part in catalog:
+            if part.id is None or part.is_integrated or part.category != args.slot or part.price < 0:
+                continue
+            if args.max_price is not None and part.price > args.max_price:
+                continue
+            if args.required_socket is not None:
+                sockets: list[str | None] = [part.socket]
+                if part.category == ComponentCategory.COOLER and part.supported_sockets:
+                    sockets = list(part.supported_sockets)
+                socket = normalized(args.required_socket)
+                if not socket or socket not in {normalized(value) for value in sockets}:
+                    continue
+            if args.required_ram_type is not None:
+                ram = normalized(args.required_ram_type)
+                if not ram or ram != normalized(part.ram_type):
+                    continue
+            candidates.append(part)
 
+        candidates.sort(key=lambda part: (part.price, str(part.id)))
+        alternatives = [
+            AlternativeComponentView(
+                id=part.id, name=part.name, price=part.price,
+                specs_summary="; ".join(
+                    value for value in (part.socket, part.ram_type, part.form_factor) if value
+                ),
+                in_stock=None,
+            )
+            for part in candidates[:args.limit]
+        ]
         return FindAlternativesOutput(
             slot=args.slot,
             requested_socket=args.required_socket,
             requested_ram_type=args.required_ram_type,
-            alternatives=alternatives[: args.limit],
-            message=f"Đã tìm thấy {len(alternatives)} linh kiện {args.slot} tương thích phù hợp yêu cầu.",
+            alternatives=alternatives,
+            message=ALTERNATIVES_FOUND_MESSAGE if alternatives else ALTERNATIVES_EMPTY_MESSAGE,
         )
 
     def analyze_bottleneck_balance(self, args: AnalyzeBottleneckArgs) -> BottleneckReport:

@@ -28,7 +28,7 @@ from ai_service.infrastructure.hardware.rule_engine import LocalHardwareRuleEngi
 
 def test_recommendation_without_canonical_catalog_fails_closed() -> None:
     with pytest.raises(BackendUnavailableError):
-        PCBuilderTools().recommend_pc_build(
+        PCBuilderTools(LocalHardwareRuleEngine()).recommend_pc_build(
             RecommendBuildArgs(budget_vnd=5_000_000, use_case=UseCaseProfile.OFFICE_BUDGET)
         )
 
@@ -41,7 +41,7 @@ def test_legacy_rule_engine_cannot_return_hardcoded_build() -> None:
 def test_compatibility_tool_does_not_certify_missing_cooler_socket() -> None:
     from ai_service.capabilities.pc_builder.schemas import CheckCompatibilityArgs
 
-    report = PCBuilderTools().check_pc_compatibility(CheckCompatibilityArgs(components=[
+    report = PCBuilderTools(LocalHardwareRuleEngine()).check_pc_compatibility(CheckCompatibilityArgs(components=[
         ComponentSpec(name="CPU", category=C.CPU, socket="AM5"),
         ComponentSpec(name="Unknown cooler", category=C.COOLER),
     ]))
@@ -49,7 +49,7 @@ def test_compatibility_tool_does_not_certify_missing_cooler_socket() -> None:
 
 
 def test_recommendation_entrypoint_uses_application_pipeline(realistic_catalog: list[ComponentSpec]) -> None:
-    result = PCBuilderTools().recommend_pc_build(
+    result = PCBuilderTools(LocalHardwareRuleEngine()).recommend_pc_build(
         RecommendBuildArgs(budget_vnd=25_000_000, use_case=UseCaseProfile.OFFICE_BUDGET),
         catalog=realistic_catalog,
     )

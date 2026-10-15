@@ -1,4 +1,7 @@
+import ast
 import asyncio
+from importlib.util import resolve_name
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -17,6 +20,31 @@ from ai_service.config.enums import AIProvider, EmbeddingProviderKind, Retrieval
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.composition import build_container
 from ai_service.infrastructure.graph import LangGraphRunner
+
+
+@pytest.mark.parametrize("layer", ["application", "capabilities"])
+def test_inner_layers_do_not_depend_on_adapters_or_runtime_frameworks(layer: str) -> None:
+    source = Path(__file__).resolve().parents[1] / "src"
+    forbidden = (
+        "ai_service.infrastructure", "ai_service.api", "fastapi", "httpx",
+        "langgraph", "langchain", "langchain_core", "langchain_openai",
+        "langchain_google_genai", "sqlalchemy", "psycopg", "psycopg_pool",
+    )
+    violations = []
+    for path in sorted((source / "ai_service" / layer).rglob("*.py")):
+        package = ".".join(path.parent.relative_to(source).parts)
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                name = "." * node.level + (node.module or "")
+                modules = [resolve_name(name, package) if node.level else name]
+            else:
+                continue
+            for module in modules:
+                if any(module == prefix or module.startswith(prefix + ".") for prefix in forbidden):
+                    violations.append(f"{path.relative_to(source)}:{node.lineno}: {module}")
+    assert not violations, "Inner layers must use ports, not adapters:\n" + "\n".join(violations)
 
 
 @pytest.mark.asyncio

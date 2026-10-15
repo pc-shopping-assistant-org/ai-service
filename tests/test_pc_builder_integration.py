@@ -27,6 +27,7 @@ from ai_service.capabilities.pc_builder.schemas import (
     UseCaseProfile,
 )
 from ai_service.capabilities.pc_builder.tools import PCBuilderTools
+from ai_service.infrastructure.hardware.rule_engine import LocalHardwareRuleEngine
 
 
 def test_service_build_pc_completely_standalone(realistic_catalog: list[ComponentSpec]) -> None:
@@ -58,7 +59,7 @@ def test_service_build_pc_completely_standalone(realistic_catalog: list[Componen
 
 def test_tools_build_pc_and_explanation_context_pipeline(realistic_catalog: list[ComponentSpec]) -> None:
     """Verify that PCBuilderTools acts as a clean adapter to the application service and produces factual context."""
-    tools = PCBuilderTools()
+    tools = PCBuilderTools(LocalHardwareRuleEngine())
     args = RecommendBuildArgs(
         budget_vnd=35_000_000,
         use_case=UseCaseProfile.GAMING_4K,
@@ -97,7 +98,7 @@ def test_tools_build_pc_and_explanation_context_pipeline(realistic_catalog: list
 
 def test_user_requested_objective_override(realistic_catalog: list[ComponentSpec]) -> None:
     """When user explicitly specifies UPGRADE_FRIENDLY objective, policy selects it with USER_SELECTED reason."""
-    tools = PCBuilderTools()
+    tools = PCBuilderTools(LocalHardwareRuleEngine())
     constraints = PCBuildConstraints(
         target_budget_vnd=ConstraintValue(
             value=30_000_000,

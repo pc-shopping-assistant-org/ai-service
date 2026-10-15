@@ -37,7 +37,7 @@ def search_tools(monkeypatch: pytest.MonkeyPatch) -> WebSearchTools:
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx.MockTransport(respond), **kwargs,
     ))
-    return WebSearchTools()
+    return WebSearchTools(DuckDuckGoSearchAdapter())
 
 
 def test_duckduckgo_query_enrichment(search_adapter: DuckDuckGoSearchAdapter) -> None:

@@ -20,16 +20,13 @@ from ai_service.capabilities.web_search.schemas import (
     PsuTierSearchArgs,
     VendorSpecsSearchArgs,
 )
-from ai_service.infrastructure.search.duckduckgo_adapter import (
-    DuckDuckGoSearchAdapter,
-)
 
 
 class WebSearchTools:
     """Search operations callable by application/graph workflows for live facts."""
 
-    def __init__(self, search_client: WebSearchClient | None = None) -> None:
-        self.search_client = search_client or DuckDuckGoSearchAdapter()
+    def __init__(self, search_client: WebSearchClient) -> None:
+        self.search_client = search_client
 
     async def search_hardware_compatibility(
         self, args: HardwareCompatibilitySearchArgs
