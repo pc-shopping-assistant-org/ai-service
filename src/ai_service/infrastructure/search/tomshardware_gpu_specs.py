@@ -1,6 +1,6 @@
 """Curated template for Tom's Hardware GPU reviews.
 
-Extracts physical board dimensions (Length x Width x Height in mm) from
+Extracts physical board dimensions (source order, no inferred axes) from
 structured comparison and specifications tables in Tom's Hardware GPU reviews.
 Converts both centimeter and millimeter notations to canonical millimeters.
 Unsupported layouts return None so the reader falls back to general extraction.
@@ -16,7 +16,8 @@ from trafilatura import load_html
 
 from ai_service.application.ports.web_search import ExtractedWebFact, WebFactStatus
 
-PARSER_VERSION = "tomshardware-gpu-dimensions:v1"
+PARSER_VERSION = "tomshardware-gpu-dimensions:v2"
+MAX_FACT_QUOTE_CHARS = 2_000
 PATH = re.compile(
     r"^/(?:pc-components/gpus/[a-z0-9-]+-review|reviews/[a-z0-9-]+-review(?:,\d+\.html)?)/?$",
     re.IGNORECASE,
@@ -99,18 +100,19 @@ def extract_tomshardware_gpu_dimensions(
     tables = root.xpath("//table")
     facts: list[ExtractedWebFact] = []
 
-    for table in tables:
+    for table_index, table in enumerate(tables, start=1):
+        headers = table.xpath("./thead/tr[1]") or table.xpath(
+            "./tr[1][th] | ./tbody/tr[1][th]"
+        )
+        if len(headers) != 1:
+            continue
         th_cells = [
-            th.text_content().strip()
-            for th in table.xpath(".//thead//th | .//thead//td")
+            cell.text_content().strip() for cell in headers[0].xpath("./th | ./td")
         ]
-        if not th_cells:
-            th_cells = [
-                td.text_content().strip()
-                for td in table.xpath(".//tr[1]/th | .//tr[1]/td")
-            ]
+        if len(th_cells) < 2 or DIM_ROW.fullmatch(th_cells[0]):
+            continue
 
-        for tr in table.xpath(".//tr"):
+        for row_index, tr in enumerate(table.xpath(".//tr"), start=1):
             cells = [c.text_content().strip() for c in tr.xpath("./td | ./th")]
             if not cells:
                 continue
@@ -119,19 +121,22 @@ def extract_tomshardware_gpu_dimensions(
                 continue
 
             for col_idx in range(1, len(cells)):
-                model_name = (
-                    th_cells[col_idx]
-                    if col_idx < len(th_cells)
-                    else f"Model {col_idx}"
-                )
-                if model_name.startswith("Header Cell"):
+                if col_idx >= len(th_cells):
+                    continue
+                model_name = th_cells[col_idx]
+                if (
+                    not model_name
+                    or not any(char.isalpha() for char in model_name)
+                    or model_name.casefold().startswith("header cell")
+                    or _parse_dimensions(model_name) is not None
+                ):
                     continue
 
                 dim_str = cells[col_idx]
                 dims = _parse_dimensions(dim_str)
                 quote = f"{model_name} {first_label}: {dim_str}"
-                if len(quote) > 2000:
-                    quote = quote[:2000]
+                if len(quote) > MAX_FACT_QUOTE_CHARS:
+                    quote = quote[:MAX_FACT_QUOTE_CHARS]
 
                 status = (
                     WebFactStatus.SUPPORTED
@@ -146,10 +151,24 @@ def extract_tomshardware_gpu_dimensions(
                         source_url=final_url,
                         document_hash=doc_hash,
                         parser_version=PARSER_VERSION,
-                        locator='table tr td:first-child="Dimensions"',
+                        locator=f"((//table)[{table_index}]//tr)[{row_index}]/*[{col_idx + 1}]",
                         quote=quote,
                         unit="mm",
                     )
                 )
 
-    return facts if facts else None
+    values_by_model: dict[str, set[tuple[float, float, float]]] = {}
+    for fact in facts:
+        if fact.value is not None:
+            key = " ".join(fact.model.split()).casefold()
+            values_by_model.setdefault(key, set()).add(fact.value)
+    conflicting_models = {
+        model for model, values in values_by_model.items() if len(values) > 1
+    }
+    # Retain each source row, but never publish a winning number from conflicting rows.
+    return [
+        fact.model_copy(update={"value": None, "fact_status": WebFactStatus.CONFLICT})
+        if " ".join(fact.model.split()).casefold() in conflicting_models
+        else fact
+        for fact in facts
+    ] or None
