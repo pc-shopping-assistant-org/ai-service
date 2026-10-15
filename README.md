@@ -53,3 +53,15 @@ uv lock --check
 Integration DSN must target local/test DB. [Testing](../docs/04-ai/testing.md) separates
 core/native/live proof. [Status](../docs/04-ai/stateful-implementation-status.md) records
 dated gates/backlog; documentation does not claim live provider/catalog readiness.
+
+## GitHub Actions
+
+The existing workflow verifies every push, pull request, merge queue (`merge_group`)
+and manual dispatch. It installs locked dependencies, runs Ruff/mypy/core pytest,
+then applies Alembic and native saver bootstrap to a disposable PostgreSQL18 database
+before running `integration_tests`. No live model/auth/catalog credentials are needed.
+
+Image builds wait for verification: PRs build without publishing; main pushes,
+`v*` tags and manual dispatch may publish to GHCR. Other branch/tag pushes and merge
+queues verify only. To block merging on failure, select `Verify Python service` as
+a required check in GitHub branch rules. This workflow does not edit those rules.

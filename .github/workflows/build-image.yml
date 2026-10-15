@@ -2,11 +2,8 @@ name: Build and publish AI image
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - 'v*'
   pull_request:
+  merge_group:
   workflow_dispatch:
 
 concurrency:
@@ -21,6 +18,23 @@ jobs:
     name: Verify Python service
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      AI_DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/ai_ci
+      AI_TEST_POSTGRES_DSN: postgresql://postgres:postgres@127.0.0.1:5432/ai_ci
+    services:
+      postgres:
+        image: postgres:18.3-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ai_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ai_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -37,14 +51,33 @@ jobs:
           enable-cache: true
 
       - name: Install locked dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
 
-      - name: Run tests
-        run: uv run pytest -q
+      - name: Run lint
+        run: uv run --no-sync ruff check src tests integration_tests migrations
+
+      - name: Run typecheck
+        run: uv run --no-sync mypy src
+
+      - name: Run core tests
+        run: uv run --no-sync pytest -q
+
+      - name: Initialize isolated test database
+        run: |
+          uv run --no-sync alembic upgrade head
+          uv run --no-sync python -m ai_service.bootstrap_stateful
+
+      - name: Run PostgreSQL integration tests
+        run: uv run --no-sync pytest -q integration_tests
 
   image:
     name: Build image
     needs: verify
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
