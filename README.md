@@ -13,8 +13,8 @@ source READMEs only provide setup/navigation.
 ## Chạy local
 
 Follow [First steps](../docs/04-ai/getting-started.md) to configure DB/JWT/model/catalog,
-select ReAct V2, migrate application tables and bootstrap native saver.
-Frontend is V2-only; server defaults remain stateful-off/V1 until explicitly configured.
+migrate application tables and bootstrap native saver.
+Server and frontend use ReAct V2 only; there are no runtime enable/version flags.
 Missing dependencies fail clearly, not silent legacy/RAM fallback.
 
 After prerequisites:
