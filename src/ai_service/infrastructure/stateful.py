@@ -1,4 +1,4 @@
-"""Opt-in process lifecycle. No request-time schema creation or RAM fallback."""
+"""V2 process lifecycle. No request-time schema creation or RAM fallback."""
 
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -11,7 +11,6 @@ from ai_service.application.use_cases.stateful_conversations import (
     StatefulConversationService,
     StatefulRunService,
 )
-from ai_service.config.enums import StatefulReactVersion
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.auth import JwtAuthenticator
 from ai_service.infrastructure.graph.initial_root import NativeConversationInitializer
@@ -40,8 +39,7 @@ async def open_stateful_resources(settings: Settings):
     )
     from ai_service.infrastructure.persistence.schema import metadata
 
-    if not settings.stateful_enabled or settings.jwt_jwks_url is None:
-        raise ValueError("Stateful mode is not configured")
+    settings.require_stateful_configuration()
     async with open_stateful_database(settings) as (engine, saver):
         async with engine.connect() as connection:
             version = (
@@ -67,9 +65,6 @@ async def open_stateful_resources(settings: Settings):
                     PostgresConversationStore(engine),
                     PostgresAcceptedCheckpointReader(saver),
                     NativeConversationInitializer(saver),
-                    view_version=2
-                    if settings.stateful_react_version == StatefulReactVersion.V2
-                    else 1,
                 ),
                 authenticator=JwtAuthenticator(
                     client,
@@ -78,12 +73,6 @@ async def open_stateful_resources(settings: Settings):
                     settings.jwt_audience,
                 ),
             )
-            if (
-                not settings.stateful_build_enabled
-                and not settings.stateful_react_enabled
-            ):
-                yield resources
-                return
             from ai_service.infrastructure.execution.build_runtime import (
                 open_build_runtime,
             )

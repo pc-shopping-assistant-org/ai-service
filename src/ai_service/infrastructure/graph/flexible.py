@@ -26,6 +26,7 @@ from ai_service.capabilities.assistant.react.actions import (
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
     CompletionRequirement,
+    ReactLimits,
     ToolContext,
     ToolName,
     ToolRecord,
@@ -111,8 +112,6 @@ from ai_service.capabilities.assistant.stateful_contracts import (
     ClarificationReplyV1,
     UnitClarificationReplyV1,
 )
-
-from .react import ReactLimits
 
 FLEXIBLE_GRAPH_VERSION = "native-flexible-react-v2-managed"
 

@@ -43,7 +43,6 @@ async def test_v2_http_schema_requires_version_and_keeps_envelope_owner_boundari
             OwnedStore(),
             PostgresAcceptedCheckpointReader(saver),
             NativeConversationInitializer(saver),
-            view_version=2,
         ),
         Tokens(owner),
         StatefulRunService(Runs(), lambda: None),
@@ -58,9 +57,6 @@ async def test_v2_http_schema_requires_version_and_keeps_envelope_owner_boundari
     )
     settings = Settings(
         _env_file=None,
-        stateful_enabled=True,
-        stateful_react_enabled=True,
-        stateful_react_version="v2",
         provider="openai",
         openai_api_key="fixture",
         database_url="postgresql+psycopg://fixture:fixture@localhost/ai_db",
@@ -111,6 +107,21 @@ async def test_v2_http_schema_requires_version_and_keeps_envelope_owner_boundari
             assert "clarification_reply" not in selected["properties"]
 
 
-def test_v2_setting_cannot_select_guided_or_disabled_runtime():
-    with pytest.raises(ValueError):
-        Settings(_env_file=None, stateful_react_version="v2")
+def test_server_serves_only_v2_without_enable_or_version_flags():
+    settings = Settings(_env_file=None)
+    assert not {
+        "stateful_enabled", "stateful_build_enabled", "stateful_react_enabled",
+        "stateful_react_version",
+    } & Settings.model_fields.keys()
+    schema = create_app(settings).openapi()
+    assert "TurnRequestV1" not in schema["components"]["schemas"]
+    body = schema["paths"]["/api/v1/conversations/{conversation_id}/runs"]["post"]["requestBody"]
+    assert body["content"]["application/json"]["schema"]["$ref"].endswith("TurnRequestV2Body")
+
+
+@pytest.mark.asyncio
+async def test_v2_startup_without_dependencies_fails_instead_of_serving_fallback():
+    app = create_app(Settings(_env_file=None))
+    with pytest.raises(ValueError, match="AI_DATABASE_URL"):
+        async with app.router.lifespan_context(app):
+            pytest.fail("Missing dependencies must not yield a running app")

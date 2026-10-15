@@ -20,14 +20,12 @@ from ai_service.capabilities.assistant.react.actions import (
 )
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
-    AnswerCandidate,
     ToolCall,
     ToolContext,
     ToolName,
     ToolRecord,
 )
 from ai_service.capabilities.assistant.stateful_contracts import Contract
-from ai_service.infrastructure.graph.react import ReactDecision
 from ai_service.infrastructure.providers.failures import invoke_provider
 
 GEMINI_SIGNATURES_KEY = "__gemini_function_call_thought_signatures__"
@@ -58,7 +56,7 @@ class _NativeToolModel:
         message: str,
         transcript: list[ToolRecord],
         allowed: tuple[ToolName, ...],
-        repair: bool | RepairFeedback | None,
+        repair: RepairFeedback | None,
         context: ToolContext | None,
         output_schema: type[Contract],
         output_instruction: str,
@@ -126,11 +124,6 @@ class _NativeToolModel:
         if isinstance(repair, RepairFeedback):
             instruction += (
                 " Application validation feedback: " + repair.model_dump_json()
-            )
-        elif repair:
-            instruction += (
-                " Your previous decision failed validation. Return one valid tool call "
-                "or a grounded JSON answer; do not weaken the user's request."
             )
         if context is not None:
             context = ToolContext.model_validate(context.model_dump())
@@ -230,38 +223,6 @@ def _response_text(response: AIMessage) -> str:
             if isinstance(part, str) or part.get("type") == "text"
         )
     return content
-
-
-class NativeReactModel(_NativeToolModel):
-    """V1 adapter retained until the flexible graph passes publication gates."""
-
-    async def decide(
-        self,
-        message: str,
-        transcript: list[ToolRecord],
-        allowed: tuple[ToolName, ...],
-        repair: bool,
-        context: ToolContext | None = None,
-    ) -> ReactDecision:
-        response = await self._invoke(
-            message,
-            transcript,
-            allowed,
-            repair,
-            context,
-            AnswerCandidate,
-            "When finished, return ONLY JSON matching this AnswerCandidate schema: ",
-        )
-        if response.invalid_tool_calls:
-            return ReactDecision()
-        try:
-            if response.tool_calls:
-                return ReactDecision(calls=self._calls(response))
-            return ReactDecision(
-                answer=AnswerCandidate.model_validate_json(_response_text(response))
-            )
-        except (ValidationError, KeyError, TypeError):
-            return ReactDecision()
 
 
 class NativeFlexibleModel(_NativeToolModel):

@@ -7,13 +7,14 @@ from typing import Any, Protocol, TypedDict
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import Field, StrictInt
+from pydantic import Field
 
 from ai_service.application.call_attempts import AttemptBoundary, AttemptKind
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.react.contracts import (
     AnswerCandidate,
     CompletionRequirement,
+    ReactLimits,
     ToolCall,
     ToolContext,
     ToolName,
@@ -42,14 +43,6 @@ class ReactModel(Protocol):
         repair: bool,
         context: ToolContext | None = None,
     ) -> ReactDecision: ...
-
-
-class ReactLimits(Contract):
-    max_model_calls: StrictInt = Field(default=12, ge=1, le=100)
-    max_tool_calls: StrictInt = Field(default=8, ge=1, le=50)
-    max_repairs: StrictInt = Field(default=2, ge=0, le=10)
-    max_state_bytes: StrictInt = Field(default=512_000, ge=1)
-    max_tool_bytes: StrictInt = Field(default=128_000, ge=1)
 
 
 class ReactState(TypedDict, total=False):

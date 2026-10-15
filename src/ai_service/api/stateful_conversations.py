@@ -5,7 +5,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import Field, StrictInt
 
@@ -20,17 +19,14 @@ from ai_service.application.ports.stateful_conversation import (
 )
 from ai_service.capabilities.assistant.public_contracts import (
     ConversationCreateV1,
-    ConversationViewV1,
     MessageViewV1,
     PageV1,
     RunViewV1,
 )
 from ai_service.capabilities.assistant.react.public_views import ConversationViewV2
 from ai_service.capabilities.assistant.react.turn_contracts import (
-    TurnRequest,
     TurnRequestV2,
 )
-from ai_service.capabilities.assistant.stateful_contracts import TurnRequestV1
 from ai_service.infrastructure.auth import AuthenticationError
 from ai_service.infrastructure.stateful import StatefulResources
 from ai_service.schemas.response import (
@@ -110,12 +106,12 @@ async def account_id(
         raise StatefulApiError(401, ResponseMessage.AI_UNAUTHENTICATED) from None
 
 
-@router.post("", status_code=201, response_model=ApiResponse[ConversationViewV1])
+@router.post("", status_code=201, response_model=ApiResponse[ConversationViewV2])
 async def create_conversation(
     body: ConversationCreateV1,
     owner: Annotated[UUID, Depends(account_id)],
     runtime: Annotated[StatefulResources, Depends(resources)],
-) -> ApiResponse[ConversationViewV1]:
+) -> ApiResponse[ConversationViewV2]:
     return ApiResponse(
         data=await runtime.conversations.create(owner, body.title),
         message=ResponseMessage.AI_CONVERSATION_CREATED,
@@ -124,7 +120,7 @@ async def create_conversation(
 
 @router.get(
     "",
-    response_model=ApiResponse[PageV1[ConversationViewV1]],
+    response_model=ApiResponse[PageV1[ConversationViewV2]],
     responses={400: {"model": ErrorResponse}},
 )
 async def list_conversations(
@@ -132,7 +128,7 @@ async def list_conversations(
     runtime: Annotated[StatefulResources, Depends(resources)],
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     cursor: Annotated[str | None, Query(max_length=36)] = None,
-) -> ApiResponse[PageV1[ConversationViewV1] | PageV1[ConversationViewV2]]:
+) -> ApiResponse[PageV1[ConversationViewV2]]:
     try:
         data = await runtime.conversations.list(owner, limit, cursor)
     except InvalidConversationCursor:
@@ -142,7 +138,7 @@ async def list_conversations(
 
 @router.get(
     "/{conversation_id}",
-    response_model=ApiResponse[ConversationViewV1],
+    response_model=ApiResponse[ConversationViewV2],
     responses={
         404: {
             "model": ErrorResponse,
@@ -154,7 +150,7 @@ async def get_conversation(
     conversation_id: UUID,
     owner: Annotated[UUID, Depends(account_id)],
     runtime: Annotated[StatefulResources, Depends(resources)],
-) -> ApiResponse[ConversationViewV1]:
+) -> ApiResponse[ConversationViewV2]:
     try:
         data = await runtime.conversations.get(owner, conversation_id)
     except ConversationNotFound:
@@ -192,6 +188,11 @@ def admission_error(exc: RunAdmissionError) -> StatefulApiError:
     )
 
 
+class TurnRequestV2Body(TurnRequestV2):
+    # Internal constructors default to V2; wire bodies must explicitly select it.
+    schema_version: StrictInt = Field(ge=2, le=2)
+
+
 @router.post(
     "/{conversation_id}/runs",
     status_code=202,
@@ -200,15 +201,9 @@ def admission_error(exc: RunAdmissionError) -> StatefulApiError:
 )
 async def submit_run(
     conversation_id: UUID,
-    body: TurnRequestV1,
+    body: TurnRequestV2Body,
     owner: Annotated[UUID, Depends(account_id)],
     runtime: Annotated[StatefulResources, Depends(resources)],
-) -> ApiResponse[RunViewV1]:
-    return await _submit_run(conversation_id, body, owner, runtime)
-
-
-async def _submit_run(
-    conversation_id: UUID, body: TurnRequest, owner: UUID, runtime: StatefulResources
 ) -> ApiResponse[RunViewV1]:
     if body.conversation_id != conversation_id:
         raise StatefulApiError(422, ResponseMessage.VALIDATION_ERROR)
@@ -219,20 +214,6 @@ async def _submit_run(
     except RunAdmissionError as exc:
         raise admission_error(exc) from None
     return ApiResponse(data=run, message=ResponseMessage.AI_RUN_ACCEPTED)
-
-
-class TurnRequestV2Body(TurnRequestV2):
-    # Internal constructors default to V2; wire bodies must explicitly select it.
-    schema_version: StrictInt = Field(ge=2, le=2)
-
-
-async def submit_run_v2(
-    conversation_id: UUID,
-    body: TurnRequestV2Body,
-    owner: Annotated[UUID, Depends(account_id)],
-    runtime: Annotated[StatefulResources, Depends(resources)],
-) -> ApiResponse[RunViewV1]:
-    return await _submit_run(conversation_id, body, owner, runtime)
 
 
 @router.get(
@@ -306,30 +287,3 @@ async def run_events(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )
-
-
-def create_stateful_router(version: int = 1) -> APIRouter:
-    if version == 1:
-        return router
-    if version != 2:
-        raise ValueError("Unknown stateful HTTP version")
-    selected = APIRouter()
-    for route in router.routes:
-        if not isinstance(route, APIRoute) or route.methods is None:
-            raise TypeError("Stateful routes must use typed FastAPI endpoints")
-        selected.add_api_route(
-            route.path,
-            submit_run_v2 if route.endpoint is submit_run else route.endpoint,
-            methods=list(route.methods),
-            status_code=route.status_code,
-            response_model=ApiResponse[ConversationViewV2]
-            if route.endpoint in (create_conversation, get_conversation)
-            else ApiResponse[PageV1[ConversationViewV2]]
-            if route.endpoint is list_conversations
-            else route.response_model,
-            responses=route.responses,
-            response_class=route.response_class,
-            tags=route.tags,
-            name=route.name,
-        )
-    return selected

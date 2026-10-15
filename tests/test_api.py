@@ -1,4 +1,3 @@
-import json
 from collections.abc import AsyncIterator
 from uuid import UUID
 
@@ -55,7 +54,7 @@ async def test_health_uses_canonical_envelope(api_client: httpx.AsyncClient) -> 
 
 @pytest.mark.asyncio
 async def test_validation_errors_use_static_message_and_array(api_client: httpx.AsyncClient) -> None:
-    response = await api_client.post("/api/v1/chat", json={"message": ""})
+    response = await api_client.post("/api/v1/search", json={"query": ""})
 
     assert response.status_code == 422
     body = response.json()
@@ -87,21 +86,8 @@ def test_response_defaults_to_static_success_message() -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_stream_returns_sse_frames_with_canonical_envelopes(api_client: httpx.AsyncClient) -> None:
+async def test_stateless_chat_stream_is_removed_in_favor_of_v2_run_events(api_client: httpx.AsyncClient) -> None:
     response = await api_client.post("/api/v1/chat/stream", json={"message": "tìm laptop"})
 
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/event-stream")
-    frames = [
-        json.loads(line.removeprefix("data: "))
-        for line in response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    assert [frame["data"]["event"] for frame in frames] == [
-        "START",
-        "DELTA",
-        "COMPLETED",
-    ]
-    assert all(list(frame) == ["data", "message", "errors"] for frame in frames)
-    assert frames[0]["message"] == "AI_CHAT_STREAM_STARTED"
-    assert frames[-1]["message"] == "AI_CHAT_STREAM_COMPLETED"
+    assert response.status_code == 404
+    assert response.json()["message"] == "ENDPOINT_NOT_FOUND"

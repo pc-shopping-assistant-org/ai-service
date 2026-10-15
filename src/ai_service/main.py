@@ -7,7 +7,6 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ai_service.api.router import api_router
-from ai_service.config.enums import StatefulReactVersion
 from ai_service.config.settings import Settings, get_settings
 from ai_service.schemas.response import ApiResponse, ErrorDetail, ResponseMessage
 
@@ -68,9 +67,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         application.state.stateful = None
-        if not runtime_settings.stateful_enabled:
-            yield
-            return
+        runtime_settings.require_stateful_configuration()
         from ai_service.infrastructure.stateful import open_stateful_resources
 
         async with open_stateful_resources(runtime_settings) as resources:
@@ -103,22 +100,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.exception_handler(RequestValidationError)(validation_exception_handler)
     application.exception_handler(StarletteHTTPException)(http_exception_handler)
     application.exception_handler(Exception)(unhandled_exception_handler)
-    if runtime_settings.stateful_enabled:
-        from ai_service.api.stateful_conversations import (
-            StatefulApiError,
-            create_stateful_router,
-            stateful_exception_handler,
-        )
+    from ai_service.api.stateful_conversations import (
+        StatefulApiError,
+        stateful_exception_handler,
+    )
+    from ai_service.api.stateful_conversations import (
+        router as stateful_router,
+    )
 
-        application.exception_handler(StatefulApiError)(stateful_exception_handler)
-        application.include_router(
-            create_stateful_router(
-                2
-                if runtime_settings.stateful_react_version == StatefulReactVersion.V2
-                else 1
-            ),
-            prefix="/api/v1",
-        )
+    application.exception_handler(StatefulApiError)(stateful_exception_handler)
+    application.include_router(stateful_router, prefix="/api/v1")
     return application
 
 

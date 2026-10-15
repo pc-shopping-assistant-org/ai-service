@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from ai_service.capabilities.assistant.conversation_core import ConsultationStateV1
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.public_contracts import PublicBuildV1
+from ai_service.capabilities.assistant.react.turn_contracts import TurnRequestV2
 from ai_service.capabilities.assistant.stateful_contracts import TurnRequestV1
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.execution.build_runtime import open_build_runtime
@@ -42,7 +43,7 @@ class SeedState(TypedDict, total=False):
 
 
 @pytest.mark.asyncio
-async def test_saved_explanation_uses_accepted_snapshot_after_orphan_and_reopen(
+async def test_v2_rejects_legacy_saved_snapshot_after_orphan_and_reopen(
     postgres_dsn, monkeypatch
 ):
     owner = uuid4()
@@ -189,8 +190,6 @@ async def test_saved_explanation_uses_accepted_snapshot_after_orphan_and_reopen(
         async with AsyncPostgresSaver.from_conn_string(postgres_dsn) as saver:
             settings = Settings(
                 _env_file=None,
-                stateful_enabled=True,
-                stateful_react_enabled=True,
                 database_url=postgres_dsn.replace(
                     "postgresql://", "postgresql+psycopg://", 1
                 ),
@@ -213,7 +212,7 @@ async def test_saved_explanation_uses_accepted_snapshot_after_orphan_and_reopen(
             ):
                 run = await service.submit(
                     owner,
-                    TurnRequestV1(
+                    TurnRequestV2(
                         conversation_id=conversation.id,
                         request_id=uuid4(),
                         expected_revision=1,
@@ -227,7 +226,7 @@ async def test_saved_explanation_uses_accepted_snapshot_after_orphan_and_reopen(
                         await asyncio.sleep(0.01)
                 assert (
                     await service.get(owner, conversation.id, run.run_id)
-                ).status.value == "COMPLETED"
+                ).status.value == "FAILED_TERMINAL"
                 current = await store.get(owner, conversation.id)
                 record = await saver.aget_tuple(
                     {
@@ -239,19 +238,10 @@ async def test_saved_explanation_uses_accepted_snapshot_after_orphan_and_reopen(
                     }
                 )
                 values = record.checkpoint["channel_values"]
-                assert (
-                    values["saved_build_evidence"]["source_ref"]["checkpoint_id"]
-                    == base_id
-                )
+                assert current.accepted_checkpoint_id == base_id
                 assert values["public_build"] == snapshot.model_dump(mode="json")
-                assert (
-                    "8,000,000 VND" in values["answer"] and "STALE" in values["answer"]
-                )
-                assert (
-                    "7 VND" not in values["answer"]
-                    and "123 VND" not in values["answer"]
-                )
-                assert current.revision == 2
+                assert values["answer"] == "Fixture accepted historical build"
+                assert current.revision == 1
         assert closed == [True]
     finally:
         async with engine.begin() as conn:

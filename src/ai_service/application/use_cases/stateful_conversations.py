@@ -14,7 +14,6 @@ from ai_service.application.ports.stateful_conversation import (
 )
 from ai_service.capabilities.assistant.conversation_core import ConsultationStateV1
 from ai_service.capabilities.assistant.public_contracts import (
-    ConversationViewV1,
     MessageViewV1,
     PageV1,
     RunViewV1,
@@ -36,28 +35,23 @@ class StatefulConversationService:
         store: StatefulConversationStore,
         reader: AcceptedCheckpointReader,
         initializer: ConversationInitializer,
-        *,
-        view_version: int = 1,
     ) -> None:
         self.store = store
         self.reader = reader
         self.initializer = initializer
-        if view_version not in (1, 2):
-            raise ValueError("Unknown public conversation version")
-        self.view_version = view_version
 
-    async def create(self, account_id: UUID, title: str | None) -> ConversationViewV1:
+    async def create(self, account_id: UUID, title: str | None) -> ConversationViewV2:
         record = await self.store.create(account_id, title)
         record = await self.store.initialize(account_id, record.id, self.initializer)
         return await self._view(record)
 
-    async def get(self, account_id: UUID, conversation_id: UUID) -> ConversationViewV1:
+    async def get(self, account_id: UUID, conversation_id: UUID) -> ConversationViewV2:
         # Authorize before any framework lookup. No thread selector from HTTP.
         return await self._view(await self.store.get(account_id, conversation_id))
 
     async def list(
         self, account_id: UUID, limit: int = 20, cursor: str | None = None
-    ) -> PageV1[ConversationViewV1] | PageV1[ConversationViewV2]:
+    ) -> PageV1[ConversationViewV2]:
         if not 1 <= limit <= 100:
             raise ValueError("Limit must be between 1 and 100")
         before = None
@@ -80,15 +74,7 @@ class StatefulConversationService:
             )
         views = [await self._view(row) for row in rows]
         next_cursor = str(rows[-1].id) if more else None
-        if self.view_version == 2:
-            return PageV1[ConversationViewV2](
-                items=[
-                    ConversationViewV2.model_validate(view.model_dump())
-                    for view in views
-                ],
-                next_cursor=next_cursor,
-            )
-        return PageV1[ConversationViewV1](items=views, next_cursor=next_cursor)
+        return PageV1[ConversationViewV2](items=views, next_cursor=next_cursor)
 
     async def messages(
         self, account_id: UUID, conversation_id: UUID, limit: int, cursor: str | None
@@ -99,7 +85,7 @@ class StatefulConversationService:
             raise InvalidConversationCursor() from None
         return await self.store.messages(account_id, conversation_id, limit, after)
 
-    async def _view(self, record: ConversationRecord) -> ConversationViewV1:
+    async def _view(self, record: ConversationRecord) -> ConversationViewV2:
         state = ConsultationStateV1()
         build = None
         clarification = None
@@ -115,7 +101,7 @@ class StatefulConversationService:
             state, build = snapshot.consultation, snapshot.public_build
             clarification = snapshot.public_clarification
             task_clarification = snapshot.public_task_clarification
-            if self.view_version == 2 and snapshot.flexible is not None:
+            if snapshot.flexible is not None:
                 if snapshot.requirement_state is None:
                     raise ValueError("V2 public state requires canonical requirements")
                 flexible = to_public_flexible(
@@ -123,7 +109,7 @@ class StatefulConversationService:
                 )
         elif record.revision != 0:
             raise ValueError("Published revision has no accepted checkpoint")
-        view = ConversationViewV1(
+        return ConversationViewV2(
             conversation_id=record.id,
             readiness="READY"
             if record.accepted_checkpoint_id is not None
@@ -135,13 +121,7 @@ class StatefulConversationService:
             build=build,
             clarification=clarification,
             task_clarification=task_clarification,
-        )
-        return (
-            ConversationViewV2.model_validate(
-                view.model_dump() | {"flexible": flexible}
-            )
-            if self.view_version == 2
-            else view
+            flexible=flexible,
         )
 
 

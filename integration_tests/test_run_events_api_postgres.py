@@ -9,11 +9,6 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from ai_service.api.stateful_conversations import (
-    StatefulApiError,
-    create_stateful_router,
-    stateful_exception_handler,
-)
 from ai_service.application.use_cases.run_events import StatefulRunEventService
 from ai_service.application.use_cases.stateful_conversations import StatefulRunService
 from ai_service.capabilities.assistant.react.turn_contracts import TurnRequestV2
@@ -30,7 +25,7 @@ from ai_service.main import create_app
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("version", [1, 2])
+@pytest.mark.parametrize("version", [2])
 async def test_basic_sse_owner_and_committed_events(postgres_dsn, version):
     owner, other = uuid4(), uuid4()
     engine = create_async_engine(
@@ -66,9 +61,7 @@ async def test_basic_sse_owner_and_committed_events(postgres_dsn, version):
             await coordinator.cancel(owner, conversation.id, submitted.run_id)
             reader = PostgresRunEventStore(engine)
             events = await reader.read(owner, conversation.id, submitted.run_id)
-            app = create_app(Settings(_env_file=None, stateful_enabled=False))
-            app.include_router(create_stateful_router(version), prefix="/api/v1")
-            app.add_exception_handler(StatefulApiError, stateful_exception_handler)
+            app = create_app(Settings(_env_file=None))
             app.state.stateful = StatefulResources(
                 None,
                 Auth(),

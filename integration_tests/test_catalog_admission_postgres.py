@@ -99,9 +99,6 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
     )
     settings = Settings(
         _env_file=None,
-        stateful_enabled=True,
-        stateful_react_enabled=True,
-        stateful_react_version="v2",
         provider="openai",
         openai_api_key="fixture",
         backend_api_url="https://catalog.test",

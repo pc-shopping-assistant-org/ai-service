@@ -20,7 +20,7 @@ from ai_service.infrastructure.persistence.schema import conversations
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("version", [1, 2])
+@pytest.mark.parametrize("version", [2])
 async def test_owned_conversation_pages_ties_cursor_and_public_projection(
     postgres_dsn, version
 ):
@@ -40,7 +40,7 @@ async def test_owned_conversation_pages_ties_cursor_and_public_projection(
             raise AssertionError("Uninitialized rows must not read a native head")
 
     service = StatefulConversationService(
-        store, NoNativeLookup(), None, view_version=version
+        store, NoNativeLookup(), None
     )
     try:
         assert (await service.list(owner, 2, None)).items == []

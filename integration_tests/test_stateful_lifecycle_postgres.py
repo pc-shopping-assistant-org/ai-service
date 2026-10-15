@@ -15,14 +15,27 @@ from ai_service.infrastructure.stateful import open_stateful_resources
 @pytest.mark.asyncio
 async def test_migrated_native_resources_reopen_without_losing_owned_conversation(
     postgres_dsn,
+    monkeypatch,
 ):
     dsn = postgres_dsn
     url = dsn.replace("postgresql://", "postgresql+psycopg://", 1)
     settings = Settings(
         _env_file=None,
-        stateful_enabled=True,
         database_url=url,
         jwt_jwks_url="http://identity.test/.well-known/jwks.json",
+        provider="openai", openai_api_key="fixture",
+        hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}},
+    )
+    class Provider:
+        def create_model(self):
+            pytest.fail("Read-only lifecycle must not invoke the model")
+
+        async def aclose(self):
+            pass
+
+    monkeypatch.setattr(
+        "ai_service.infrastructure.execution.build_runtime.build_model_provider",
+        lambda settings: Provider(),
     )
     owner = uuid4()
     created_id = None

@@ -34,6 +34,14 @@ from ai_service.capabilities.assistant.stateful_contracts import (
 )
 from ai_service.capabilities.pc_builder.schemas import BuildObjective
 
+
+class ReactLimits(Contract):
+    max_model_calls: StrictInt = Field(default=12, ge=1, le=100)
+    max_tool_calls: StrictInt = Field(default=8, ge=1, le=50)
+    max_repairs: StrictInt = Field(default=2, ge=0, le=10)
+    max_state_bytes: StrictInt = Field(default=512_000, ge=1)
+    max_tool_bytes: StrictInt = Field(default=128_000, ge=1)
+
 from .search_evidence import BuildSearchEvidence
 
 

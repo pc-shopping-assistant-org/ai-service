@@ -1,17 +1,10 @@
-from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
 
 from ai_service.api.dependencies import get_assistant_service
-from ai_service.api.sse import encode_chat_event
 from ai_service.application.ports.assistant import AssistantUseCase
 from ai_service.capabilities.assistant.schemas import (
-    ChatData,
-    ChatRequest,
-    ChatStreamEvent,
-    ChatStreamEventType,
     CompareData,
     CompareRequest,
     ConsultData,
@@ -21,60 +14,9 @@ from ai_service.capabilities.assistant.schemas import (
     SearchData,
     SearchRequest,
 )
-from ai_service.schemas.response import ApiResponse, ErrorDetail, ResponseMessage
+from ai_service.schemas.response import ApiResponse
 
 router = APIRouter()
-
-
-@router.post("/chat", response_model=ApiResponse[ChatData], tags=["assistant"])
-async def chat(
-    request: ChatRequest,
-    service: Annotated[AssistantUseCase, Depends(get_assistant_service)],
-) -> ApiResponse[ChatData]:
-    return await service.chat(request)
-
-
-@router.post(
-    "/chat/stream",
-    response_class=StreamingResponse,
-    tags=["assistant"],
-    responses={
-        200: {
-            "description": "Server-sent chat events. Every data frame is a canonical API envelope.",
-            "content": {"text/event-stream": {"schema": {"type": "string"}}},
-        }
-    },
-)
-async def stream_chat(
-    request: ChatRequest,
-    service: Annotated[AssistantUseCase, Depends(get_assistant_service)],
-) -> StreamingResponse:
-    async def event_stream() -> AsyncIterator[str]:
-        try:
-            async for event in service.stream_chat(request):
-                yield encode_chat_event(event)
-        except Exception:  # noqa: BLE001 - keep SSE failures in the API contract
-            error = ApiResponse(
-                data=ChatStreamEvent(event=ChatStreamEventType.ERROR),
-                message=ResponseMessage.AI_CHAT_STREAM_FAILED,
-                errors=[
-                    ErrorDetail(
-                        code=ResponseMessage.AI_CHAT_STREAM_FAILED.value,
-                        message="Chat stream failed",
-                    )
-                ],
-            )
-            yield encode_chat_event(error)
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache, no-transform",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 @router.post("/search", response_model=ApiResponse[SearchData], tags=["assistant"])

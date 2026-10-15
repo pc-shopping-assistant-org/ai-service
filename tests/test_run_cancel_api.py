@@ -5,11 +5,6 @@ import httpx
 import pytest
 from test_stateful_api import Tokens
 
-from ai_service.api.stateful_conversations import (
-    StatefulApiError,
-    create_stateful_router,
-    stateful_exception_handler,
-)
 from ai_service.application.ports.stateful_conversation import RunAdmissionError
 from ai_service.application.use_cases.stateful_conversations import StatefulRunService
 from ai_service.capabilities.assistant.public_contracts import RunViewV1
@@ -18,7 +13,7 @@ from ai_service.main import create_app
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("version", [1, 2])
+@pytest.mark.parametrize("version", [2])
 async def test_cancel_http_owner_envelope_and_commit_before_signal(version):
     owner, conversation, run, request_id = uuid4(), uuid4(), uuid4(), uuid4()
     calls = []
@@ -42,9 +37,7 @@ async def test_cancel_http_owner_envelope_and_commit_before_signal(version):
         return True
 
     service = StatefulRunService(Store(), lambda: calls.append("wake"), signal)
-    app = create_app(Settings(_env_file=None, stateful_enabled=False))
-    app.include_router(create_stateful_router(version), prefix="/api/v1")
-    app.add_exception_handler(StatefulApiError, stateful_exception_handler)
+    app = create_app(Settings(_env_file=None))
     app.state.stateful = SimpleNamespace(authenticator=Tokens(owner), runs=service)
     path = f"/api/v1/conversations/{conversation}/runs/{run}/cancel"
     async with httpx.AsyncClient(

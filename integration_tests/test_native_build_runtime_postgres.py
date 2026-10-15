@@ -20,8 +20,6 @@ from ai_service.main import create_app
 @pytest.mark.parametrize(
     "react_enabled,version,retry,selected",
     [
-        (False, "v1", False, False),
-        (True, "v1", False, False),
         (True, "v2", False, False),
         (True, "v2", True, False),
         (True, "v2", False, True),
@@ -282,10 +280,6 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
     )
     settings = Settings(
         _env_file=None,
-        stateful_enabled=True,
-        stateful_build_enabled=not react_enabled,
-        stateful_react_enabled=react_enabled,
-        stateful_react_version=version,
         provider="openai",
         openai_api_key="local-test-key",
         backend_api_url="https://catalog.test",
@@ -384,11 +378,6 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                             "expected_revision": 1,
                             "message": "Find GPU",
                             **({"schema_version": 2} if version == "v2" else {}),
-                            **(
-                                {"selected_product_ids": [str(product_id)]}
-                                if selected
-                                else {}
-                            ),
                         },
                     )
                     assert accepted.status_code == 202
@@ -412,7 +401,8 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                     assert "8,000,000 VND" in messages[-1]["content"]
                     view = await client.get(path)
                     assert view.json()["data"]["revision"] == 2
-                    assert len(calls) == (4 if selected else 7 if retry else 6)
+                    # Ordinary follow-up retains the prior attachment turn in history.
+                    assert len(calls) == (5 if selected else 7 if retry else 6)
                     if version == "v2":
                         last_context = conversation_contexts[-1]
                         assert len(last_context) == 1

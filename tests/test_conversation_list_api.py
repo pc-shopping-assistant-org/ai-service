@@ -6,11 +6,6 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from test_stateful_api import OwnedStore, Tokens
 
-from ai_service.api.stateful_conversations import (
-    StatefulApiError,
-    create_stateful_router,
-    stateful_exception_handler,
-)
 from ai_service.application.use_cases.stateful_conversations import (
     StatefulConversationService,
 )
@@ -29,7 +24,7 @@ from ai_service.main import create_app
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("version", [1, 2])
+@pytest.mark.parametrize("version", [2])
 async def test_conversation_list_http_auth_paging_envelope_and_version_schema(version):
     class Store(OwnedStore):
         async def list_owned(self, account_id, limit=20, before=None):
@@ -49,7 +44,6 @@ async def test_conversation_list_http_auth_paging_envelope_and_version_schema(ve
         store,
         PostgresAcceptedCheckpointReader(saver),
         NativeConversationInitializer(saver),
-        view_version=version,
     )
     created = [await service.create(owner, title) for title in ("First", "Second")]
     foreign = await service.create(uuid4(), "Foreign")
@@ -79,9 +73,7 @@ async def test_conversation_list_http_auth_paging_envelope_and_version_schema(ve
                 return snapshot
 
         service.reader = Reader(saver)
-    app = create_app(Settings(_env_file=None, stateful_enabled=False))
-    app.include_router(create_stateful_router(version), prefix="/api/v1")
-    app.add_exception_handler(StatefulApiError, stateful_exception_handler)
+    app = create_app(Settings(_env_file=None))
     app.state.stateful = StatefulResources(service, Tokens(owner))
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://fixture"

@@ -227,7 +227,6 @@ async def test_submit_claim_execute_publish_and_follow_up(postgres_dsn):
                 StatefulConversationService,
                 StatefulRunService,
             )
-            from ai_service.capabilities.assistant.public_contracts import RunViewV1
             from ai_service.config.settings import Settings
             from ai_service.infrastructure.stateful import StatefulResources
             from ai_service.main import create_app
@@ -235,7 +234,6 @@ async def test_submit_claim_execute_publish_and_follow_up(postgres_dsn):
             app = create_app(
                 Settings(
                     _env_file=None,
-                    stateful_enabled=True,
                     database_url=postgres_dsn.replace(
                         "postgresql://", "postgresql+psycopg://", 1
                     ),
@@ -275,8 +273,10 @@ async def test_submit_claim_execute_publish_and_follow_up(postgres_dsn):
                 response = await client.post(
                     path, json=next_request.model_dump(mode="json")
                 )
-                assert response.status_code == 202
-                follow_up = RunViewV1.model_validate(response.json()["data"])
+                # Frozen V1 fixture can exercise storage, never the current HTTP admission.
+                assert response.status_code == 422
+            follow_up = await coordinator.submit(owner, next_request)
+            executor.wake()
             # Closing the HTTP client does not cancel the managed execution.
             await completed(follow_up.run_id)
             async with httpx.AsyncClient(
@@ -292,9 +292,8 @@ async def test_submit_claim_execute_publish_and_follow_up(postgres_dsn):
                 replay = await client.post(
                     path, json=next_request.model_dump(mode="json")
                 )
-                assert replay.status_code == 202 and replay.json()["data"][
-                    "run_id"
-                ] == str(follow_up.run_id)
+                assert replay.status_code == 422
+            assert (await coordinator.submit(owner, next_request)).run_id == follow_up.run_id
             second = await store.get(owner, conversation.id)
             assert (
                 second.revision == 2

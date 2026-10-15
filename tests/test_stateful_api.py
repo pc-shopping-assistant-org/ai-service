@@ -7,7 +7,6 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic import ValidationError
 
 from ai_service.application.ports.stateful_conversation import (
     ConversationNotFound,
@@ -115,9 +114,10 @@ async def test_enabled_lifecycle_auth_owner_and_public_envelope(monkeypatch):
     )
     settings = Settings(
         _env_file=None,
-        stateful_enabled=True,
         database_url="postgresql+psycopg://postgres:postgres@localhost:5433/ai_db",
         jwt_jwks_url="http://identity.test/.well-known/jwks.json",
+        provider="openai", openai_api_key="fixture",
+        hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}},
     )
     app = create_app(settings)
     async with app.router.lifespan_context(app):  # noqa: SIM117 - make lifecycle ordering explicit
@@ -183,6 +183,7 @@ async def test_enabled_lifecycle_auth_owner_and_public_envelope(monkeypatch):
             unavailable = await client.post(
                 path + "/runs",
                 json={
+                    "schema_version": 2,
                     "conversation_id": body["data"]["conversation_id"],
                     "request_id": str(uuid4()),
                     "expected_revision": 0,
@@ -195,38 +196,23 @@ async def test_enabled_lifecycle_auth_owner_and_public_envelope(monkeypatch):
     assert closed == [True] and app.state.stateful is None
 
 
-def test_persistence_is_opt_in_and_enabled_mode_requires_configuration():
-    app = create_app(Settings(_env_file=None, stateful_enabled=False))
-    assert "/api/v1/conversations" not in app.openapi()["paths"]
-    assert not any("/conversations" in path for path in app.openapi()["paths"])
-    with pytest.raises(ValidationError):
-        Settings(
-            _env_file=None, stateful_enabled=True, database_url=None, jwt_jwks_url=None
-        )
+def test_persistence_is_required_and_startup_requires_configuration():
+    app = create_app(Settings(_env_file=None))
+    assert "/api/v1/conversations" in app.openapi()["paths"]
+    with pytest.raises(ValueError, match="AI_DATABASE_URL"):
+        Settings(_env_file=None).require_stateful_configuration()
 
 
-@pytest.mark.parametrize(
-    "runtime_flag", ["stateful_build_enabled", "stateful_react_enabled"]
-)
-def test_native_build_runtime_requires_explicit_model_and_mapping(runtime_flag):
+def test_native_runtime_requires_explicit_model_and_mapping():
     base = {
         "_env_file": None,
-        "stateful_enabled": True,
         "database_url": "postgresql+psycopg://postgres:postgres@localhost:5433/ai_db",
         "jwt_jwks_url": "http://identity.test/jwks",
-        runtime_flag: True,
     }
-    with pytest.raises(ValidationError):
-        Settings(**base)
-    with pytest.raises(ValidationError):
-        Settings(**base, hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}})
-
-
-def test_guided_and_react_execution_modes_cannot_be_enabled_together():
-    with pytest.raises(ValidationError, match="not both"):
-        Settings(
-            _env_file=None, stateful_build_enabled=True, stateful_react_enabled=True
-        )
+    with pytest.raises(ValueError, match="mapping"):
+        Settings(**base).require_stateful_configuration()
+    with pytest.raises(ValueError, match="provider/key"):
+        Settings(**base, hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}}).require_stateful_configuration()
 
 
 @pytest.mark.asyncio
@@ -282,9 +268,10 @@ async def test_run_http_auth_scope_validation_static_errors_and_wake(monkeypatch
     app = create_app(
         Settings(
             _env_file=None,
-            stateful_enabled=True,
             database_url="postgresql+psycopg://postgres:postgres@localhost:5433/ai_db",
             jwt_jwks_url="http://identity.test/jwks",
+            provider="openai", openai_api_key="fixture",
+            hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}},
         )
     )
     async with app.router.lifespan_context(app):  # noqa: SIM117 - explicit lifespan ordering
@@ -293,6 +280,7 @@ async def test_run_http_auth_scope_validation_static_errors_and_wake(monkeypatch
         ) as client:
             path = f"/api/v1/conversations/{conversation_id}/runs"
             body = {
+                "schema_version": 2,
                 "conversation_id": str(conversation_id),
                 "request_id": str(request_id),
                 "expected_revision": 0,
