@@ -8,6 +8,14 @@ from ai_service.application.ports.web_search import (
     WebSearchQuery,
     WebSearchResult,
 )
+from ai_service.capabilities.web_search.presets import (
+    LEGACY_REVIEW_FOCUS,
+    WebSearchPresets,
+)
+from ai_service.capabilities.web_search.research_contracts import (
+    HardwareResearchFocus,
+    ResearchSourceStatus,
+)
 from ai_service.capabilities.web_search.schemas import (
     BuildGuideSearchArgs,
     DriverSoftwareSearchArgs,
@@ -20,13 +28,55 @@ from ai_service.capabilities.web_search.schemas import (
     PsuTierSearchArgs,
     VendorSpecsSearchArgs,
 )
+from ai_service.capabilities.web_search.source_policy import (
+    ResearchSourcePolicy,
+    within_domains,
+)
+
+DISCOVERY_RESULT_LIMIT = 4
 
 
 class WebSearchTools:
     """Search operations callable by application/graph workflows for live facts."""
 
-    def __init__(self, search_client: WebSearchClient) -> None:
+    def __init__(
+        self,
+        search_client: WebSearchClient,
+        source_policy: ResearchSourcePolicy | None = None,
+    ) -> None:
         self.search_client = search_client
+        self.source_policy = source_policy or ResearchSourcePolicy()
+
+    async def _search(
+        self,
+        query: str,
+        category: WebSearchCategory,
+        topic: str,
+        domains: list[str] | None = None,
+    ) -> LiveSearchResponse:
+        if domains == []:
+            result = WebSearchResult(
+                query=query,
+                category=category,
+                note=ResearchSourceStatus.SOURCE_UNRESOLVED,
+            )
+        else:
+            result = await self.search_client.search(
+                WebSearchQuery(
+                    query=query,
+                    category=category,
+                    target_domains=domains or [],
+                    limit=DISCOVERY_RESULT_LIMIT,
+                )
+            )
+            if domains:
+                items = [
+                    item for item in result.items if within_domains(item.url, domains)
+                ]
+                result = result.model_copy(
+                    update={"items": items, "total_results": len(items)}
+                )
+        return self._format_response(topic, result)
 
     async def search_hardware_compatibility(
         self, args: HardwareCompatibilitySearchArgs
@@ -35,18 +85,14 @@ class WebSearchTools:
 
         Ví dụ: Cấn chiều cao tản nhiệt và thanh RAM, vỏ case có vừa card 3 fan không, bo mạch chủ cần update BIOS trước khi nhận CPU không.
         """
-        query_str = f"{args.part_a} {args.part_b} compatibility"
-        if args.specific_concern:
-            query_str += f" {args.specific_concern}"
-
-        search_query = WebSearchQuery(
-            query=query_str,
-            category=WebSearchCategory.COMPATIBILITY,
-            target_domains=["reddit.com", "tomshardware.com", "techpowerup.com"],
-            limit=4,
+        return await self._search(
+            WebSearchPresets.compatibility(
+                args.part_a, args.part_b, args.specific_concern
+            ),
+            WebSearchCategory.COMPATIBILITY,
+            "Tương thích linh kiện thực tế",
+            self.source_policy.review_domains(WebSearchCategory.COMPATIBILITY),
         )
-        res = await self.search_client.search(search_query)
-        return self._format_response("Tương thích linh kiện thực tế", res)
 
     async def search_product_reviews(
         self, args: ProductReviewSearchArgs
@@ -55,26 +101,14 @@ class WebSearchTools:
 
         Ví dụ: So sánh FPS RTX 4060 vs RX 6700 XT ở độ phân giải 2K, nhiệt độ và độ ồn khi full load.
         """
-        query_str = args.product_name
-        if args.compare_with:
-            query_str += f" vs {args.compare_with}"
-        if args.focus_aspect == "GAMING_FPS":
-            query_str += " gaming FPS benchmark review"
-        elif args.focus_aspect == "THERMAL_NOISE":
-            query_str += " thermal temperature noise dbA review"
-        elif args.focus_aspect == "PRODUCTIVITY":
-            query_str += " blender premiere rendering benchmark"
-        else:
-            query_str += " techpowerup tomshardware review"
-
-        search_query = WebSearchQuery(
-            query=query_str,
-            category=WebSearchCategory.REVIEWS,
-            target_domains=["techpowerup.com", "tomshardware.com", "gamersnexus.net"],
-            limit=4,
+        return await self._search(
+            WebSearchPresets.product_reviews(
+                args.product_name, args.compare_with, args.focus_aspect
+            ),
+            WebSearchCategory.REVIEWS,
+            "Đánh giá & Benchmark thực tế",
+            self.source_policy.review_domains(LEGACY_REVIEW_FOCUS[args.focus_aspect]),
         )
-        res = await self.search_client.search(search_query)
-        return self._format_response("Đánh giá & Benchmark thực tế", res)
 
     async def search_build_guides(
         self, args: BuildGuideSearchArgs
@@ -83,18 +117,11 @@ class WebSearchTools:
 
         Ví dụ: 'Cấu hình 20 triệu chơi mượt Black Myth Wukong', 'Dàn máy đồ họa 3D kiến trúc 35 triệu'.
         """
-        query_str = f"cấu hình PC {args.target_use_case}"
-        if args.budget_vnd:
-            triệu = args.budget_vnd // 1_000_000
-            query_str += f" {triệu} triệu"
-
-        search_query = WebSearchQuery(
-            query=query_str,
-            category=WebSearchCategory.BUILD_GUIDES,
-            limit=4,
+        return await self._search(
+            WebSearchPresets.build_guides(args.target_use_case, args.budget_vnd),
+            WebSearchCategory.BUILD_GUIDES,
+            "Cấu hình tham khảo & Hướng dẫn build",
         )
-        res = await self.search_client.search(search_query)
-        return self._format_response("Cấu hình gợi ý & Hướng dẫn build", res)
 
     async def search_game_requirements(
         self, args: GameRequirementSearchArgs
@@ -103,15 +130,23 @@ class WebSearchTools:
 
         Ví dụ: Cấu hình yêu cầu của Black Myth Wukong, Cyberpunk 2077, AutoCAD 2026, Premiere Pro.
         """
-        query_str = f"{args.game_title} PC system requirements minimum recommended {args.target_resolution}"
-        search_query = WebSearchQuery(
-            query=query_str,
-            category=WebSearchCategory.GAME_REQUIREMENTS,
-            target_domains=["steampowered.com", "systemrequirementslab.com"],
-            limit=4,
+        query = WebSearchPresets.game_requirements(
+            args.game_title, args.target_resolution
         )
-        res = await self.search_client.search(search_query)
-        return self._format_response("Cấu hình yêu cầu của Game/Phần mềm", res)
+        topic = "Cấu hình yêu cầu của Game/Phần mềm"
+        publisher = self.source_policy.publisher_domains(args.game_title)
+        if publisher:
+            result = await self._search(
+                query, WebSearchCategory.GAME_REQUIREMENTS, topic, publisher
+            )
+            if result.results:
+                return result
+        return await self._search(
+            query,
+            WebSearchCategory.GAME_REQUIREMENTS,
+            topic,
+            self.source_policy.requirement_stores,
+        )
 
     async def search_hardware_issues(
         self, args: HardwareIssueSearchArgs
@@ -120,33 +155,25 @@ class WebSearchTools:
 
         Ví dụ: Lỗi mất ổn định Vmin Shift của Intel Gen 13/14, sự cố cháy cáp 12VHPWR RTX 4090, tụt sức khỏe SSD.
         """
-        query_str = f"{args.product_name} defect issue stability recall"
-        if args.concern:
-            query_str += f" {args.concern}"
-
-        search_query = WebSearchQuery(
-            query=query_str,
-            category=WebSearchCategory.HARDWARE_ISSUES,
-            target_domains=["tomshardware.com", "techpowerup.com", "reddit.com"],
-            limit=4,
+        return await self._search(
+            WebSearchPresets.hardware_issues(args.product_name, args.concern),
+            WebSearchCategory.HARDWARE_ISSUES,
+            "Cảnh báo sự cố & Lỗi phần cứng",
+            self.source_policy.official_domains(args.product_name)
+            or self.source_policy.review_domains(HardwareResearchFocus.KNOWN_ISSUES),
         )
-        res = await self.search_client.search(search_query)
-        return self._format_response("Cảnh báo sự cố & Lỗi phần cứng nổi cộm", res)
 
     async def search_psu_tier(self, args: PsuTierSearchArgs) -> LiveSearchResponse:
         """Tra cứu bảng xếp hạng an toàn của bộ nguồn (PSU Cultists Tier List: Tier A, Tier B, Tier C...).
 
         Giúp tư vấn khách hàng chọn nguồn an toàn, tránh mua phải nguồn kém chất lượng (Tier E/F) gây nguy cơ cháy nổ.
         """
-        query_str = f"{args.psu_model_name} PSU Cultists Network tier list rating"
-        search_query = WebSearchQuery(
-            query=query_str,
-            category=WebSearchCategory.PSU_TIER,
-            target_domains=["cultists.network", "linustechtips.com", "reddit.com"],
-            limit=4,
+        return await self._search(
+            WebSearchPresets.psu_tier(args.psu_model_name),
+            WebSearchCategory.PSU_TIER,
+            "Bảng xếp hạng bộ nguồn (PSU Tier List)",
+            self.source_policy.review_domains(HardwareResearchFocus.PSU_TIER),
         )
-        res = await self.search_client.search(search_query)
-        return self._format_response("Bảng xếp hạng an toàn bộ nguồn (PSU Tier List)", res)
 
     async def search_driver_and_software(
         self, args: DriverSoftwareSearchArgs
@@ -155,21 +182,14 @@ class WebSearchTools:
 
         Ví dụ: 'NVIDIA GeForce Game Ready Driver mới nhất', 'MSI B760M BIOS update fix lỗi', 'ASUS Armoury Crate download'.
         """
-        soft_kw = {
-            "VGA_DRIVER": "official graphics driver download latest",
-            "BIOS_UPDATE": "motherboard BIOS update download official",
-            "CHIPSET_DRIVER": "chipset driver support download",
-            "RGB_CONTROL": "RGB software utility control download",
-        }.get(args.software_type, "official driver download")
-
-        query_str = f"{args.component_name} {soft_kw}"
-        search_query = WebSearchQuery(
-            query=query_str,
-            category=WebSearchCategory.DRIVER_SOFTWARE,
-            limit=4,
+        return await self._search(
+            WebSearchPresets.driver_and_software(
+                args.component_name, args.software_type
+            ),
+            WebSearchCategory.DRIVER_SOFTWARE,
+            "Driver & Phần mềm chính hãng",
+            self.source_policy.official_domains(args.component_name),
         )
-        res = await self.search_client.search(search_query)
-        return self._format_response("Driver & Phần mềm chính hãng", res)
 
     async def search_tech_specs_from_vendor(
         self, args: VendorSpecsSearchArgs
@@ -178,15 +198,12 @@ class WebSearchTools:
 
         Ví dụ: 'ASUS TUF RTX 4070 Ti SUPER chiều dài mm', 'Thermalright Assassin X 120 chiều cao mm', 'khe tản nhiệt m.2'.
         """
-        attr_part = f" {args.spec_attribute}" if args.spec_attribute else " specifications dimensions clearance official"
-        query_str = f"{args.product_model}{attr_part}"
-        search_query = WebSearchQuery(
-            query=query_str,
-            category=WebSearchCategory.VENDOR_SPECS,
-            limit=4,
+        return await self._search(
+            WebSearchPresets.tech_specs(args.product_model, args.spec_attribute),
+            WebSearchCategory.VENDOR_SPECS,
+            "Thông số kỹ thuật từ nhà sản xuất",
+            self.source_policy.official_domains(args.product_model),
         )
-        res = await self.search_client.search(search_query)
-        return self._format_response("Thông số kỹ thuật chính thức từ nhà sản xuất", res)
 
     def _format_response(
         self, topic: str, search_result: WebSearchResult
@@ -199,11 +216,13 @@ class WebSearchTools:
             )
             for item in search_result.items
         ]
-        snippets_text = "\n".join(f"- {it.title} ({it.url}): {it.snippet}" for it in items_view)
+        snippets_text = "\n".join(
+            f"- {it.title} ({it.url}): {it.snippet}" for it in items_view
+        )
         prompt_instruction = (
-            f"Dưới đây là thông tin tra cứu mới nhất từ Internet về '{topic}' ({search_result.query}):\n"
+            f"Kết quả tìm kiếm để chọn trang về '{topic}' ({search_result.query}):\n"
             f"{snippets_text}\n"
-            f"Hãy dùng thông tin thực tế trên để trả lời khách hàng một cách khách quan, chính xác và có dẫn chứng."
+            "Snippet chỉ dùng discovery. Phải đọc trang và kiểm tra model/điều kiện trước khi trả lời hoặc dẫn nguồn."
         )
         if not items_view:
             prompt_instruction = "Không có bằng chứng từ web cho yêu cầu này. Nêu rõ giới hạn; không suy diễn hoặc bịa nguồn."

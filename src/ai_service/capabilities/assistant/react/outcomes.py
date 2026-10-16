@@ -11,6 +11,7 @@ from ai_service.capabilities.assistant.stateful_contracts import Contract, Text
 from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
 )
+from ai_service.capabilities.web_search.research_contracts import ResearchSourceStatus
 
 from .actions import FinalAnswerAction, FinalOutcome
 from .contracts import (
@@ -18,11 +19,13 @@ from .contracts import (
     CatalogResult,
     CompletionRequirement,
     ReadWebPageResult,
+    ResearchResult,
     SearchWebResult,
     ToolContext,
     ToolError,
     ToolResult,
     ValidatedAnswer,
+    result_web_pages,
 )
 from .search_evidence import BuildSearchEvidence
 
@@ -214,15 +217,15 @@ def validate_negative_answer(
         statuses: list[WebFactStatus] = []
         found: set[str] = set()
         for item in selected:
-            page = item.result
-            if (
-                action.outcome != "INSUFFICIENT_EVIDENCE"
-                or item.status != "COMPLETED"
-                or not isinstance(page, ReadWebPageResult)
-                or page.status != WebPageReadStatus.READABLE
-            ):
+            if action.outcome != "INSUFFICIENT_EVIDENCE" or item.status != "COMPLETED":
                 raise ValueError("Missing fact requires a completed structured page")
-            facts = [fact for fact in page.facts if fact.evidence_ref in refs]
+            facts = [
+                fact
+                for page in result_web_pages(item.result)
+                if page.status == WebPageReadStatus.READABLE
+                for fact in page.facts
+                if fact.evidence_ref in refs
+            ]
             if not facts or any(
                 fact.fact.fact_status == WebFactStatus.SUPPORTED for fact in facts
             ):
@@ -251,12 +254,21 @@ def validate_negative_answer(
         )
     if action.outcome == "DEPENDENCY_UNAVAILABLE":
         if not all(
-            item.status == "FAILED"
-            and item.error
-            in {
-                ToolError.CATALOG_UNAVAILABLE,
-                ToolError.WEB_SEARCH_UNAVAILABLE,
-            }
+            (
+                item.status == "FAILED"
+                and item.error
+                in {
+                    ToolError.CATALOG_UNAVAILABLE,
+                    ToolError.WEB_SEARCH_UNAVAILABLE,
+                }
+            )
+            or (
+                isinstance(item.result, ResearchResult)
+                and all(
+                    section.status == ResearchSourceStatus.UNAVAILABLE
+                    for section in item.result.sections
+                )
+            )
             for item in selected
         ):
             raise ValueError("Dependency failure requires actual adapter failure")
@@ -279,6 +291,18 @@ def validate_negative_answer(
                 and payload.status != WebPageReadStatus.READABLE
             ):
                 reasons.append("SOURCE_UNAVAILABLE")
+            elif isinstance(payload, ResearchResult) and all(
+                section.status != ResearchSourceStatus.READABLE
+                for section in payload.sections
+            ):
+                reasons.append(
+                    "NO_RESULTS"
+                    if all(
+                        section.status == ResearchSourceStatus.NO_RESULTS
+                        for section in payload.sections
+                    )
+                    else "SOURCE_UNAVAILABLE"
+                )
             else:
                 raise ValueError("Tool result does not support the missing-data claim")
         reason = (
@@ -291,6 +315,17 @@ def validate_negative_answer(
         )
     else:
         raise ValueError("Tool data failure is not optimizer search evidence")
+    for item in selected:
+        if isinstance(item.result, ResearchResult):
+            if any(
+                section.status == ResearchSourceStatus.SOURCE_UNRESOLVED
+                for section in item.result.sections
+            ):
+                text += "\nChưa xác định được nguồn chính thức; cần bổ sung hãng hoặc model đầy đủ."
+            text += "\n" + "\n".join(
+                f"- {', '.join(section.subjects)}: {section.status.value}."
+                for section in item.result.sections
+            )
     return FlexibleAnswer(
         text=text,
         status="UNRESOLVED",
@@ -414,13 +449,11 @@ def validate_final_answer(
         return validate_negative_answer(action, ledger, context, required)
     selected = set(action.answer.evidence_refs)
     if any(
-        isinstance(item.result, ReadWebPageResult)
-        and any(
-            fact.evidence_ref in selected
-            and fact.fact.fact_status != WebFactStatus.SUPPORTED
-            for fact in item.result.facts
-        )
+        fact.evidence_ref in selected
+        and fact.fact.fact_status != WebFactStatus.SUPPORTED
         for item in ledger
+        for page in result_web_pages(item.result)
+        for fact in page.facts
     ):
         raise ValueError(
             "Unknown/conflicting fact requires unresolved insufficient evidence"

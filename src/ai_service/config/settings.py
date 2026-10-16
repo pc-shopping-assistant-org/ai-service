@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     conversation_max_messages: int = 20
     database_url: SecretStr | None = None
     hardware_catalog_mapping: dict[str, JsonValue] | None = None
+    web_research_sources: dict[str, JsonValue] | None = None
     jwt_jwks_url: HttpUrl | None = None
     jwt_issuer: str = Field(default="http://identity-service", min_length=1)
     jwt_audience: str = Field(default="pc-shopping-api", min_length=1)

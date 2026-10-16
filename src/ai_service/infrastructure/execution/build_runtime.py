@@ -28,6 +28,7 @@ from ai_service.capabilities.assistant.requirements.resolver import Draft
 from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
 )
+from ai_service.capabilities.web_search.source_policy import ResearchSourcePolicy
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.commerce.hardware_catalog import (
     BackendRequirementCatalog,
@@ -52,6 +53,10 @@ from ai_service.infrastructure.providers.react_model import (
 )
 from ai_service.infrastructure.providers.requirement_extractor import (
     NativeRequirementExtractor,
+)
+from ai_service.infrastructure.search.budgeted import (
+    BudgetedWebReader,
+    BudgetedWebSearch,
 )
 from ai_service.infrastructure.search.duckduckgo_adapter import DuckDuckGoSearchAdapter
 from ai_service.infrastructure.search.trafilatura_reader import TrafilaturaReader
@@ -84,6 +89,9 @@ async def open_build_runtime(
     )
     web_search = DuckDuckGoSearchAdapter(settings)
     web_reader = TrafilaturaReader(settings)
+    source_policy = ResearchSourcePolicy.model_validate(
+        settings.web_research_sources or {}
+    )
 
     async def graph_factory(claim: ExecutionClaim) -> DurableConversationGraph:
         attempts = AttemptBoundary(coordinator.ledger, claim)
@@ -122,16 +130,12 @@ async def open_build_runtime(
             if source_record is None:
                 raise ValueError("Recovery checkpoint is missing")
             original_context = FlexibleExecutionContext.model_validate(
-                source_record.checkpoint["channel_values"].get(
-                    "publication_context"
-                )
+                source_record.checkpoint["channel_values"].get("publication_context")
             )
             if (
                 original_context.context.run_id != claim.run_id
-                or original_context.context.account_id
-                != await coordinator.owner(claim)
-                or original_context.context.requirements
-                != accepted.requirement_state
+                or original_context.context.account_id != await coordinator.owner(claim)
+                or original_context.context.requirements != accepted.requirement_state
             ):
                 raise ValueError("Recovery publication context mismatch")
             catalog = original_context.context.catalog
@@ -206,13 +210,17 @@ async def open_build_runtime(
                 ),
             )
         )
-        extractor = NativeRequirementExtractor(
-            provider, attempts, context=tool_context
-        )
+        extractor = NativeRequirementExtractor(provider, attempts, context=tool_context)
         return DurableConversationGraph(
             build_flexible_graph(
                 NativeFlexibleModel(provider),
-                ToolDispatcher(products, service, web_search, web_reader),
+                ToolDispatcher(
+                    products,
+                    service,
+                    BudgetedWebSearch(web_search, attempts),
+                    BudgetedWebReader(web_reader, attempts),
+                    source_policy=source_policy,
+                ),
                 tool_context,
                 tasks,
                 attempts,

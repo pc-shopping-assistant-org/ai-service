@@ -3,7 +3,7 @@
 | Package/file | Trách nhiệm |
 | --- | --- |
 | `requirements/` | Canonical requirements; resolve/merge/compiler/verifier rules |
-| `react/` | Bốn actions, sáu tools, typed outcomes, grounding và snapshot publication rules |
+| `react/` | Bốn actions, 11 tools, typed outcomes, grounding và snapshot publication rules |
 | `stateful_contracts.py`, `public_contracts.py` | State/checkpoint và public DTO contracts |
 | `provenance.py`, `limits.py` | Evidence identity và feature limits |
 | `graphs/` | Request-scoped planning cũ; không phải V2 runtime |

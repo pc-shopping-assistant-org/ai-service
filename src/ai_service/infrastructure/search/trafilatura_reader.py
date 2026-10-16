@@ -27,6 +27,7 @@ from ai_service.infrastructure.search.tomshardware_gpu_specs import (
 )
 
 LOGGER = logging.getLogger(__name__)
+READABLE_MEDIA_TYPES = frozenset({"text/html", "application/xhtml+xml", "text/plain"})
 
 CURATED_PARSERS = [
     extract_asus_dimensions,
@@ -71,17 +72,26 @@ class TrafilaturaReader(WebPageReader):
                     "Accept-Language": "en-US,en;q=0.9,vi;q=0.8",
                 },
             ) as client:
-                res = await client.get(url)
-                final_url = str(res.url)
-
-                if not res.is_success or not res.text.strip():
-                    return WebPageReadResult(
-                        url=url,
-                        final_url=final_url,
-                        status=WebPageReadStatus.EMPTY
-                        if res.is_success
-                        else WebPageReadStatus.UNREADABLE,
+                async with client.stream("GET", url) as res:
+                    final_url = str(res.url)
+                    media_type = (
+                        res.headers.get("content-type", "")
+                        .split(";", 1)[0]
+                        .strip()
+                        .lower()
                     )
+                    # Read support documents, not executable/archive driver packages.
+                    if not res.is_success or media_type not in READABLE_MEDIA_TYPES:
+                        return WebPageReadResult(
+                            url=url,
+                            final_url=final_url,
+                            status=WebPageReadStatus.UNREADABLE,
+                        )
+                    await res.aread()
+                    if not res.text.strip():
+                        return WebPageReadResult(
+                            url=url, final_url=final_url, status=WebPageReadStatus.EMPTY
+                        )
 
                 extracted, title, facts = await run_cpu(
                     lambda: _extract_html(res.text, final_url)

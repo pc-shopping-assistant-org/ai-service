@@ -20,6 +20,7 @@ from ai_service.application.ports.stateful_conversation import (
     AcceptedConversationSnapshot,
     RunAdmissionError,
 )
+from ai_service.capabilities.assistant.limits import DEFAULT_TOOL_IO_LIMIT
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.public_contracts import (
     RunViewV1,
@@ -202,7 +203,7 @@ class PostgresRunCoordinator:
                 insert(agent_call_budgets).values(
                     run_id=run_id,
                     model_limit=12,
-                    tool_io_limit=16,
+                    tool_io_limit=DEFAULT_TOOL_IO_LIMIT,
                     deadline=now + timedelta(minutes=5),
                 )
             )

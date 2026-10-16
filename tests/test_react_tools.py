@@ -99,6 +99,10 @@ def test_state_aware_exposure_keeps_reads_and_requires_compiled_build(
         ToolName.COMPARE_PRODUCTS,
         ToolName.SEARCH_WEB,
         ToolName.READ_WEB_PAGE,
+        ToolName.RESEARCH_HARDWARE,
+        ToolName.RESEARCH_COMPATIBILITY,
+        ToolName.RESEARCH_WORKLOAD,
+        ToolName.RESEARCH_DRIVER,
     )
     ready = context(state(), rows(realistic_catalog))
     assert ToolName.BUILD_PC in allowed_tools(ready)

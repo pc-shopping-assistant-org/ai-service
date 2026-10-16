@@ -1,3 +1,6 @@
+import re
+from urllib.parse import parse_qs
+
 import httpx
 import pytest
 
@@ -29,9 +32,12 @@ def search_tools(monkeypatch: pytest.MonkeyPatch) -> WebSearchTools:
     original_client = httpx.AsyncClient
 
     def respond(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, text='''
-            <h2 class="result__title"><a class="result__url" href="https://example.org/review">Fixture review</a></h2>
-            <a class="result__snippet" href="https://example.org/review">RAM clearance fixture evidence</a>
+        query = parse_qs(request.content.decode())["q"][0]
+        scoped = re.search(r"site:([a-z0-9.-]+)", query)
+        host = scoped.group(1) if scoped else "example.org"
+        return httpx.Response(200, text=f'''
+            <h2 class="result__title"><a class="result__url" href="https://{host}/review">Fixture review</a></h2>
+            <a class="result__snippet" href="https://{host}/review">RAM clearance fixture evidence</a>
         ''')
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(

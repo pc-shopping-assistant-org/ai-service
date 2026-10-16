@@ -696,7 +696,7 @@ def build_flexible_graph(
             if state.get("repair_feedback")
             else None
         )
-        exposed = allowed_tools(ctx)
+        exposed = allowed_tools(ctx, transcript)
         payload: dict[str, JsonValue] = {
             "message": state["message"],
             "transcript": [r.model_dump(mode="json") for r in transcript],
@@ -741,7 +741,7 @@ def build_flexible_graph(
                 return repair(state, "INVALID_ACTION")
             try:
                 name = ToolName(action.call.name)
-                if name not in allowed_tools(ctx):
+                if name not in allowed_tools(ctx, projection(state)):
                     return repair(state, "TOOL_NOT_ALLOWED")
                 TOOL_SCHEMAS[name].model_validate(action.call.arguments)
             except (ValueError, ValidationError):
@@ -833,7 +833,7 @@ def build_flexible_graph(
                 AttemptKind.TOOL_IO,
                 f"flexible:tool:{entry.call.call_id}",
                 call_hash(entry.call, ctx),
-                lambda: dispatcher.execute(entry.call, ctx),
+                lambda: dispatcher.execute(entry.call, ctx, records=entries[:-1]),
             )
         if len(entry.result.model_dump_json().encode()) > limits.max_tool_bytes:
             raise ValueError("REACT_TOOL_RESULT_TOO_LARGE")

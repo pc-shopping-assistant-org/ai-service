@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from ai_service.application.cpu_work import run_cpu
 from ai_service.application.errors import BackendUnavailableError
+from ai_service.application.ports.hardware import ComponentCategory
 from ai_service.application.ports.web_search import (
     WebFactStatus,
     WebPageReader,
@@ -26,6 +27,14 @@ from ai_service.capabilities.assistant.requirements.search_report import search_
 from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
 )
+from ai_service.capabilities.web_search.research_contracts import (
+    ResearchCompatibilityArgs,
+    ResearchDriverArgs,
+    ResearchHardwareArgs,
+    ResearchPCBuildArgs,
+    ResearchWorkloadArgs,
+)
+from ai_service.capabilities.web_search.source_policy import ResearchSourcePolicy
 
 from .contracts import (
     TOOL_SCHEMAS,
@@ -42,6 +51,7 @@ from .contracts import (
     ProductEvidence,
     ReadWebPageArgs,
     ReadWebPageResult,
+    ResearchResult,
     SearchCatalogArgs,
     SearchWebArgs,
     SearchWebItem,
@@ -53,7 +63,16 @@ from .contracts import (
     ToolRecord,
     ToolResult,
     ValidatedAnswer,
-    WebFactEvidence,
+    result_web_pages,
+    web_evidence_refs,
+)
+from .web_research import (
+    PageOffsetError,
+    ResearchArgumentsError,
+    ResearchPrerequisiteError,
+    read_page_evidence,
+    research_build_subjects,
+    research_sources,
 )
 
 
@@ -64,7 +83,9 @@ class _ResultIdentity(TypedDict):
     constraints_revision: int
 
 
-def allowed_tools(context: ToolContext) -> tuple[ToolName, ...]:
+def allowed_tools(
+    context: ToolContext, records: list[ToolRecord] | None = None
+) -> tuple[ToolName, ...]:
     if not context.execution_allowed or not context.read_catalog_allowed:
         return ()
     names: tuple[ToolName, ...] = (
@@ -73,7 +94,18 @@ def allowed_tools(context: ToolContext) -> tuple[ToolName, ...]:
         ToolName.COMPARE_PRODUCTS,
         ToolName.SEARCH_WEB,
         ToolName.READ_WEB_PAGE,
+        ToolName.RESEARCH_HARDWARE,
+        ToolName.RESEARCH_COMPATIBILITY,
+        ToolName.RESEARCH_WORKLOAD,
+        ToolName.RESEARCH_DRIVER,
     )
+    if context.saved_build or any(
+        item.result
+        and isinstance(item.result.result, BuildResult)
+        and item.result.result.receipt.outcome == "BUILT"
+        for item in project_current_tools(records or [], context)
+    ):
+        names += (ToolName.RESEARCH_PC_BUILD,)
     if (
         context.catalog_ready
         and compile_requirements(context.requirements, context.catalog).ready
@@ -115,11 +147,13 @@ class ToolDispatcher:
         service: PCBuildApplicationService,
         search_client: WebSearchClient | None = None,
         reader: WebPageReader | None = None,
+        source_policy: ResearchSourcePolicy | None = None,
     ):
         self.catalog = catalog
         self.service = service
         self._search_client = search_client
         self._reader = reader
+        self.source_policy = source_policy or ResearchSourcePolicy()
 
     @property
     def search_client(self) -> WebSearchClient:
@@ -133,7 +167,13 @@ class ToolDispatcher:
             raise ValueError("Web reader adapter is not configured")
         return self._reader
 
-    async def execute(self, call: ToolCall, context: ToolContext) -> ToolResult:
+    async def execute(
+        self,
+        call: ToolCall,
+        context: ToolContext,
+        *,
+        records: list[ToolRecord] | None = None,
+    ) -> ToolResult:
         call = ToolCall.model_validate(call.model_dump())
         context = ToolContext.model_validate(context.model_dump())
         base: _ResultIdentity = {
@@ -150,7 +190,7 @@ class ToolDispatcher:
             name = ToolName(call.name)
         except ValueError:
             return rejected(ToolError.UNKNOWN_TOOL)
-        if name not in allowed_tools(context):
+        if name not in allowed_tools(context, records):
             return rejected(ToolError.PREREQUISITE_MISSING)
         try:
             args = TOOL_SCHEMAS[name].model_validate(call.arguments)
@@ -168,6 +208,7 @@ class ToolDispatcher:
                 | BuildResult
                 | SearchWebResult
                 | ReadWebPageResult
+                | ResearchResult
             )
             if isinstance(args, SearchCatalogArgs):
                 products = await self.catalog.search(args.query, args.limit)
@@ -203,7 +244,7 @@ class ToolDispatcher:
                 raw = await self.search_client.search(
                     WebSearchQuery(query=args.query, limit=args.limit)
                 )
-                if raw.note == "WEB_SEARCH_UNAVAILABLE":
+                if raw.note == ToolError.WEB_SEARCH_UNAVAILABLE:
                     return ToolResult(
                         **base, status="FAILED", error=ToolError.WEB_SEARCH_UNAVAILABLE
                     )
@@ -223,52 +264,59 @@ class ToolDispatcher:
                     evidence_refs=[],
                 )
             elif isinstance(args, ReadWebPageArgs):
-                page = await self.reader.read(args.url)
-                content = page.content
-                next_offset = None
-                total_chars = len(content) if content is not None else None
-                evidence_ref = None
-                if page.status == WebPageReadStatus.READABLE and content:
-                    if args.offset >= len(content):
-                        return rejected(ToolError.BAD_ARGUMENTS)
-                    end = min(args.offset + args.max_chars, len(content))
-                    content = content[args.offset : end]
-                    next_offset = end if end < len(page.content or "") else None
-                    if page.evidence_ref:
-                        evidence_ref = "web:" + canonical_hash(
-                            {
-                                "source_ref": page.evidence_ref,
-                                "offset": args.offset,
-                                "content": content,
-                            }
-                        )
-                payload = ReadWebPageResult(
-                    url=args.url,
-                    final_url=page.final_url,
-                    title=page.title[:500] if page.title else None,
-                    status=page.status,
-                    content_hash=page.content_hash,
-                    content=content,
-                    evidence_ref=evidence_ref,
-                    offset=args.offset,
-                    next_offset=next_offset,
-                    total_chars=total_chars,
-                    extraction_status=page.extraction_status,
-                    document_hash=page.document_hash,
-                    facts=[
-                        WebFactEvidence(
-                            evidence_ref="fact:" + canonical_hash(fact), fact=fact
-                        )
-                        for fact in page.facts
-                    ],
-                )
-                ev_refs = [payload.evidence_ref] if payload.evidence_ref else []
-                ev_refs.extend(fact.evidence_ref for fact in payload.facts)
+                try:
+                    payload = await read_page_evidence(self.reader, args)
+                except PageOffsetError:
+                    return rejected(ToolError.BAD_ARGUMENTS)
                 return ToolResult(
                     **base,
                     status="COMPLETED",
                     result=payload,
-                    evidence_refs=ev_refs,
+                    evidence_refs=web_evidence_refs([payload]),
+                )
+            elif isinstance(
+                args,
+                (
+                    ResearchHardwareArgs,
+                    ResearchCompatibilityArgs,
+                    ResearchWorkloadArgs,
+                    ResearchPCBuildArgs,
+                    ResearchDriverArgs,
+                ),
+            ):
+                parts: dict[ComponentCategory, str] = {}
+                brands: dict[ComponentCategory, str | None] = {}
+                source_ref = None
+                if isinstance(args, ResearchPCBuildArgs):
+                    builds = [
+                        item.result.result
+                        for item in project_current_tools(records or [], context)
+                        if item.result and isinstance(item.result.result, BuildResult)
+                    ]
+                    try:
+                        parts, source_ref, brands = research_build_subjects(
+                            args, context, builds
+                        )
+                    except ResearchPrerequisiteError:
+                        return rejected(ToolError.PREREQUISITE_MISSING)
+                try:
+                    payload = await research_sources(
+                        name,
+                        args,
+                        self.search_client,
+                        self.reader,
+                        parts=parts,
+                        build_source_ref=source_ref,
+                        brands=brands,
+                        policy=self.source_policy,
+                    )
+                except ResearchArgumentsError:
+                    return rejected(ToolError.BAD_ARGUMENTS)
+                return ToolResult(
+                    **base,
+                    status="COMPLETED",
+                    result=payload,
+                    evidence_refs=web_evidence_refs(result_web_pages(payload)),
                 )
             else:
                 receipt = await run_cpu(
@@ -414,20 +462,39 @@ def validate_answer(
         )
         lines.append(f"Tổng chi phí đã lưu: {snapshot.total_spending_vnd:,} VND.")
     rendered: set[str] = set()
-    web_pages = [
-        p
-        for p in selected_results
-        if isinstance(p, ReadWebPageResult) and p.status == WebPageReadStatus.READABLE
-    ]
+    web_pages = list(
+        {
+            page.evidence_ref: page
+            for payload in selected_results
+            for page in result_web_pages(payload)
+            if page.status == WebPageReadStatus.READABLE
+            and (
+                page.evidence_ref in selected
+                or any(fact.evidence_ref in selected for fact in page.facts)
+            )
+        }.values()
+    )
     pages_by_ref = {page.evidence_ref: page for page in web_pages}
     for excerpt in candidate.web_excerpts:
         page = pages_by_ref.get(excerpt.evidence_ref)
         if (
             page is None
+            or excerpt.evidence_ref not in selected
             or not excerpt.quote.strip()
             or excerpt.quote not in (page.content or "")
         ):
             raise ValueError("Web excerpt must match selected source content")
+
+    excerpt_refs = {excerpt.evidence_ref for excerpt in candidate.web_excerpts}
+    for payload in selected_results:
+        if isinstance(payload, ResearchResult) and not any(
+            page.evidence_ref in excerpt_refs
+            or any(fact.evidence_ref in selected for fact in page.facts)
+            for page in result_web_pages(payload)
+        ):
+            raise ValueError(
+                "Research answer requires selected source excerpts or typed facts"
+            )
 
     if candidate.review is not None:
         if not web_pages:
@@ -502,7 +569,7 @@ def validate_answer(
                     f"{product.name}: {price}. Thông số: {product.specifications or 'chưa có dữ liệu xác thực'}."
                 )
                 rendered.add(product.evidence_ref)
-        elif isinstance(payload, (ReadWebPageResult, SearchWebResult)):
+        elif isinstance(payload, (ReadWebPageResult, SearchWebResult, ResearchResult)):
             continue
 
     if web_pages:
@@ -563,6 +630,29 @@ def validate_answer(
             citation_block = "Nguồn tham khảo:\n" + "\n".join(citations)
             candidate_body = f"{candidate_body}\n\n{citation_block}".strip()
         lines.append(candidate_body)
+
+    for payload in selected_results:
+        if isinstance(payload, ResearchResult):
+            lines.append(
+                "Nguồn nghiên cứu đã tra (READABLE chỉ xác nhận đọc được nguồn):"
+            )
+            lines.extend(
+                f"- {', '.join(section.subjects)}: {section.status.value}; "
+                f"official domain: {section.official_source_status.value}; "
+                + "; ".join(
+                    f"{step.tier.value}: {step.status.value}"
+                    for step in section.search_steps
+                )
+                for section in payload.sections
+            )
+            if payload.missing_conditions:
+                lines.append(
+                    "Điều kiện benchmark chưa được cung cấp: "
+                    + ", ".join(
+                        condition.value for condition in payload.missing_conditions
+                    )
+                    + ". Không suy ra FPS cho điều kiện chưa rõ."
+                )
 
     if not lines:
         raise ValueError("Answer completion has no renderable evidence")

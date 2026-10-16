@@ -9,6 +9,31 @@ from ai_service.infrastructure.search.trafilatura_reader import TrafilaturaReade
 
 
 @pytest.mark.asyncio
+async def test_reader_does_not_download_a_software_package_body(monkeypatch):
+    consumed = []
+
+    class Package(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            consumed.append(True)
+            yield b"software package bytes"
+
+    original = httpx.AsyncClient
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            headers={"content-type": "application/octet-stream"},
+            stream=Package(),
+        )
+    )
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda **kwargs: original(transport=transport, **kwargs)
+    )
+    result = await TrafilaturaReader().read("https://vendor.example/driver.exe")
+    assert result.status == WebPageReadStatus.UNREADABLE and not consumed
+    assert result.content is None and result.evidence_ref is None
+
+
+@pytest.mark.asyncio
 async def test_reader_parses_outside_event_loop_and_preserves_result(monkeypatch):
     loop_thread = threading.get_ident()
     threads = []

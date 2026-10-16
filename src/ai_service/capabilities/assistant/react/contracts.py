@@ -33,6 +33,24 @@ from ai_service.capabilities.assistant.stateful_contracts import (
     Text,
 )
 from ai_service.capabilities.pc_builder.schemas import BuildObjective
+from ai_service.capabilities.web_search.research_contracts import (
+    MAX_BUILD_RESEARCH_PARTS,
+    MAX_RESEARCH_SEARCH_RESULTS,
+    MAX_RESEARCH_SOURCE_TIERS,
+    MAX_RESEARCH_SOURCES,
+    MAX_RESEARCH_SUBJECTS,
+    BenchmarkCondition,
+    ResearchCompatibilityArgs,
+    ResearchDriverArgs,
+    ResearchHardwareArgs,
+    ResearchPCBuildArgs,
+    ResearchSourceStatus,
+    ResearchWorkloadArgs,
+)
+from ai_service.capabilities.web_search.source_policy import (
+    OfficialSourceStatus,
+    SourceTier,
+)
 
 
 class ReactLimits(Contract):
@@ -41,6 +59,7 @@ class ReactLimits(Contract):
     max_repairs: StrictInt = Field(default=2, ge=0, le=10)
     max_state_bytes: StrictInt = Field(default=512_000, ge=1)
     max_tool_bytes: StrictInt = Field(default=128_000, ge=1)
+
 
 from .search_evidence import BuildSearchEvidence
 
@@ -52,6 +71,11 @@ class ToolName(StrEnum):
     BUILD_PC = "build_pc"
     SEARCH_WEB = "search_web"
     READ_WEB_PAGE = "read_web_page"
+    RESEARCH_HARDWARE = "research_hardware"
+    RESEARCH_COMPATIBILITY = "research_compatibility"
+    RESEARCH_WORKLOAD = "research_workload"
+    RESEARCH_PC_BUILD = "research_pc_build"
+    RESEARCH_DRIVER = "research_driver"
 
 
 class SearchCatalogArgs(Contract):
@@ -98,6 +122,11 @@ TOOL_SCHEMAS: dict[ToolName, type[Contract]] = {
     ToolName.BUILD_PC: BuildPCArgs,
     ToolName.SEARCH_WEB: SearchWebArgs,
     ToolName.READ_WEB_PAGE: ReadWebPageArgs,
+    ToolName.RESEARCH_HARDWARE: ResearchHardwareArgs,
+    ToolName.RESEARCH_COMPATIBILITY: ResearchCompatibilityArgs,
+    ToolName.RESEARCH_WORKLOAD: ResearchWorkloadArgs,
+    ToolName.RESEARCH_PC_BUILD: ResearchPCBuildArgs,
+    ToolName.RESEARCH_DRIVER: ResearchDriverArgs,
 }
 
 
@@ -213,15 +242,107 @@ class ReadWebPageResult(Contract):
         return self
 
 
+class ResearchSearchStep(Contract):
+    tier: SourceTier
+    query: Text
+    target_domains: list[Text]
+    status: ResearchSourceStatus
+    result_urls: list[Text] = Field(default_factory=list)
+
+
+class ResearchSection(Contract):
+    subjects: list[Text] = Field(min_length=1, max_length=MAX_RESEARCH_SUBJECTS)
+    focus: Text
+    query: Text = Field(max_length=2000)
+    status: ResearchSourceStatus
+    official_source_status: OfficialSourceStatus = OfficialSourceStatus.UNKNOWN
+    search_steps: list[ResearchSearchStep] = Field(
+        default_factory=list, max_length=MAX_RESEARCH_SOURCE_TIERS
+    )
+    results: list[SearchWebItem] = Field(
+        default_factory=list,
+        max_length=MAX_RESEARCH_SEARCH_RESULTS * MAX_RESEARCH_SOURCE_TIERS,
+    )
+    pages: list[ReadWebPageResult] = Field(
+        default_factory=list,
+        max_length=MAX_RESEARCH_SOURCES * MAX_RESEARCH_SOURCE_TIERS,
+    )
+
+    @model_validator(mode="after")
+    def source_status(self) -> "ResearchSection":
+        readable = any(page.status == WebPageReadStatus.READABLE for page in self.pages)
+        if readable != (self.status == ResearchSourceStatus.READABLE):
+            raise ValueError("Research source status does not match its pages")
+        if self.status in {
+            ResearchSourceStatus.NO_RESULTS,
+            ResearchSourceStatus.UNAVAILABLE,
+            ResearchSourceStatus.SOURCE_UNRESOLVED,
+        } and (self.results or self.pages):
+            raise ValueError("Unavailable/empty research has no source results")
+        urls = {item.url for item in self.results}
+        if len(urls) != len(self.results) or any(
+            page.url not in urls for page in self.pages
+        ):
+            raise ValueError("Research pages must belong to distinct search results")
+        return self
+
+
+class ResearchResult(Contract):
+    tool: Literal[
+        ToolName.RESEARCH_HARDWARE,
+        ToolName.RESEARCH_COMPATIBILITY,
+        ToolName.RESEARCH_WORKLOAD,
+        ToolName.RESEARCH_PC_BUILD,
+        ToolName.RESEARCH_DRIVER,
+    ]
+    sections: list[ResearchSection] = Field(
+        min_length=1, max_length=MAX_BUILD_RESEARCH_PARTS
+    )
+    build_source_ref: Text | None = None
+    source_policy_version: Text
+    source_policy_hash: Text = Field(pattern=r"^[0-9a-f]{64}$")
+    missing_conditions: list[BenchmarkCondition] = Field(
+        default_factory=list, max_length=len(BenchmarkCondition)
+    )
+
+    @model_validator(mode="after")
+    def build_binding(self) -> "ResearchResult":
+        if (self.tool == ToolName.RESEARCH_PC_BUILD) != (
+            self.build_source_ref is not None
+        ):
+            raise ValueError("Build research requires its canonical source reference")
+        return self
+
+
 ToolPayload = Annotated[
     CatalogResult
     | DetailsResult
     | ComparisonResult
     | BuildResult
     | SearchWebResult
-    | ReadWebPageResult,
+    | ReadWebPageResult
+    | ResearchResult,
     Field(discriminator="tool"),
 ]
+
+
+def result_web_pages(payload: ToolPayload | None) -> list[ReadWebPageResult]:
+    if isinstance(payload, ReadWebPageResult):
+        return [payload]
+    if isinstance(payload, ResearchResult):
+        return [page for section in payload.sections for page in section.pages]
+    return []
+
+
+def web_evidence_refs(pages: list[ReadWebPageResult]) -> list[str]:
+    return list(
+        dict.fromkeys(
+            ref
+            for page in pages
+            for ref in ([page.evidence_ref] if page.evidence_ref else [])
+            + [item.evidence_ref for item in page.facts]
+        )
+    )
 
 
 class ToolError(StrEnum):
@@ -265,6 +386,10 @@ class ToolResult(Contract):
             raise ValueError("Failed/rejected tool has no successful evidence")
         if len(set(self.evidence_refs)) != len(self.evidence_refs):
             raise ValueError("Evidence references must be unique")
+        if isinstance(
+            self.result, ResearchResult
+        ) and self.evidence_refs != web_evidence_refs(result_web_pages(self.result)):
+            raise ValueError("Research evidence must match its actual read pages")
         return self
 
 
