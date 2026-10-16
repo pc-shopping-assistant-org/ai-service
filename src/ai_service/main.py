@@ -68,14 +68,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(application: FastAPI):
         application.state.stateful = None
         runtime_settings.require_stateful_configuration()
+        from ai_service.infrastructure.observability import open_telemetry
         from ai_service.infrastructure.stateful import open_stateful_resources
 
-        async with open_stateful_resources(runtime_settings) as resources:
-            application.state.stateful = resources
-            try:
-                yield
-            finally:
-                application.state.stateful = None
+        with open_telemetry(runtime_settings):
+            async with open_stateful_resources(runtime_settings) as resources:
+                application.state.stateful = resources
+                try:
+                    yield
+                finally:
+                    application.state.stateful = None
 
     application = FastAPI(
         title="PC Shopping Assistant AI Service",

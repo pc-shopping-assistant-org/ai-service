@@ -21,6 +21,7 @@ from ai_service.capabilities.assistant.stateful_contracts import (
     Contract,
     ExecutionStopEvidenceV1,
 )
+from ai_service.infrastructure.observability import StepOutcome, execution_trace, step
 
 Execution = Callable[[ExecutionClaim, asyncio.TaskGroup], Awaitable[None]]
 logger = logging.getLogger(__name__)
@@ -133,6 +134,17 @@ class ManagedExecutor:
                 raise RuntimeError("EXECUTION_OWNERSHIP_LOST")
 
     async def _run(self, claim: ExecutionClaim) -> None:
+        with execution_trace(claim) as observation:
+            outcome = await self._run_execution(claim)
+            if outcome.status == "FAILED":
+                observation.outcome = StepOutcome.FAILED
+                observation.error_type = (
+                    outcome.failure.value if outcome.failure else None
+                )
+            elif outcome.status == "CANCELLED":
+                observation.outcome = StepOutcome.CANCELLED
+
+    async def _run_execution(self, claim: ExecutionClaim) -> ExecutionOutcome:
         self._started.add(claim.execution_id)
         outcome = ExecutionOutcome(status="COMPLETED")
         try:
@@ -169,11 +181,13 @@ class ManagedExecutor:
                 proof_ref=f"executor:{claim.worker_instance_id}:{claim.execution_id}:{claim.generation}",
             )
             try:
-                await self.coordinator.stopped(claim, proof, outcome)
+                with step("run.finalize"):
+                    await self.coordinator.stopped(claim, proof, outcome)
             except Exception as error:  # noqa: BLE001 -- retain DB busy on any ACK failure
                 logger.error("Stop ACK persistence failed (%s)", type(error).__name__)
                 # Keep DB busy when ACK persistence fails. No fake local release.
                 self.last_error = "STOP_ACK_NOT_PERSISTED"
+            return outcome
         finally:
             self._active.pop(claim.execution_id, None)
             self._started.discard(claim.execution_id)

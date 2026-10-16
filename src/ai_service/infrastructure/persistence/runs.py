@@ -178,6 +178,7 @@ class PostgresRunCoordinator:
                         insert(agent_runs)
                         .values(
                             id=run_id,
+                            trace_id=run_id.hex,
                             conversation_id=request.conversation_id,
                             request_id=request.request_id,
                             request_hash=digest,

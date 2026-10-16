@@ -9,6 +9,7 @@ from ai_service.application.ports.web_search import (
     WebSearchResult,
 )
 from ai_service.capabilities.assistant.provenance import canonical_hash
+from ai_service.infrastructure.observability import step
 
 
 class BudgetedWebSearch:
@@ -17,12 +18,13 @@ class BudgetedWebSearch:
 
     async def search(self, query: WebSearchQuery) -> WebSearchResult:
         digest = canonical_hash(query)
-        return await self.attempts.invoke(
-            AttemptKind.TOOL_IO,
-            "web:search:" + digest,
-            digest,
-            lambda: self.client.search(query),
-        )
+        with step("web.search"):
+            return await self.attempts.invoke(
+                AttemptKind.TOOL_IO,
+                "web:search:" + digest,
+                digest,
+                lambda: self.client.search(query),
+            )
 
 
 class BudgetedWebReader:
@@ -31,9 +33,12 @@ class BudgetedWebReader:
 
     async def read(self, url: str) -> WebPageReadResult:
         digest = canonical_hash({"url": url})
-        return await self.attempts.invoke(
-            AttemptKind.TOOL_IO,
-            "web:read:" + digest,
-            digest,
-            lambda: self.reader.read(url),
-        )
+        with step("web.read") as observation:
+            result = await self.attempts.invoke(
+                AttemptKind.TOOL_IO,
+                "web:read:" + digest,
+                digest,
+                lambda: self.reader.read(url),
+            )
+            observation.result_status = result.status
+            return result

@@ -8,6 +8,14 @@ The values intentionally remain the same strings used by environment files.
 from enum import StrEnum
 
 
+class LogLevel(StrEnum):
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+
+
 class AIProvider(StrEnum):
     """LLM provider selected for model answer generation."""
 
@@ -34,5 +42,6 @@ class EmbeddingProviderKind(StrEnum):
 __all__ = [
     "AIProvider",
     "EmbeddingProviderKind",
+    "LogLevel",
     "RetrievalBackend",
 ]

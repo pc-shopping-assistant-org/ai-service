@@ -39,6 +39,12 @@ Root package: src/ai_service/.
 | Optimizer | capabilities/pc_builder/ |
 | V2 graph | infrastructure/graph/flexible.py |
 | Managed runtime wiring | infrastructure/stateful.py, infrastructure/execution/build_runtime.py |
+| Structured logs / run traces | infrastructure/observability.py |
+
+Local log store: `docker compose -f ../backend/docker-compose.yml up -d lgtm`.
+Set `AI_OTLP_ENDPOINT=http://localhost:4318`, then open
+[AI Runs](http://localhost:3300/d/pcshop-ai) and filter by the run's `trace_id`.
+[Observability guide](../docs/04-ai/observability.md) covers fields and limits.
 
 ## Verify
 

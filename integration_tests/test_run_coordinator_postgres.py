@@ -23,6 +23,7 @@ from ai_service.infrastructure.persistence.runs import (
     RunAdmissionError,
 )
 from ai_service.infrastructure.persistence.schema import (
+    agent_runs,
     conversation_messages,
     conversations,
 )
@@ -190,6 +191,17 @@ async def test_submit_claim_execute_publish_and_follow_up(postgres_dsn):
                 message="Build 30 triệu gaming",
             )
             submitted = await coordinator.submit(owner, request)
+            assert submitted.trace_id == submitted.run_id.hex
+            assert (
+                await coordinator.submit(owner, request)
+            ).trace_id == submitted.trace_id
+            async with engine.connect() as conn:
+                stored_trace = await conn.scalar(
+                    select(agent_runs.c.trace_id).where(
+                        agent_runs.c.id == submitted.run_id
+                    )
+                )
+            assert stored_trace == submitted.trace_id
             assert (await coordinator.submit(owner, request)).run_id == submitted.run_id
             with pytest.raises(RunAdmissionError, match="AI_REQUEST_CONFLICT"):
                 await coordinator.submit(
@@ -293,7 +305,9 @@ async def test_submit_claim_execute_publish_and_follow_up(postgres_dsn):
                     path, json=next_request.model_dump(mode="json")
                 )
                 assert replay.status_code == 422
-            assert (await coordinator.submit(owner, next_request)).run_id == follow_up.run_id
+            assert (
+                await coordinator.submit(owner, next_request)
+            ).run_id == follow_up.run_id
             second = await store.get(owner, conversation.id)
             assert (
                 second.revision == 2

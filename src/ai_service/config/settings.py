@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from ai_service.config.enums import (
     AIProvider,
     EmbeddingProviderKind,
+    LogLevel,
     RetrievalBackend,
 )
 
@@ -30,6 +31,8 @@ class Settings(BaseSettings):
     database_url: SecretStr | None = None
     hardware_catalog_mapping: dict[str, JsonValue] | None = None
     web_research_sources: dict[str, JsonValue] | None = None
+    otlp_endpoint: HttpUrl | None = None
+    log_level: LogLevel = LogLevel.INFO
     jwt_jwks_url: HttpUrl | None = None
     jwt_issuer: str = Field(default="http://identity-service", min_length=1)
     jwt_audience: str = Field(default="pc-shopping-api", min_length=1)

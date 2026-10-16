@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 
 from ai_service.capabilities.assistant.recovery_policy import RetryFailure
 from ai_service.infrastructure.execution.supervisor import ExecutionFailed
+from ai_service.infrastructure.observability import step
 
 
 def provider_failure(error: Exception) -> RetryFailure | None:
@@ -33,7 +34,8 @@ def provider_failure(error: Exception) -> RetryFailure | None:
 
 async def invoke_provider[T](dispatch: Callable[[], Awaitable[T]]) -> T:
     try:
-        return await dispatch()
+        with step("model.call"):
+            return await dispatch()
     except Exception as error:
         failure = provider_failure(error)
         if failure is None:

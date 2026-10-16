@@ -114,6 +114,10 @@ class PublicBuildV1(Contract):
 
 class RunViewV1(Contract):
     run_id: UUID
+    trace_id: str = Field(
+        default_factory=lambda data: data["run_id"].hex,
+        pattern=r"^[0-9a-f]{32}$",
+    )
     conversation_id: UUID
     request_id: UUID
     status: RunStatus

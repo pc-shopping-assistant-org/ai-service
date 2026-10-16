@@ -112,6 +112,7 @@ from ai_service.capabilities.assistant.stateful_contracts import (
     ClarificationReplyV1,
     UnitClarificationReplyV1,
 )
+from ai_service.infrastructure.observability import observed_async, observed_sync, step
 
 FLEXIBLE_GRAPH_VERSION = "native-flexible-react-v2-managed"
 
@@ -481,10 +482,9 @@ def build_flexible_graph(
         return bounded(state, update)
 
     async def prepare_agent(state: FlexibleState) -> dict[str, Any]:
-        if (
-            any(task.kind == "BUILD" for task in registered_tasks(state))
-            and build_needs_catalog(current(state).requirements)
-        ):
+        if any(
+            task.kind == "BUILD" for task in registered_tasks(state)
+        ) and build_needs_catalog(current(state).requirements):
             return await load_catalog(state)
         return {}
 
@@ -829,12 +829,15 @@ def build_flexible_graph(
         if entry.result is None:
             # Budget every tool invocation; individual adapter retries must remain
             # independently reserved. Native recovery reuses committed outcomes.
-            entry.result = await attempts.invoke(
-                AttemptKind.TOOL_IO,
-                f"flexible:tool:{entry.call.call_id}",
-                call_hash(entry.call, ctx),
-                lambda: dispatcher.execute(entry.call, ctx, records=entries[:-1]),
-            )
+            with step(f"tool.{entry.call.name}") as observation:
+                entry.result = await attempts.invoke(
+                    AttemptKind.TOOL_IO,
+                    f"flexible:tool:{entry.call.call_id}",
+                    call_hash(entry.call, ctx),
+                    lambda: dispatcher.execute(entry.call, ctx, records=entries[:-1]),
+                )
+                observation.span.set_attribute("ai.tool.result_type", entry.result.tool)
+                observation.result_status = entry.result.status
         if len(entry.result.model_dump_json().encode()) > limits.max_tool_bytes:
             raise ValueError("REACT_TOOL_RESULT_TOO_LARGE")
         return bounded(
@@ -911,17 +914,22 @@ def build_flexible_graph(
         return bounded(state, update)
 
     builder = StateGraph(FlexibleState)
-    builder.add_node("begin_turn", begin)
-    builder.add_node("agent", agent)
-    builder.add_node("validate_action", validate)
-    builder.add_node("execute_tool", execute)
-    builder.add_node("resolve_proposal", resolve)
-    builder.add_node("load_proposal_catalog", load_proposal_catalog)
-    builder.add_node("prepare_agent", prepare_agent)
+    builder.add_node("begin_turn", observed_sync("begin_turn", begin))
+    builder.add_node("agent", observed_async("agent", agent))
+    builder.add_node("validate_action", observed_sync("validate_action", validate))
+    builder.add_node("execute_tool", observed_async("execute_tool", execute))
+    builder.add_node("resolve_proposal", observed_async("resolve_proposal", resolve))
+    builder.add_node(
+        "load_proposal_catalog",
+        observed_async("load_proposal_catalog", load_proposal_catalog),
+    )
+    builder.add_node("prepare_agent", observed_async("prepare_agent", prepare_agent))
     builder.add_edge("load_proposal_catalog", "resolve_proposal")
     builder.add_edge("prepare_agent", "agent")
-    builder.add_node("interpret_reply", interpret_reply)
-    builder.add_node("amend_pending", amend_reply)
+    builder.add_node(
+        "interpret_reply", observed_async("interpret_reply", interpret_reply)
+    )
+    builder.add_node("amend_pending", observed_async("amend_pending", amend_reply))
     terminal = END
     if publication:
 
@@ -939,19 +947,27 @@ def build_flexible_graph(
             )
 
         terminal = "prepare_publish"
-        builder.add_node(terminal, prepare)
+        builder.add_node(terminal, observed_sync(terminal, prepare))
         builder.add_edge(terminal, END)
     builder.add_edge(START, "begin_turn")
     start_agent = "prepare_agent"
     if registering:
         start_agent = "register_request"
-        builder.add_node(start_agent, register)
-        builder.add_node("resolve_registered_tasks", resolve_registered)
+        builder.add_node(start_agent, observed_async(start_agent, register))
+        builder.add_node(
+            "resolve_registered_tasks",
+            observed_async("resolve_registered_tasks", resolve_registered),
+        )
         if task_clarifier:
-            builder.add_node("interpret_task_reply", interpret_task_reply)
+            builder.add_node(
+                "interpret_task_reply",
+                observed_async("interpret_task_reply", interpret_task_reply),
+            )
             builder.add_edge(start_agent, "interpret_task_reply")
             if task_amender:
-                builder.add_node("amend_task", amend_task_reply)
+                builder.add_node(
+                    "amend_task", observed_async("amend_task", amend_task_reply)
+                )
                 builder.add_conditional_edges(
                     "interpret_task_reply",
                     lambda s: (
