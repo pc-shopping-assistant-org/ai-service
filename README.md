@@ -82,8 +82,9 @@ and manual dispatch. It installs locked dependencies, runs Ruff/mypy/core pytest
 then applies Alembic and native saver bootstrap to a disposable PostgreSQL18 database
 before running `integration_tests`. No live model/auth/catalog credentials are needed.
 
-Only pushes/manual dispatches on the exact `release` branch build/publish an image,
-tagged `release` and `sha-<full commit>`. Other branches/tags, PRs and merge queues
+Only pushes/manual dispatches on `release/vX.Y.Z` (or `release/vX.Y.Z-rc.N`)
+build/publish an image tagged `X.Y.Z` (or `X.Y.Z-rc.N`) and `sha-<full commit>`.
+For example, `release/v1.0.0` publishes `ai-service:1.0.0`. Other branches/tags, PRs and merge queues
 verify only. This repository does not deploy. The infra repository's `release`
 workflow owns SSH deployment, stopping the old executor and running migrations
 before starting AI. Server env comes from `infra/.env.docker`, never from an env
