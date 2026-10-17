@@ -2,12 +2,22 @@
 
 from collections.abc import Awaitable, Callable
 
+import httpx
+
 from ai_service.capabilities.assistant.recovery_policy import RetryFailure
 from ai_service.infrastructure.execution.supervisor import ExecutionFailed
 from ai_service.infrastructure.observability import step
 
 
 def provider_failure(error: Exception) -> RetryFailure | None:
+    if isinstance(error, httpx.TimeoutException):
+        return RetryFailure.UPSTREAM_TIMEOUT
+    if isinstance(error, httpx.HTTPStatusError):
+        if error.response.status_code == 429:
+            return RetryFailure.UPSTREAM_RATE_LIMIT
+        if 500 <= error.response.status_code < 600:
+            return RetryFailure.UPSTREAM_SERVER_ERROR
+        return None
     module = type(error).__module__
     if module.startswith("openai"):
         from openai import APIStatusError, APITimeoutError

@@ -3,6 +3,7 @@ from ai_service.config.enums import AIProvider
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.providers.gemini import GeminiModelProvider
 from ai_service.infrastructure.providers.openai import OpenAIModelProvider
+from ai_service.infrastructure.providers.qwen import QwenModelProvider
 
 
 def build_model_provider(settings: Settings) -> ModelProvider | None:
@@ -17,4 +18,6 @@ def build_model_provider(settings: Settings) -> ModelProvider | None:
         return OpenAIModelProvider(settings)
     if settings.provider == AIProvider.GEMINI:
         return GeminiModelProvider(settings)
+    if settings.provider == AIProvider.QWEN:
+        return QwenModelProvider(settings)
     return None

@@ -22,6 +22,7 @@ class AIProvider(StrEnum):
     FALLBACK = "fallback"
     OPENAI = "openai"
     GEMINI = "gemini"
+    QWEN = "qwen"
 
 
 class RetrievalBackend(StrEnum):

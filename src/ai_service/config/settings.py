@@ -9,6 +9,7 @@ from ai_service.config.enums import (
     LogLevel,
     RetrievalBackend,
 )
+from ai_service.config.qwen import QWEN_MODEL_ID, QWEN_REQUEST_TIMEOUT_SECONDS
 
 
 class Settings(BaseSettings):
@@ -45,6 +46,10 @@ class Settings(BaseSettings):
             raise ValueError("AI_DATABASE_URL must use postgresql+psycopg")
         if not self.hardware_catalog_mapping:
             raise ValueError("Stateful execution requires hardware catalog mapping")
+        if self.provider == AIProvider.QWEN:
+            if self.qwen_base_url is None:
+                raise ValueError("Qwen requires AI_QWEN_BASE_URL")
+            return self
         key = (
             self.openai_api_key if self.provider == AIProvider.OPENAI
             else self.gemini_api_key if self.provider == AIProvider.GEMINI else None
@@ -73,6 +78,11 @@ class Settings(BaseSettings):
     model_name: str | None = None
     openai_model_name: str = "gpt-4o-mini"
     gemini_model_name: str = "gemini-2.5-flash"
+    qwen_base_url: HttpUrl | None = None
+    qwen_model_name: str = Field(default=QWEN_MODEL_ID, min_length=1)
+    qwen_api_key: SecretStr | None = None
+    qwen_max_tokens: int = Field(default=2048, ge=1)
+    qwen_request_timeout_seconds: float = Field(default=QWEN_REQUEST_TIMEOUT_SECONDS, gt=0)
     openai_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("AI_OPENAI_API_KEY", "OPENAI_API_KEY"),
