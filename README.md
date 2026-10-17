@@ -40,6 +40,8 @@ Root package: src/ai_service/.
 | V2 graph | infrastructure/graph/flexible.py |
 | Managed runtime wiring | infrastructure/stateful.py, infrastructure/execution/build_runtime.py |
 | Structured logs / run traces | infrastructure/observability.py |
+| Offline dataset/export/evaluation | training/; repository data in training/pilot-v1/ |
+| Qwen model-call adapter | infrastructure/providers/qwen.py; vLLM runs separately |
 
 Local log store: `docker compose -f ../backend/docker-compose.yml up -d lgtm`.
 Set `AI_OTLP_ENDPOINT=http://localhost:4318`, then open
@@ -47,6 +49,19 @@ Set `AI_OTLP_ENDPOINT=http://localhost:4318`, then open
 [Observability guide](../docs/04-ai/observability.md) covers fields and limits.
 
 ## Verify
+
+Training plan/pilot (not a trained model): [guide](../docs/04-ai/training-plan.md)
+and [scenario index](training/pilot-v1/SCENARIOS.md). Validate offline without GPU:
+
+```bash
+uv run python -m ai_service.training training/pilot-v1
+```
+
+All pilot labels are DRAFT; validation is not human approval or proof of model quality.
+Approved-label export and captured-response scoring: [offline workflow](training/README.md).
+These commands do not run inference/training or replace the runtime model.
+Qwen3-8B SFT/QLoRA, real inference commands and opt-in serving: [runbook](../docs/04-ai/training.md).
+Model weights/GPU packages are not loaded in the FastAPI process.
 
 ```bash
 uv run pytest -q
