@@ -394,6 +394,16 @@ class PCBuildConstraints(BaseModel):
     )
     owned_parts: list[OwnedComponent] = Field(default_factory=list)
     pinned_parts: dict[ComponentCategory, UUID] = Field(default_factory=dict)
+    preference_scores: dict[UUID, float] = Field(
+        default_factory=dict, exclude_if=lambda value: not value
+    )
+
+    @field_validator("preference_scores")
+    @classmethod
+    def bounded_preference_scores(cls, values: dict[UUID, float]) -> dict[UUID, float]:
+        if any(not 0 <= score <= 1 for score in values.values()):
+            raise ValueError("Preference utility must be finite and in [0, 1]")
+        return values
 
     @model_validator(mode="after")
     def validate_part_bindings(self) -> PCBuildConstraints:

@@ -24,6 +24,10 @@ from ai_service.capabilities.pc_builder.optimizer import (
     SCORING_POLICIES,
     DeterministicPCOptimizer,
 )
+from ai_service.capabilities.pc_builder.preferences import (
+    PREFERENCE_POLICY_VERSION,
+    PREFERENCE_WEIGHT,
+)
 from ai_service.capabilities.pc_builder.pruning import DEFAULT_ENVELOPES
 from ai_service.capabilities.pc_builder.schemas import (
     BuildObjective,
@@ -56,6 +60,8 @@ class PCBuildApplicationService:
         return TypeAdapter(JsonValue).validate_python(
             {
                 "enable_pruning": self._optimizer.enable_pruning,
+                "preference_policy": PREFERENCE_POLICY_VERSION,
+                "preference_weight": PREFERENCE_WEIGHT,
                 "algorithm_version": OptimizerSearchTrace.model_fields["algorithm_version"].default,
                 "pruning_version": "compatibility-aware-pareto-v2",
                 "case_compatibility_version": "explicit-support-v1",

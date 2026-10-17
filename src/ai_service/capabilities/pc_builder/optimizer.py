@@ -18,6 +18,7 @@ from ai_service.capabilities.pc_builder.errors import (
     CaseSupportMetadataError,
     NoFeasibleBuildError,
 )
+from ai_service.capabilities.pc_builder.preferences import apply_preferences
 from ai_service.capabilities.pc_builder.pruning import (
     get_candidate_pool,
     pareto_prune_all_objectives,
@@ -738,7 +739,9 @@ class DeterministicPCOptimizer:
                 continue
 
             pool = get_candidate_pool(items, budget, cat, profile)
-            if self.enable_pruning:
+            if self.enable_pruning and not any(
+                constraints.preference_scores.get(part.id, 0) if part.id else 0 for part in pool.all_affordable
+            ):
                 non_dominated = pareto_prune_all_objectives(pool.all_affordable, profile)
                 total_pruned_candidates += len(pool.all_affordable) - len(non_dominated)
             else:
@@ -967,6 +970,7 @@ class DeterministicPCOptimizer:
                                                 # Reject build with missing required scoring metric
                                                 continue
 
+                                            breakdown = apply_preferences(breakdown, full_parts, constraints.preference_scores)
                                             score_val = breakdown.total_score
                                             current_record = best_builds[obj]
                                             if current_record is None or score_val > current_record[0]:
