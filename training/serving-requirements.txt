@@ -1,0 +1,2 @@
+# Separate environment: do not install vLLM into the FastAPI/training environment.
+vllm==0.31.0

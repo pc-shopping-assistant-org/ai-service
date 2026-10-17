@@ -30,3 +30,8 @@ Thumbs.db
 
 # Virtual environments
 .venv
+.venv-training/
+.venv-serving/
+
+# Local exports, captured responses, evaluation reports and trained artifacts
+training/artifacts/
