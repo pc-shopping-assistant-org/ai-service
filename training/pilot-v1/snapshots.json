@@ -1,0 +1,1787 @@
+{
+  "explore": {
+    "context": {
+      "account_id": "f5c98292-69a4-57df-9eff-4dc213a31d43",
+      "conversation_id": "1d4356a6-993f-5c97-95a1-9bd0dd389471",
+      "run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb",
+      "requirements": {
+        "schema_version": 1
+      },
+      "read_catalog_allowed": true,
+      "execution_allowed": true,
+      "catalog_ready": false
+    }
+  },
+  "followup": {
+    "context": {
+      "account_id": "f5c98292-69a4-57df-9eff-4dc213a31d43",
+      "conversation_id": "1d4356a6-993f-5c97-95a1-9bd0dd389471",
+      "run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb",
+      "requirements": {
+        "revision": 1,
+        "requirements": {
+          "896111a2-0bfe-546b-9bf1-ffcbe020f9fc": {
+            "id": "896111a2-0bfe-546b-9bf1-ffcbe020f9fc",
+            "subject": "SETUP",
+            "predicate": "budget",
+            "operator": "LTE",
+            "value": {
+              "amount": 25000000,
+              "unit": "VND",
+              "kind": "QUANTITY"
+            },
+            "evidence": {
+              "message_id": "72ce9120-8775-57be-a66d-dada58133927",
+              "start": 0,
+              "end": 50,
+              "quote": "Build PC 25 triệu, RAM ít nhất 32GB, ưu tiên ASUS."
+            }
+          },
+          "a4f996a2-4614-58c9-a732-f06ac40cf194": {
+            "id": "a4f996a2-4614-58c9-a732-f06ac40cf194",
+            "subject": "RAM",
+            "predicate": "capacity",
+            "operator": "GTE",
+            "value": {
+              "amount": 32,
+              "unit": "GB",
+              "kind": "QUANTITY"
+            },
+            "evidence": {
+              "message_id": "72ce9120-8775-57be-a66d-dada58133927",
+              "start": 0,
+              "end": 50,
+              "quote": "Build PC 25 triệu, RAM ít nhất 32GB, ưu tiên ASUS."
+            }
+          },
+          "d4ff3fa2-f879-5508-988c-859d38fc3a75": {
+            "id": "d4ff3fa2-f879-5508-988c-859d38fc3a75",
+            "subject": "GPU",
+            "predicate": "brand",
+            "value": {
+              "text": "ASUS",
+              "kind": "TEXT"
+            },
+            "strength": "SOFT",
+            "evidence": {
+              "message_id": "72ce9120-8775-57be-a66d-dada58133927",
+              "start": 0,
+              "end": 50,
+              "quote": "Build PC 25 triệu, RAM ít nhất 32GB, ưu tiên ASUS."
+            }
+          }
+        },
+        "schema_version": 1
+      },
+      "read_catalog_allowed": true,
+      "execution_allowed": true,
+      "catalog_ready": false,
+      "history": [
+        {
+          "user_text": "Build PC 25 triệu, RAM ít nhất 32GB, ưu tiên ASUS.",
+          "assistant_text": "Đã ghi nhận yêu cầu; chưa tạo cấu hình."
+        }
+      ]
+    }
+  },
+  "catalog-read": {
+    "context": {
+      "account_id": "f5c98292-69a4-57df-9eff-4dc213a31d43",
+      "conversation_id": "1d4356a6-993f-5c97-95a1-9bd0dd389471",
+      "run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb",
+      "requirements": {
+        "schema_version": 1
+      },
+      "read_catalog_allowed": true,
+      "execution_allowed": true,
+      "catalog_ready": false
+    },
+    "records": [
+      {
+        "call": {
+          "call_id": "pilot-search_catalog",
+          "name": "search_catalog",
+          "arguments": {
+            "query": "GPU mô phỏng"
+          }
+        },
+        "result": {
+          "tool_call_id": "pilot-search_catalog",
+          "tool": "search_catalog",
+          "status": "COMPLETED",
+          "input_hash": "e88332ad978403f709d8aa54f8f1e36c5bc48a037e1fe7fb1dffa2d82ce77f3a",
+          "constraints_revision": 0,
+          "result": {
+            "products": [
+              {
+                "product_id": "dbd87b67-1748-5e62-bdd7-cbdcf5621f7f",
+                "name": "GPU mô phỏng A",
+                "price_vnd": 7500000,
+                "evidence_ref": "catalog:pilot:A",
+                "retrieved_at": "2026-10-17T00:00:00Z"
+              },
+              {
+                "product_id": "dd98d216-b639-54e8-9ba1-5c7c1a44d9d0",
+                "name": "GPU mô phỏng B",
+                "price_vnd": 9000000,
+                "evidence_ref": "catalog:pilot:B",
+                "retrieved_at": "2026-10-17T00:00:00Z"
+              }
+            ],
+            "tool": "search_catalog"
+          },
+          "evidence_refs": [
+            "catalog:pilot:A",
+            "catalog:pilot:B"
+          ],
+          "schema_version": 1
+        },
+        "origin_run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb"
+      }
+    ]
+  },
+  "web-read": {
+    "context": {
+      "account_id": "f5c98292-69a4-57df-9eff-4dc213a31d43",
+      "conversation_id": "1d4356a6-993f-5c97-95a1-9bd0dd389471",
+      "run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb",
+      "requirements": {
+        "schema_version": 1
+      },
+      "read_catalog_allowed": true,
+      "execution_allowed": true,
+      "catalog_ready": false
+    },
+    "records": [
+      {
+        "call": {
+          "call_id": "pilot-read_web_page",
+          "name": "read_web_page",
+          "arguments": {
+            "url": "https://example.com/gearpc/demo-review"
+          }
+        },
+        "result": {
+          "tool_call_id": "pilot-read_web_page",
+          "tool": "read_web_page",
+          "status": "COMPLETED",
+          "input_hash": "bdb0ed7247d67bd210e29d076796951f5ef91e024b6ecffe71034c17bdc305e6",
+          "constraints_revision": 0,
+          "result": {
+            "url": "https://example.com/gearpc/demo-review",
+            "final_url": "https://example.com/gearpc/demo-review",
+            "title": "Review mô phỏng, không là thông số thật",
+            "status": "READABLE",
+            "content_hash": "96f70e7bf5bc586b3a4e84be9102069890866f17bf098d27ef88735afa6b4818",
+            "content": "Bài thử mô phỏng ghi nhận quạt có thể nghe rõ khi tải nặng.",
+            "evidence_ref": "web:a76df7186150a4f44610bde6662236d01fcef3ada97c2fa27012576cb85a03b2",
+            "total_chars": 59,
+            "extraction_status": "CONTENT_ONLY",
+            "tool": "read_web_page"
+          },
+          "evidence_refs": [
+            "web:a76df7186150a4f44610bde6662236d01fcef3ada97c2fa27012576cb85a03b2"
+          ],
+          "schema_version": 1
+        },
+        "origin_run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb"
+      }
+    ]
+  },
+  "web-blocked": {
+    "context": {
+      "account_id": "f5c98292-69a4-57df-9eff-4dc213a31d43",
+      "conversation_id": "1d4356a6-993f-5c97-95a1-9bd0dd389471",
+      "run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb",
+      "requirements": {
+        "schema_version": 1
+      },
+      "read_catalog_allowed": true,
+      "execution_allowed": true,
+      "catalog_ready": false
+    },
+    "records": [
+      {
+        "call": {
+          "call_id": "pilot-read_web_page",
+          "name": "read_web_page",
+          "arguments": {
+            "url": "https://example.com/gearpc/blocked"
+          }
+        },
+        "result": {
+          "tool_call_id": "pilot-read_web_page",
+          "tool": "read_web_page",
+          "status": "COMPLETED",
+          "input_hash": "c731183c5b45af83543ef3319419aa1958c0ae5411c4dda2e1ddb86066cd59e0",
+          "constraints_revision": 0,
+          "result": {
+            "url": "https://example.com/gearpc/blocked",
+            "final_url": "https://example.com/gearpc/blocked",
+            "status": "UNREADABLE",
+            "extraction_status": "FAILED",
+            "tool": "read_web_page"
+          },
+          "schema_version": 1
+        },
+        "origin_run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb"
+      }
+    ]
+  },
+  "build-ready": {
+    "context": {
+      "account_id": "f5c98292-69a4-57df-9eff-4dc213a31d43",
+      "conversation_id": "1d4356a6-993f-5c97-95a1-9bd0dd389471",
+      "run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb",
+      "requirements": {
+        "goals": {
+          "3838bfe5-ae6c-516b-bc59-b9801b229026": {
+            "id": "3838bfe5-ae6c-516b-bc59-b9801b229026",
+            "subject": "WORKLOAD",
+            "predicate": "use_case",
+            "value": {
+              "text": "GAMING_1080P",
+              "kind": "TEXT"
+            },
+            "evidence": {
+              "message_id": "9dd41402-b8cd-5cb4-bade-f22b971de78a",
+              "start": 0,
+              "end": 35,
+              "quote": "Build PC 30 triệu cho gaming 1080p."
+            }
+          }
+        },
+        "requirements": {
+          "51f61416-56c8-5a05-b4d0-ef5bf083e0a8": {
+            "id": "51f61416-56c8-5a05-b4d0-ef5bf083e0a8",
+            "subject": "SETUP",
+            "predicate": "budget",
+            "operator": "LTE",
+            "value": {
+              "amount": 30000000,
+              "unit": "VND",
+              "kind": "QUANTITY"
+            },
+            "evidence": {
+              "message_id": "9dd41402-b8cd-5cb4-bade-f22b971de78a",
+              "start": 0,
+              "end": 35,
+              "quote": "Build PC 30 triệu cho gaming 1080p."
+            }
+          }
+        },
+        "schema_version": 1
+      },
+      "catalog": [
+        {
+          "variant_id": "20dda31a-d8e2-5e31-8ff4-966a0774de59",
+          "sku": "PILOT-CPU",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "20dda31a-d8e2-5e31-8ff4-966a0774de59",
+            "name": "CPU mô phỏng",
+            "category": "CPU",
+            "price": 5200000,
+            "socket": "AM5",
+            "tdp_watts": 65,
+            "performance_score": 85
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "b8f87b7e-5ce3-5df0-b923-8285c5cb5828",
+          "sku": "PILOT-MAINBOARD",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "b8f87b7e-5ce3-5df0-b923-8285c5cb5828",
+            "name": "MAINBOARD mô phỏng",
+            "category": "MAINBOARD",
+            "price": 3400000,
+            "socket": "AM5",
+            "ram_type": "DDR5",
+            "ram_slots": 4,
+            "form_factor": "Micro-ATX"
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "699dde52-d493-5a45-9847-cad67a206265",
+          "sku": "PILOT-RAM",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "699dde52-d493-5a45-9847-cad67a206265",
+            "name": "RAM mô phỏng",
+            "category": "RAM",
+            "price": 2400000,
+            "ram_type": "DDR5",
+            "performance_score": 78,
+            "capacity_gb": 32
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "6ede8dba-7e45-52a0-b979-24d86d11c3b3",
+          "sku": "PILOT-GPU",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "6ede8dba-7e45-52a0-b979-24d86d11c3b3",
+            "name": "GPU mô phỏng",
+            "category": "GPU",
+            "price": 7000000,
+            "tdp_watts": 115,
+            "gpu_length_mm": 240,
+            "performance_score": 76,
+            "vram_gb": 8
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "22ce67d8-9d2a-5837-97f5-4d5a8f942d79",
+          "sku": "PILOT-CASE",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "22ce67d8-9d2a-5837-97f5-4d5a8f942d79",
+            "name": "CASE mô phỏng",
+            "category": "CASE",
+            "price": 1100000,
+            "supported_form_factors": [
+              "Micro-ATX"
+            ],
+            "max_gpu_length_mm": 330,
+            "max_cooler_height_mm": 161
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441",
+          "sku": "PILOT-COOLER",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441",
+            "name": "COOLER mô phỏng",
+            "category": "COOLER",
+            "price": 500000,
+            "cooler_height_mm": 140,
+            "performance_score": 65,
+            "supported_sockets": [
+              "AM5"
+            ]
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "248efce5-cf44-5a79-8527-6a21f00e4f65",
+          "sku": "PILOT-STORAGE",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "248efce5-cf44-5a79-8527-6a21f00e4f65",
+            "name": "STORAGE mô phỏng",
+            "category": "STORAGE",
+            "price": 1000000,
+            "performance_score": 65,
+            "capacity_gb": 1000
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "179d0369-7760-5f13-b523-790dd7286650",
+          "sku": "PILOT-PSU",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "179d0369-7760-5f13-b523-790dd7286650",
+            "name": "PSU mô phỏng",
+            "category": "PSU",
+            "price": 1100000,
+            "wattage": 650,
+            "performance_score": 72,
+            "psu_tier": "C"
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        }
+      ],
+      "read_catalog_allowed": true,
+      "execution_allowed": true,
+      "completion_requirements": [
+        {
+          "kind": "BUILD",
+          "constraints_revision": 0
+        }
+      ]
+    }
+  },
+  "build-completed": {
+    "context": {
+      "account_id": "f5c98292-69a4-57df-9eff-4dc213a31d43",
+      "conversation_id": "1d4356a6-993f-5c97-95a1-9bd0dd389471",
+      "run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb",
+      "requirements": {
+        "goals": {
+          "3838bfe5-ae6c-516b-bc59-b9801b229026": {
+            "id": "3838bfe5-ae6c-516b-bc59-b9801b229026",
+            "subject": "WORKLOAD",
+            "predicate": "use_case",
+            "value": {
+              "text": "GAMING_1080P",
+              "kind": "TEXT"
+            },
+            "evidence": {
+              "message_id": "9dd41402-b8cd-5cb4-bade-f22b971de78a",
+              "start": 0,
+              "end": 35,
+              "quote": "Build PC 30 triệu cho gaming 1080p."
+            }
+          }
+        },
+        "requirements": {
+          "51f61416-56c8-5a05-b4d0-ef5bf083e0a8": {
+            "id": "51f61416-56c8-5a05-b4d0-ef5bf083e0a8",
+            "subject": "SETUP",
+            "predicate": "budget",
+            "operator": "LTE",
+            "value": {
+              "amount": 30000000,
+              "unit": "VND",
+              "kind": "QUANTITY"
+            },
+            "evidence": {
+              "message_id": "9dd41402-b8cd-5cb4-bade-f22b971de78a",
+              "start": 0,
+              "end": 35,
+              "quote": "Build PC 30 triệu cho gaming 1080p."
+            }
+          }
+        },
+        "schema_version": 1
+      },
+      "catalog": [
+        {
+          "variant_id": "20dda31a-d8e2-5e31-8ff4-966a0774de59",
+          "sku": "PILOT-CPU",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "20dda31a-d8e2-5e31-8ff4-966a0774de59",
+            "name": "CPU mô phỏng",
+            "category": "CPU",
+            "price": 5200000,
+            "socket": "AM5",
+            "tdp_watts": 65,
+            "performance_score": 85
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "b8f87b7e-5ce3-5df0-b923-8285c5cb5828",
+          "sku": "PILOT-MAINBOARD",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "b8f87b7e-5ce3-5df0-b923-8285c5cb5828",
+            "name": "MAINBOARD mô phỏng",
+            "category": "MAINBOARD",
+            "price": 3400000,
+            "socket": "AM5",
+            "ram_type": "DDR5",
+            "ram_slots": 4,
+            "form_factor": "Micro-ATX"
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "699dde52-d493-5a45-9847-cad67a206265",
+          "sku": "PILOT-RAM",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "699dde52-d493-5a45-9847-cad67a206265",
+            "name": "RAM mô phỏng",
+            "category": "RAM",
+            "price": 2400000,
+            "ram_type": "DDR5",
+            "performance_score": 78,
+            "capacity_gb": 32
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "6ede8dba-7e45-52a0-b979-24d86d11c3b3",
+          "sku": "PILOT-GPU",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "6ede8dba-7e45-52a0-b979-24d86d11c3b3",
+            "name": "GPU mô phỏng",
+            "category": "GPU",
+            "price": 7000000,
+            "tdp_watts": 115,
+            "gpu_length_mm": 240,
+            "performance_score": 76,
+            "vram_gb": 8
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "22ce67d8-9d2a-5837-97f5-4d5a8f942d79",
+          "sku": "PILOT-CASE",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "22ce67d8-9d2a-5837-97f5-4d5a8f942d79",
+            "name": "CASE mô phỏng",
+            "category": "CASE",
+            "price": 1100000,
+            "supported_form_factors": [
+              "Micro-ATX"
+            ],
+            "max_gpu_length_mm": 330,
+            "max_cooler_height_mm": 161
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441",
+          "sku": "PILOT-COOLER",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441",
+            "name": "COOLER mô phỏng",
+            "category": "COOLER",
+            "price": 500000,
+            "cooler_height_mm": 140,
+            "performance_score": 65,
+            "supported_sockets": [
+              "AM5"
+            ]
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "248efce5-cf44-5a79-8527-6a21f00e4f65",
+          "sku": "PILOT-STORAGE",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "248efce5-cf44-5a79-8527-6a21f00e4f65",
+            "name": "STORAGE mô phỏng",
+            "category": "STORAGE",
+            "price": 1000000,
+            "performance_score": 65,
+            "capacity_gb": 1000
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "179d0369-7760-5f13-b523-790dd7286650",
+          "sku": "PILOT-PSU",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "179d0369-7760-5f13-b523-790dd7286650",
+            "name": "PSU mô phỏng",
+            "category": "PSU",
+            "price": 1100000,
+            "wattage": 650,
+            "performance_score": 72,
+            "psu_tier": "C"
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        }
+      ],
+      "read_catalog_allowed": true,
+      "execution_allowed": true,
+      "completion_requirements": [
+        {
+          "kind": "BUILD",
+          "constraints_revision": 0
+        }
+      ]
+    },
+    "records": [
+      {
+        "call": {
+          "call_id": "pilot-build_pc",
+          "name": "build_pc",
+          "arguments": {}
+        },
+        "result": {
+          "tool_call_id": "pilot-build_pc",
+          "tool": "build_pc",
+          "status": "COMPLETED",
+          "input_hash": "e3ff14ed6a07f2b21409a54abacc80f189688eba24648fb91219421a372fbec4",
+          "constraints_revision": 0,
+          "result": {
+            "build_ref": "566adcdc-c0a5-5708-b681-257108296932",
+            "receipt": {
+              "compilation": {
+                "state_hash": "bde743fbc2bc385f6b45c5969f0b0c2307d387cdfad13e55e6d0ec1277f9d67a",
+                "mapping": [
+                  {
+                    "requirement_id": "3838bfe5-ae6c-516b-bc59-b9801b229026",
+                    "status": "APPLIED",
+                    "reason": "WORKLOAD_PROFILE",
+                    "strength": "HARD",
+                    "subject": "WORKLOAD",
+                    "predicate": "use_case"
+                  },
+                  {
+                    "requirement_id": "51f61416-56c8-5a05-b4d0-ef5bf083e0a8",
+                    "status": "APPLIED",
+                    "reason": "BUDGET_CAP",
+                    "strength": "HARD",
+                    "subject": "SETUP",
+                    "predicate": "budget"
+                  }
+                ],
+                "optimizer_input": {
+                  "constraints": {
+                    "target_budget_vnd": {
+                      "value": 30000000,
+                      "source": "USER"
+                    },
+                    "use_case": {
+                      "value": "GAMING_1080P",
+                      "source": "USER"
+                    }
+                  },
+                  "candidates": [
+                    {
+                      "id": "20dda31a-d8e2-5e31-8ff4-966a0774de59",
+                      "name": "CPU mô phỏng",
+                      "category": "CPU",
+                      "price": 5200000,
+                      "socket": "AM5",
+                      "tdp_watts": 65,
+                      "performance_score": 85
+                    },
+                    {
+                      "id": "b8f87b7e-5ce3-5df0-b923-8285c5cb5828",
+                      "name": "MAINBOARD mô phỏng",
+                      "category": "MAINBOARD",
+                      "price": 3400000,
+                      "socket": "AM5",
+                      "ram_type": "DDR5",
+                      "ram_slots": 4,
+                      "form_factor": "Micro-ATX"
+                    },
+                    {
+                      "id": "699dde52-d493-5a45-9847-cad67a206265",
+                      "name": "RAM mô phỏng",
+                      "category": "RAM",
+                      "price": 2400000,
+                      "ram_type": "DDR5",
+                      "performance_score": 78,
+                      "capacity_gb": 32
+                    },
+                    {
+                      "id": "6ede8dba-7e45-52a0-b979-24d86d11c3b3",
+                      "name": "GPU mô phỏng",
+                      "category": "GPU",
+                      "price": 7000000,
+                      "tdp_watts": 115,
+                      "gpu_length_mm": 240,
+                      "performance_score": 76,
+                      "vram_gb": 8
+                    },
+                    {
+                      "id": "22ce67d8-9d2a-5837-97f5-4d5a8f942d79",
+                      "name": "CASE mô phỏng",
+                      "category": "CASE",
+                      "price": 1100000,
+                      "supported_form_factors": [
+                        "Micro-ATX"
+                      ],
+                      "max_gpu_length_mm": 330,
+                      "max_cooler_height_mm": 161
+                    },
+                    {
+                      "id": "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441",
+                      "name": "COOLER mô phỏng",
+                      "category": "COOLER",
+                      "price": 500000,
+                      "cooler_height_mm": 140,
+                      "performance_score": 65,
+                      "supported_sockets": [
+                        "AM5"
+                      ]
+                    },
+                    {
+                      "id": "248efce5-cf44-5a79-8527-6a21f00e4f65",
+                      "name": "STORAGE mô phỏng",
+                      "category": "STORAGE",
+                      "price": 1000000,
+                      "performance_score": 65,
+                      "capacity_gb": 1000
+                    },
+                    {
+                      "id": "179d0369-7760-5f13-b523-790dd7286650",
+                      "name": "PSU mô phỏng",
+                      "category": "PSU",
+                      "price": 1100000,
+                      "wattage": 650,
+                      "performance_score": 72,
+                      "psu_tier": "C"
+                    }
+                  ],
+                  "effective_spending_vnd": {
+                    "20dda31a-d8e2-5e31-8ff4-966a0774de59": 5200000,
+                    "b8f87b7e-5ce3-5df0-b923-8285c5cb5828": 3400000,
+                    "699dde52-d493-5a45-9847-cad67a206265": 2400000,
+                    "6ede8dba-7e45-52a0-b979-24d86d11c3b3": 7000000,
+                    "22ce67d8-9d2a-5837-97f5-4d5a8f942d79": 1100000,
+                    "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441": 500000,
+                    "248efce5-cf44-5a79-8527-6a21f00e4f65": 1000000,
+                    "179d0369-7760-5f13-b523-790dd7286650": 1100000
+                  }
+                }
+              },
+              "outcome": "BUILT",
+              "build": {
+                "objective": "BALANCED",
+                "objective_score": 79.22,
+                "total_price": 21700000,
+                "parts": {
+                  "CPU": {
+                    "id": "20dda31a-d8e2-5e31-8ff4-966a0774de59",
+                    "name": "CPU mô phỏng",
+                    "category": "CPU",
+                    "price": 5200000,
+                    "socket": "AM5",
+                    "tdp_watts": 65,
+                    "performance_score": 85
+                  },
+                  "MAINBOARD": {
+                    "id": "b8f87b7e-5ce3-5df0-b923-8285c5cb5828",
+                    "name": "MAINBOARD mô phỏng",
+                    "category": "MAINBOARD",
+                    "price": 3400000,
+                    "socket": "AM5",
+                    "ram_type": "DDR5",
+                    "ram_slots": 4,
+                    "form_factor": "Micro-ATX"
+                  },
+                  "RAM": {
+                    "id": "699dde52-d493-5a45-9847-cad67a206265",
+                    "name": "RAM mô phỏng",
+                    "category": "RAM",
+                    "price": 2400000,
+                    "ram_type": "DDR5",
+                    "performance_score": 78,
+                    "capacity_gb": 32
+                  },
+                  "GPU": {
+                    "id": "6ede8dba-7e45-52a0-b979-24d86d11c3b3",
+                    "name": "GPU mô phỏng",
+                    "category": "GPU",
+                    "price": 7000000,
+                    "tdp_watts": 115,
+                    "gpu_length_mm": 240,
+                    "performance_score": 76,
+                    "vram_gb": 8
+                  },
+                  "CASE": {
+                    "id": "22ce67d8-9d2a-5837-97f5-4d5a8f942d79",
+                    "name": "CASE mô phỏng",
+                    "category": "CASE",
+                    "price": 1100000,
+                    "supported_form_factors": [
+                      "Micro-ATX"
+                    ],
+                    "max_gpu_length_mm": 330,
+                    "max_cooler_height_mm": 161
+                  },
+                  "COOLER": {
+                    "id": "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441",
+                    "name": "COOLER mô phỏng",
+                    "category": "COOLER",
+                    "price": 500000,
+                    "cooler_height_mm": 140,
+                    "performance_score": 65,
+                    "supported_sockets": [
+                      "AM5"
+                    ]
+                  },
+                  "STORAGE": {
+                    "id": "248efce5-cf44-5a79-8527-6a21f00e4f65",
+                    "name": "STORAGE mô phỏng",
+                    "category": "STORAGE",
+                    "price": 1000000,
+                    "performance_score": 65,
+                    "capacity_gb": 1000
+                  },
+                  "PSU": {
+                    "id": "179d0369-7760-5f13-b523-790dd7286650",
+                    "name": "PSU mô phỏng",
+                    "category": "PSU",
+                    "price": 1100000,
+                    "wattage": 650,
+                    "performance_score": 72,
+                    "psu_tier": "C"
+                  }
+                },
+                "power_estimate": {
+                  "cpu_estimated_peak_watts": 71.5,
+                  "gpu_estimated_peak_watts": 115,
+                  "platform_estimated_watts": 65,
+                  "estimated_sustained_peak_watts": 251.5,
+                  "transient_allowance_watts": 13.8,
+                  "minimum_capacity_watts": 450,
+                  "recommended_capacity_watts": 450,
+                  "sizing_rationale": "Sustained peak load: 252W (CPU 72W, GPU 115W, Platform 65W). Transient allowance: +14W. Minimum capacity: 450W, Recommended capacity: 450W."
+                },
+                "evidence": [
+                  {
+                    "metric": "objective_score",
+                    "raw_value": 79.22,
+                    "normalized_score": 79.22,
+                    "unit": "/100",
+                    "source": "scoring_engine",
+                    "label": "Điểm tối ưu (BALANCED)"
+                  },
+                  {
+                    "metric": "score_dim_gpu_perf",
+                    "raw_value": 76,
+                    "normalized_score": 76,
+                    "weight": 0.32,
+                    "contribution": 24.32,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: gpu_perf"
+                  },
+                  {
+                    "metric": "score_dim_cpu_perf",
+                    "raw_value": 85,
+                    "normalized_score": 85,
+                    "weight": 0.24,
+                    "contribution": 20.4,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: cpu_perf"
+                  },
+                  {
+                    "metric": "score_dim_psu_quality",
+                    "raw_value": 70,
+                    "normalized_score": 70,
+                    "weight": 0.15,
+                    "contribution": 10.5,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: psu_quality"
+                  },
+                  {
+                    "metric": "score_dim_platform_longevity",
+                    "raw_value": "AM5",
+                    "normalized_score": 100,
+                    "weight": 0.15,
+                    "contribution": 15,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: platform_longevity"
+                  },
+                  {
+                    "metric": "score_dim_ram_capacity",
+                    "raw_value": 32,
+                    "normalized_score": 50,
+                    "weight": 0.1,
+                    "contribution": 5,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: ram_capacity"
+                  },
+                  {
+                    "metric": "score_dim_psu_headroom",
+                    "raw_value": 398.5,
+                    "normalized_score": 100,
+                    "weight": 0.04,
+                    "contribution": 4,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: psu_headroom"
+                  },
+                  {
+                    "metric": "sustained_peak_watts",
+                    "raw_value": 251.5,
+                    "unit": "W",
+                    "source": "power_calculator",
+                    "label": "Công suất tiêu thụ tối đa (Full load)"
+                  },
+                  {
+                    "metric": "psu_capacity_watts",
+                    "raw_value": 650,
+                    "unit": "W",
+                    "source": "component_spec",
+                    "label": "Công suất bộ nguồn"
+                  },
+                  {
+                    "metric": "gpu_name",
+                    "raw_value": "GPU mô phỏng",
+                    "source": "catalog",
+                    "label": "Card đồ họa"
+                  },
+                  {
+                    "metric": "gpu_vram",
+                    "raw_value": 8,
+                    "unit": "GB",
+                    "source": "spec",
+                    "label": "Bộ nhớ VRAM"
+                  },
+                  {
+                    "metric": "gpu_score",
+                    "raw_value": 76,
+                    "unit": "/100",
+                    "source": "benchmark",
+                    "label": "Điểm Benchmark GPU"
+                  },
+                  {
+                    "metric": "cpu_name",
+                    "raw_value": "CPU mô phỏng",
+                    "source": "catalog",
+                    "label": "Bộ vi xử lý"
+                  },
+                  {
+                    "metric": "cpu_socket",
+                    "raw_value": "AM5",
+                    "source": "spec",
+                    "label": "Chuẩn Socket"
+                  },
+                  {
+                    "metric": "cpu_score",
+                    "raw_value": 85,
+                    "unit": "/100",
+                    "source": "benchmark",
+                    "label": "Điểm Benchmark CPU"
+                  },
+                  {
+                    "metric": "mainboard_socket",
+                    "raw_value": "AM5",
+                    "source": "spec",
+                    "label": "Socket Bo mạch chủ"
+                  }
+                ],
+                "compatibility_status": "COMPATIBLE",
+                "spending_prices": {
+                  "CPU": 5200000,
+                  "MAINBOARD": 3400000,
+                  "RAM": 2400000,
+                  "GPU": 7000000,
+                  "CASE": 1100000,
+                  "COOLER": 500000,
+                  "STORAGE": 1000000,
+                  "PSU": 1100000
+                }
+              },
+              "observed_use_case": "GAMING_1080P",
+              "search_trace": {
+                "enumeration_complete": true,
+                "pruned_candidates": 0,
+                "metadata_rejections": 0,
+                "scoring_rejections": 0,
+                "pool_variant_ids": {
+                  "CPU": [
+                    "20dda31a-d8e2-5e31-8ff4-966a0774de59"
+                  ],
+                  "MAINBOARD": [
+                    "b8f87b7e-5ce3-5df0-b923-8285c5cb5828"
+                  ],
+                  "RAM": [
+                    "699dde52-d493-5a45-9847-cad67a206265"
+                  ],
+                  "GPU": [
+                    "6ede8dba-7e45-52a0-b979-24d86d11c3b3"
+                  ],
+                  "PSU": [
+                    "179d0369-7760-5f13-b523-790dd7286650"
+                  ],
+                  "CASE": [
+                    "22ce67d8-9d2a-5837-97f5-4d5a8f942d79"
+                  ],
+                  "COOLER": [
+                    "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441"
+                  ],
+                  "STORAGE": [
+                    "248efce5-cf44-5a79-8527-6a21f00e4f65"
+                  ]
+                }
+              },
+              "search_policy_hash": "3e1fe9a7b7f8a446aa742e89cef224f23b5361132bc215e1405a6ffc32cd7728"
+            },
+            "satisfaction": {
+              "state_hash": "bde743fbc2bc385f6b45c5969f0b0c2307d387cdfad13e55e6d0ec1277f9d67a",
+              "results": [
+                {
+                  "requirement_id": "3838bfe5-ae6c-516b-bc59-b9801b229026",
+                  "satisfied": true,
+                  "strength": "HARD",
+                  "reason": "SATISFIED"
+                },
+                {
+                  "requirement_id": "51f61416-56c8-5a05-b4d0-ef5bf083e0a8",
+                  "satisfied": true,
+                  "strength": "HARD",
+                  "reason": "SATISFIED"
+                }
+              ]
+            },
+            "search_evidence": {
+              "outcome": "FEASIBLE",
+              "scope": "SUPPLIED_NORMALIZED_CANDIDATES",
+              "requirements_hash": "7392a1bd302132e7b8878b1146ff343508234536457f3712fcdb7b51825c0a87",
+              "optimizer_input_hash": "85edf15800d0b2c5ae08ea1222aeb0f073ba83a9303a5ec2cdacf4ac519eb27c",
+              "catalog_snapshot_hash": "1c701b9cf28a3716cd0c728dfd57983fbe156b57de7ef587cb8caa4dd65c1402",
+              "algorithm_version": "deterministic-enumeration-v3",
+              "pruning_version": "compatibility-aware-pareto-v2",
+              "policy_version": "3e1fe9a7b7f8a446aa742e89cef224f23b5361132bc215e1405a6ffc32cd7728",
+              "search_complete": true,
+              "coverage_complete": true,
+              "pruning_sound": true,
+              "termination": "FOUND_RESULT",
+              "build_ref": "566adcdc-c0a5-5708-b681-257108296932",
+              "schema_version": 2
+            },
+            "tool": "build_pc"
+          },
+          "evidence_refs": [
+            "build:566adcdc-c0a5-5708-b681-257108296932"
+          ],
+          "schema_version": 1
+        },
+        "origin_run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb"
+      }
+    ]
+  },
+  "build-review": {
+    "context": {
+      "account_id": "f5c98292-69a4-57df-9eff-4dc213a31d43",
+      "conversation_id": "1d4356a6-993f-5c97-95a1-9bd0dd389471",
+      "run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb",
+      "requirements": {
+        "goals": {
+          "3838bfe5-ae6c-516b-bc59-b9801b229026": {
+            "id": "3838bfe5-ae6c-516b-bc59-b9801b229026",
+            "subject": "WORKLOAD",
+            "predicate": "use_case",
+            "value": {
+              "text": "GAMING_1080P",
+              "kind": "TEXT"
+            },
+            "evidence": {
+              "message_id": "9dd41402-b8cd-5cb4-bade-f22b971de78a",
+              "start": 0,
+              "end": 35,
+              "quote": "Build PC 30 triệu cho gaming 1080p."
+            }
+          }
+        },
+        "requirements": {
+          "51f61416-56c8-5a05-b4d0-ef5bf083e0a8": {
+            "id": "51f61416-56c8-5a05-b4d0-ef5bf083e0a8",
+            "subject": "SETUP",
+            "predicate": "budget",
+            "operator": "LTE",
+            "value": {
+              "amount": 30000000,
+              "unit": "VND",
+              "kind": "QUANTITY"
+            },
+            "evidence": {
+              "message_id": "9dd41402-b8cd-5cb4-bade-f22b971de78a",
+              "start": 0,
+              "end": 35,
+              "quote": "Build PC 30 triệu cho gaming 1080p."
+            }
+          }
+        },
+        "schema_version": 1
+      },
+      "catalog": [
+        {
+          "variant_id": "20dda31a-d8e2-5e31-8ff4-966a0774de59",
+          "sku": "PILOT-CPU",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "20dda31a-d8e2-5e31-8ff4-966a0774de59",
+            "name": "CPU mô phỏng",
+            "category": "CPU",
+            "price": 5200000,
+            "socket": "AM5",
+            "tdp_watts": 65,
+            "performance_score": 85
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "b8f87b7e-5ce3-5df0-b923-8285c5cb5828",
+          "sku": "PILOT-MAINBOARD",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "b8f87b7e-5ce3-5df0-b923-8285c5cb5828",
+            "name": "MAINBOARD mô phỏng",
+            "category": "MAINBOARD",
+            "price": 3400000,
+            "socket": "AM5",
+            "ram_type": "DDR5",
+            "ram_slots": 4,
+            "form_factor": "Micro-ATX"
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "699dde52-d493-5a45-9847-cad67a206265",
+          "sku": "PILOT-RAM",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "699dde52-d493-5a45-9847-cad67a206265",
+            "name": "RAM mô phỏng",
+            "category": "RAM",
+            "price": 2400000,
+            "ram_type": "DDR5",
+            "performance_score": 78,
+            "capacity_gb": 32
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "6ede8dba-7e45-52a0-b979-24d86d11c3b3",
+          "sku": "PILOT-GPU",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "6ede8dba-7e45-52a0-b979-24d86d11c3b3",
+            "name": "GPU mô phỏng",
+            "category": "GPU",
+            "price": 7000000,
+            "tdp_watts": 115,
+            "gpu_length_mm": 240,
+            "performance_score": 76,
+            "vram_gb": 8
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "22ce67d8-9d2a-5837-97f5-4d5a8f942d79",
+          "sku": "PILOT-CASE",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "22ce67d8-9d2a-5837-97f5-4d5a8f942d79",
+            "name": "CASE mô phỏng",
+            "category": "CASE",
+            "price": 1100000,
+            "supported_form_factors": [
+              "Micro-ATX"
+            ],
+            "max_gpu_length_mm": 330,
+            "max_cooler_height_mm": 161
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441",
+          "sku": "PILOT-COOLER",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441",
+            "name": "COOLER mô phỏng",
+            "category": "COOLER",
+            "price": 500000,
+            "cooler_height_mm": 140,
+            "performance_score": 65,
+            "supported_sockets": [
+              "AM5"
+            ]
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "248efce5-cf44-5a79-8527-6a21f00e4f65",
+          "sku": "PILOT-STORAGE",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "248efce5-cf44-5a79-8527-6a21f00e4f65",
+            "name": "STORAGE mô phỏng",
+            "category": "STORAGE",
+            "price": 1000000,
+            "performance_score": 65,
+            "capacity_gb": 1000
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        },
+        {
+          "variant_id": "179d0369-7760-5f13-b523-790dd7286650",
+          "sku": "PILOT-PSU",
+          "product_status": "ACTIVE",
+          "variant_status": "ACTIVE",
+          "quantity": 1,
+          "component": {
+            "id": "179d0369-7760-5f13-b523-790dd7286650",
+            "name": "PSU mô phỏng",
+            "category": "PSU",
+            "price": 1100000,
+            "wattage": 650,
+            "performance_score": 72,
+            "psu_tier": "C"
+          },
+          "retrieved_at": "2026-10-17T00:00:00Z",
+          "evidence_refs": [
+            "synthetic:pilot-v1"
+          ]
+        }
+      ],
+      "read_catalog_allowed": true,
+      "execution_allowed": true,
+      "completion_requirements": [
+        {
+          "kind": "BUILD",
+          "constraints_revision": 0
+        },
+        {
+          "kind": "ANSWER"
+        }
+      ]
+    },
+    "records": [
+      {
+        "call": {
+          "call_id": "pilot-build_pc",
+          "name": "build_pc",
+          "arguments": {}
+        },
+        "result": {
+          "tool_call_id": "pilot-build_pc",
+          "tool": "build_pc",
+          "status": "COMPLETED",
+          "input_hash": "e3ff14ed6a07f2b21409a54abacc80f189688eba24648fb91219421a372fbec4",
+          "constraints_revision": 0,
+          "result": {
+            "build_ref": "566adcdc-c0a5-5708-b681-257108296932",
+            "receipt": {
+              "compilation": {
+                "state_hash": "bde743fbc2bc385f6b45c5969f0b0c2307d387cdfad13e55e6d0ec1277f9d67a",
+                "mapping": [
+                  {
+                    "requirement_id": "3838bfe5-ae6c-516b-bc59-b9801b229026",
+                    "status": "APPLIED",
+                    "reason": "WORKLOAD_PROFILE",
+                    "strength": "HARD",
+                    "subject": "WORKLOAD",
+                    "predicate": "use_case"
+                  },
+                  {
+                    "requirement_id": "51f61416-56c8-5a05-b4d0-ef5bf083e0a8",
+                    "status": "APPLIED",
+                    "reason": "BUDGET_CAP",
+                    "strength": "HARD",
+                    "subject": "SETUP",
+                    "predicate": "budget"
+                  }
+                ],
+                "optimizer_input": {
+                  "constraints": {
+                    "target_budget_vnd": {
+                      "value": 30000000,
+                      "source": "USER"
+                    },
+                    "use_case": {
+                      "value": "GAMING_1080P",
+                      "source": "USER"
+                    }
+                  },
+                  "candidates": [
+                    {
+                      "id": "20dda31a-d8e2-5e31-8ff4-966a0774de59",
+                      "name": "CPU mô phỏng",
+                      "category": "CPU",
+                      "price": 5200000,
+                      "socket": "AM5",
+                      "tdp_watts": 65,
+                      "performance_score": 85
+                    },
+                    {
+                      "id": "b8f87b7e-5ce3-5df0-b923-8285c5cb5828",
+                      "name": "MAINBOARD mô phỏng",
+                      "category": "MAINBOARD",
+                      "price": 3400000,
+                      "socket": "AM5",
+                      "ram_type": "DDR5",
+                      "ram_slots": 4,
+                      "form_factor": "Micro-ATX"
+                    },
+                    {
+                      "id": "699dde52-d493-5a45-9847-cad67a206265",
+                      "name": "RAM mô phỏng",
+                      "category": "RAM",
+                      "price": 2400000,
+                      "ram_type": "DDR5",
+                      "performance_score": 78,
+                      "capacity_gb": 32
+                    },
+                    {
+                      "id": "6ede8dba-7e45-52a0-b979-24d86d11c3b3",
+                      "name": "GPU mô phỏng",
+                      "category": "GPU",
+                      "price": 7000000,
+                      "tdp_watts": 115,
+                      "gpu_length_mm": 240,
+                      "performance_score": 76,
+                      "vram_gb": 8
+                    },
+                    {
+                      "id": "22ce67d8-9d2a-5837-97f5-4d5a8f942d79",
+                      "name": "CASE mô phỏng",
+                      "category": "CASE",
+                      "price": 1100000,
+                      "supported_form_factors": [
+                        "Micro-ATX"
+                      ],
+                      "max_gpu_length_mm": 330,
+                      "max_cooler_height_mm": 161
+                    },
+                    {
+                      "id": "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441",
+                      "name": "COOLER mô phỏng",
+                      "category": "COOLER",
+                      "price": 500000,
+                      "cooler_height_mm": 140,
+                      "performance_score": 65,
+                      "supported_sockets": [
+                        "AM5"
+                      ]
+                    },
+                    {
+                      "id": "248efce5-cf44-5a79-8527-6a21f00e4f65",
+                      "name": "STORAGE mô phỏng",
+                      "category": "STORAGE",
+                      "price": 1000000,
+                      "performance_score": 65,
+                      "capacity_gb": 1000
+                    },
+                    {
+                      "id": "179d0369-7760-5f13-b523-790dd7286650",
+                      "name": "PSU mô phỏng",
+                      "category": "PSU",
+                      "price": 1100000,
+                      "wattage": 650,
+                      "performance_score": 72,
+                      "psu_tier": "C"
+                    }
+                  ],
+                  "effective_spending_vnd": {
+                    "20dda31a-d8e2-5e31-8ff4-966a0774de59": 5200000,
+                    "b8f87b7e-5ce3-5df0-b923-8285c5cb5828": 3400000,
+                    "699dde52-d493-5a45-9847-cad67a206265": 2400000,
+                    "6ede8dba-7e45-52a0-b979-24d86d11c3b3": 7000000,
+                    "22ce67d8-9d2a-5837-97f5-4d5a8f942d79": 1100000,
+                    "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441": 500000,
+                    "248efce5-cf44-5a79-8527-6a21f00e4f65": 1000000,
+                    "179d0369-7760-5f13-b523-790dd7286650": 1100000
+                  }
+                }
+              },
+              "outcome": "BUILT",
+              "build": {
+                "objective": "BALANCED",
+                "objective_score": 79.22,
+                "total_price": 21700000,
+                "parts": {
+                  "CPU": {
+                    "id": "20dda31a-d8e2-5e31-8ff4-966a0774de59",
+                    "name": "CPU mô phỏng",
+                    "category": "CPU",
+                    "price": 5200000,
+                    "socket": "AM5",
+                    "tdp_watts": 65,
+                    "performance_score": 85
+                  },
+                  "MAINBOARD": {
+                    "id": "b8f87b7e-5ce3-5df0-b923-8285c5cb5828",
+                    "name": "MAINBOARD mô phỏng",
+                    "category": "MAINBOARD",
+                    "price": 3400000,
+                    "socket": "AM5",
+                    "ram_type": "DDR5",
+                    "ram_slots": 4,
+                    "form_factor": "Micro-ATX"
+                  },
+                  "RAM": {
+                    "id": "699dde52-d493-5a45-9847-cad67a206265",
+                    "name": "RAM mô phỏng",
+                    "category": "RAM",
+                    "price": 2400000,
+                    "ram_type": "DDR5",
+                    "performance_score": 78,
+                    "capacity_gb": 32
+                  },
+                  "GPU": {
+                    "id": "6ede8dba-7e45-52a0-b979-24d86d11c3b3",
+                    "name": "GPU mô phỏng",
+                    "category": "GPU",
+                    "price": 7000000,
+                    "tdp_watts": 115,
+                    "gpu_length_mm": 240,
+                    "performance_score": 76,
+                    "vram_gb": 8
+                  },
+                  "CASE": {
+                    "id": "22ce67d8-9d2a-5837-97f5-4d5a8f942d79",
+                    "name": "CASE mô phỏng",
+                    "category": "CASE",
+                    "price": 1100000,
+                    "supported_form_factors": [
+                      "Micro-ATX"
+                    ],
+                    "max_gpu_length_mm": 330,
+                    "max_cooler_height_mm": 161
+                  },
+                  "COOLER": {
+                    "id": "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441",
+                    "name": "COOLER mô phỏng",
+                    "category": "COOLER",
+                    "price": 500000,
+                    "cooler_height_mm": 140,
+                    "performance_score": 65,
+                    "supported_sockets": [
+                      "AM5"
+                    ]
+                  },
+                  "STORAGE": {
+                    "id": "248efce5-cf44-5a79-8527-6a21f00e4f65",
+                    "name": "STORAGE mô phỏng",
+                    "category": "STORAGE",
+                    "price": 1000000,
+                    "performance_score": 65,
+                    "capacity_gb": 1000
+                  },
+                  "PSU": {
+                    "id": "179d0369-7760-5f13-b523-790dd7286650",
+                    "name": "PSU mô phỏng",
+                    "category": "PSU",
+                    "price": 1100000,
+                    "wattage": 650,
+                    "performance_score": 72,
+                    "psu_tier": "C"
+                  }
+                },
+                "power_estimate": {
+                  "cpu_estimated_peak_watts": 71.5,
+                  "gpu_estimated_peak_watts": 115,
+                  "platform_estimated_watts": 65,
+                  "estimated_sustained_peak_watts": 251.5,
+                  "transient_allowance_watts": 13.8,
+                  "minimum_capacity_watts": 450,
+                  "recommended_capacity_watts": 450,
+                  "sizing_rationale": "Sustained peak load: 252W (CPU 72W, GPU 115W, Platform 65W). Transient allowance: +14W. Minimum capacity: 450W, Recommended capacity: 450W."
+                },
+                "evidence": [
+                  {
+                    "metric": "objective_score",
+                    "raw_value": 79.22,
+                    "normalized_score": 79.22,
+                    "unit": "/100",
+                    "source": "scoring_engine",
+                    "label": "Điểm tối ưu (BALANCED)"
+                  },
+                  {
+                    "metric": "score_dim_gpu_perf",
+                    "raw_value": 76,
+                    "normalized_score": 76,
+                    "weight": 0.32,
+                    "contribution": 24.32,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: gpu_perf"
+                  },
+                  {
+                    "metric": "score_dim_cpu_perf",
+                    "raw_value": 85,
+                    "normalized_score": 85,
+                    "weight": 0.24,
+                    "contribution": 20.4,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: cpu_perf"
+                  },
+                  {
+                    "metric": "score_dim_psu_quality",
+                    "raw_value": 70,
+                    "normalized_score": 70,
+                    "weight": 0.15,
+                    "contribution": 10.5,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: psu_quality"
+                  },
+                  {
+                    "metric": "score_dim_platform_longevity",
+                    "raw_value": "AM5",
+                    "normalized_score": 100,
+                    "weight": 0.15,
+                    "contribution": 15,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: platform_longevity"
+                  },
+                  {
+                    "metric": "score_dim_ram_capacity",
+                    "raw_value": 32,
+                    "normalized_score": 50,
+                    "weight": 0.1,
+                    "contribution": 5,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: ram_capacity"
+                  },
+                  {
+                    "metric": "score_dim_psu_headroom",
+                    "raw_value": 398.5,
+                    "normalized_score": 100,
+                    "weight": 0.04,
+                    "contribution": 4,
+                    "source": "scoring_breakdown",
+                    "label": "Thành phần điểm: psu_headroom"
+                  },
+                  {
+                    "metric": "sustained_peak_watts",
+                    "raw_value": 251.5,
+                    "unit": "W",
+                    "source": "power_calculator",
+                    "label": "Công suất tiêu thụ tối đa (Full load)"
+                  },
+                  {
+                    "metric": "psu_capacity_watts",
+                    "raw_value": 650,
+                    "unit": "W",
+                    "source": "component_spec",
+                    "label": "Công suất bộ nguồn"
+                  },
+                  {
+                    "metric": "gpu_name",
+                    "raw_value": "GPU mô phỏng",
+                    "source": "catalog",
+                    "label": "Card đồ họa"
+                  },
+                  {
+                    "metric": "gpu_vram",
+                    "raw_value": 8,
+                    "unit": "GB",
+                    "source": "spec",
+                    "label": "Bộ nhớ VRAM"
+                  },
+                  {
+                    "metric": "gpu_score",
+                    "raw_value": 76,
+                    "unit": "/100",
+                    "source": "benchmark",
+                    "label": "Điểm Benchmark GPU"
+                  },
+                  {
+                    "metric": "cpu_name",
+                    "raw_value": "CPU mô phỏng",
+                    "source": "catalog",
+                    "label": "Bộ vi xử lý"
+                  },
+                  {
+                    "metric": "cpu_socket",
+                    "raw_value": "AM5",
+                    "source": "spec",
+                    "label": "Chuẩn Socket"
+                  },
+                  {
+                    "metric": "cpu_score",
+                    "raw_value": 85,
+                    "unit": "/100",
+                    "source": "benchmark",
+                    "label": "Điểm Benchmark CPU"
+                  },
+                  {
+                    "metric": "mainboard_socket",
+                    "raw_value": "AM5",
+                    "source": "spec",
+                    "label": "Socket Bo mạch chủ"
+                  }
+                ],
+                "compatibility_status": "COMPATIBLE",
+                "spending_prices": {
+                  "CPU": 5200000,
+                  "MAINBOARD": 3400000,
+                  "RAM": 2400000,
+                  "GPU": 7000000,
+                  "CASE": 1100000,
+                  "COOLER": 500000,
+                  "STORAGE": 1000000,
+                  "PSU": 1100000
+                }
+              },
+              "observed_use_case": "GAMING_1080P",
+              "search_trace": {
+                "enumeration_complete": true,
+                "pruned_candidates": 0,
+                "metadata_rejections": 0,
+                "scoring_rejections": 0,
+                "pool_variant_ids": {
+                  "CPU": [
+                    "20dda31a-d8e2-5e31-8ff4-966a0774de59"
+                  ],
+                  "MAINBOARD": [
+                    "b8f87b7e-5ce3-5df0-b923-8285c5cb5828"
+                  ],
+                  "RAM": [
+                    "699dde52-d493-5a45-9847-cad67a206265"
+                  ],
+                  "GPU": [
+                    "6ede8dba-7e45-52a0-b979-24d86d11c3b3"
+                  ],
+                  "PSU": [
+                    "179d0369-7760-5f13-b523-790dd7286650"
+                  ],
+                  "CASE": [
+                    "22ce67d8-9d2a-5837-97f5-4d5a8f942d79"
+                  ],
+                  "COOLER": [
+                    "c7e84ea3-d083-54a0-8f4d-6c18b2dbb441"
+                  ],
+                  "STORAGE": [
+                    "248efce5-cf44-5a79-8527-6a21f00e4f65"
+                  ]
+                }
+              },
+              "search_policy_hash": "3e1fe9a7b7f8a446aa742e89cef224f23b5361132bc215e1405a6ffc32cd7728"
+            },
+            "satisfaction": {
+              "state_hash": "bde743fbc2bc385f6b45c5969f0b0c2307d387cdfad13e55e6d0ec1277f9d67a",
+              "results": [
+                {
+                  "requirement_id": "3838bfe5-ae6c-516b-bc59-b9801b229026",
+                  "satisfied": true,
+                  "strength": "HARD",
+                  "reason": "SATISFIED"
+                },
+                {
+                  "requirement_id": "51f61416-56c8-5a05-b4d0-ef5bf083e0a8",
+                  "satisfied": true,
+                  "strength": "HARD",
+                  "reason": "SATISFIED"
+                }
+              ]
+            },
+            "search_evidence": {
+              "outcome": "FEASIBLE",
+              "scope": "SUPPLIED_NORMALIZED_CANDIDATES",
+              "requirements_hash": "7392a1bd302132e7b8878b1146ff343508234536457f3712fcdb7b51825c0a87",
+              "optimizer_input_hash": "85edf15800d0b2c5ae08ea1222aeb0f073ba83a9303a5ec2cdacf4ac519eb27c",
+              "catalog_snapshot_hash": "1c701b9cf28a3716cd0c728dfd57983fbe156b57de7ef587cb8caa4dd65c1402",
+              "algorithm_version": "deterministic-enumeration-v3",
+              "pruning_version": "compatibility-aware-pareto-v2",
+              "policy_version": "3e1fe9a7b7f8a446aa742e89cef224f23b5361132bc215e1405a6ffc32cd7728",
+              "search_complete": true,
+              "coverage_complete": true,
+              "pruning_sound": true,
+              "termination": "FOUND_RESULT",
+              "build_ref": "566adcdc-c0a5-5708-b681-257108296932",
+              "schema_version": 2
+            },
+            "tool": "build_pc"
+          },
+          "evidence_refs": [
+            "build:566adcdc-c0a5-5708-b681-257108296932"
+          ],
+          "schema_version": 1
+        },
+        "origin_run_id": "6e5f40a2-0923-5274-8adc-8cb13438fcdb"
+      }
+    ]
+  }
+}

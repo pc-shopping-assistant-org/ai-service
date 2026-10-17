@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "dataset_id": "gearpc-pilot-v1",
+  "runtime_contract": "react-v2",
+  "source": "AUTHORED_SYNTHETIC",
+  "files": {
+    "samples.jsonl": "f22c99613132ae5f6dc51821c294c37c45a6de4316af632243f6fd912a774236",
+    "snapshots.json": "ca51df951c05f3aab2bf5e7d9bde8629af731e7ebeae7f2b22058a23ff002bcb"
+  }
+}
