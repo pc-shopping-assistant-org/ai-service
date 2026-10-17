@@ -82,7 +82,12 @@ and manual dispatch. It installs locked dependencies, runs Ruff/mypy/core pytest
 then applies Alembic and native saver bootstrap to a disposable PostgreSQL18 database
 before running `integration_tests`. No live model/auth/catalog credentials are needed.
 
-Image builds wait for verification: PRs build without publishing; main pushes,
-`v*` tags and manual dispatch may publish to GHCR. Other branch/tag pushes and merge
-queues verify only. To block merging on failure, select `Verify Python service` as
-a required check in GitHub branch rules. This workflow does not edit those rules.
+Only pushes/manual dispatches on the exact `release` branch build/publish an image,
+tagged `release` and `sha-<full commit>`. Other branches/tags, PRs and merge queues
+verify only. Release then SSHes to the server: pull AI image, stop the old executor,
+run Alembic/checkpointer bootstrap, start AI and wait for health. Server env comes
+from `infra/.env.docker`, never from an env file baked into the image. Configure
+Environment `release` SSH variables/secrets using `../infra/README.md`.
+Select `Verify Python service` as a required branch check; no branch rules are
+modified by this workflow. Migration failures require operator action, not an
+automatic schema rollback.
