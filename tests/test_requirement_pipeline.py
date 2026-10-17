@@ -189,9 +189,9 @@ def test_owned_resource_is_not_implicitly_selected_or_free(realistic_catalog):
     )
 
 
-def test_unsupported_soft_model_preference_is_not_silently_dropped(realistic_catalog):
+def test_unsupported_soft_noise_preference_is_not_silently_dropped(realistic_catalog):
     preferred = requirement(
-        "GPU", "model", TextValue(text="RTX 5070 Ti"), strength="SOFT"
+        "GPU", "noise", TextValue(text="Quiet"), strength="SOFT"
     )
     compiled = compile_requirements(state(preferred), rows(realistic_catalog))
     assert not compiled.ready and compiled.optimizer_input is None

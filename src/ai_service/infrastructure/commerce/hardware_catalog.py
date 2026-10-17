@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, JsonValue, StrictBool, model_validator
 
 from ai_service.application.call_attempts import AttemptBoundary
 from ai_service.application.errors import BackendUnavailableError
+from ai_service.application.ports.accessories import AccessorySpec, AccessoryType
 from ai_service.application.ports.hardware import ComponentCategory, ComponentSpec
 from ai_service.capabilities.assistant.provenance import CatalogRowV1, canonical_hash
 from ai_service.capabilities.assistant.requirements.contracts import (
@@ -26,7 +27,7 @@ SPEC_FIELDS = (
 
 class HardwareCatalogMapping(Contract):
     version: str = Field(default="catalog-hardware-v1", min_length=1)
-    categories: dict[UUID, ComponentCategory] = Field(min_length=1)
+    categories: dict[UUID, ComponentCategory | AccessoryType] = Field(min_length=1)
     # Destination canonical field -> source product attribute key.
     spec_fields: dict[str, str] = Field(default_factory=dict)
     # Option IDs are stable even though the current backend DTO omits option type.
@@ -179,14 +180,25 @@ class BackendRequirementCatalog(BackendProductCatalog):
                 if "storage_media" in specs
                 else {}
             )
-            component = ComponentSpec.model_validate(
+            category = self.mapping.categories[detail.category_id]
+            component = (
+                ComponentSpec
+                if isinstance(category, ComponentCategory)
+                else AccessorySpec
+            ).model_validate(
                 {
-                    **specs,
+                    **(
+                        specs
+                        if isinstance(category, ComponentCategory)
+                        else {"brand": detail.brand_name}
+                    ),
                     "id": variant.id,
                     "name": variant.model or detail.name,
-                    "category": self.mapping.categories[detail.category_id],
+                    "category": category,
                     "price": variant.price,
-                    "extra_specs": extra,
+                    "extra_specs": extra
+                    if isinstance(category, ComponentCategory)
+                    else detail.specifications,
                 },
                 strict=True,
             )

@@ -58,7 +58,12 @@ def search_report(
     found = receipt.outcome == "BUILT"
     if found:
         verify_receipt(state, receipt, catalog)
-    proven = trace.enumeration_complete and coverage and pruning_sound
+    # Accessory selection is a staged policy, not exhaustive joint core/setup search.
+    # A failed chosen allocation must not prove all other accessory selections infeasible.
+    unbound_accessories = compiled.setup is not None and any(
+        not item.owned and not item.pinned for item in compiled.setup.accessories
+    )
+    proven = trace.enumeration_complete and coverage and pruning_sound and not unbound_accessories
     return BuildSearchEvidence(
         outcome="FEASIBLE"
         if found
@@ -75,7 +80,7 @@ def search_report(
         pruning_version="compatibility-aware-pareto-v2",
         policy_version=receipt.search_policy_hash,
         search_complete=trace.enumeration_complete,
-        coverage_complete=coverage,
+        coverage_complete=coverage and not unbound_accessories,
         pruning_sound=pruning_sound,
         termination="FOUND_RESULT"
         if found

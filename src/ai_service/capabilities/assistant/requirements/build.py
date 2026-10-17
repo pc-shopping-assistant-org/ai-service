@@ -126,7 +126,9 @@ def grounded_summary(receipt: BuildReceipt, report: SatisfactionReport | None) -
         )
     if report is None or not report.hard_satisfied or receipt.build is None:
         raise ValueError("Cannot explain an unverified build")
-    lines = [f"Tổng chi phí linh kiện: {receipt.build.total_price:,} VND."]
+    setup = receipt.compilation.setup
+    total = receipt.build.total_price + (setup.spending if setup else 0)
+    lines = [f"Tổng chi phí linh kiện: {total:,} VND."]
     for slot, part in sorted(receipt.build.parts.items()):
         capacity = (
             f"; dung lượng {part.capacity_gb} GB"
@@ -136,4 +138,16 @@ def grounded_summary(receipt: BuildReceipt, report: SatisfactionReport | None) -
         lines.append(
             f"{slot.value}: {part.name}{capacity}; chi phí {receipt.build.spending_prices[slot]:,} VND."
         )
+    if setup:
+        lines.extend(
+            f"{item.row.component.category.value}: {item.row.component.name}; chi phí {item.spending:,} VND."
+            for item in setup.accessories
+        )
+    mappings = {item.requirement_id: item for item in receipt.compilation.mapping}
+    for result in report.results:
+        if result.strength == "SOFT" and not result.satisfied:
+            mapping = mappings[result.requirement_id]
+            lines.append(
+                f"Ưu tiên chưa đáp ứng: {mapping.subject} ({mapping.predicate}); chưa thỏa hoặc thiếu dữ liệu."
+            )
     return "\n".join(lines)

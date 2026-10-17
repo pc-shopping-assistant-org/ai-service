@@ -22,6 +22,9 @@ from pydantic import (
     model_validator,
 )
 
+from ai_service.application.ports.accessories import (
+    AccessoryType as AccessoryType,  # noqa: PLC0414 - public contract re-export
+)
 from ai_service.application.ports.hardware import ComponentCategory, ResolutionTier
 from ai_service.capabilities.assistant.limits import MAX_TURN_MESSAGE_CHARS
 from ai_service.capabilities.pc_builder.schemas import UseCaseProfile
@@ -90,13 +93,6 @@ class OwnedPartRefV1(Contract):
         if value is not True:
             raise ValueError("V1 owned parts are always excluded from spending")
         return value
-
-
-class AccessoryType(StrEnum):
-    MONITOR = "MONITOR"
-    MOUSE = "MOUSE"
-    KEYBOARD = "KEYBOARD"
-    HEADSET = "HEADSET"
 
 
 class AccessoryRequestV1(Contract):

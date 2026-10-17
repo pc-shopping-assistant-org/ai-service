@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import Field, StrictInt, model_validator
 
+from ai_service.application.ports.accessories import AccessoryType
 from ai_service.application.ports.hardware import ComponentCategory
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.stateful_contracts import (
@@ -13,7 +14,7 @@ from ai_service.capabilities.assistant.stateful_contracts import (
     Text,
 )
 
-Subject = Literal["SETUP", "WORKLOAD"] | ComponentCategory
+Subject = Literal["SETUP", "WORKLOAD"] | ComponentCategory | AccessoryType
 
 
 class SourceEvidence(Contract):

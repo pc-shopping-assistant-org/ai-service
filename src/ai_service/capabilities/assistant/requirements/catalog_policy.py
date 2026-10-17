@@ -6,7 +6,13 @@ from .compiler import compile_requirements
 from .contracts import CanonicalRequirementState
 from .resolver import Draft
 
-CATALOG_DEPENDENT_REASONS = frozenset({"VARIANT_NOT_RESOLVED", "METADATA_INSUFFICIENT"})
+CATALOG_DEPENDENT_REASONS = frozenset(
+    {
+        "VARIANT_NOT_RESOLVED",
+        "METADATA_INSUFFICIENT",
+        "ACCESSORY_UNAVAILABLE_OR_METADATA_MISSING",
+    }
+)
 REFERENCE_PREDICATES = frozenset({"identity", "use_resource"})
 
 

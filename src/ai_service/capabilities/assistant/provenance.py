@@ -16,6 +16,7 @@ from pydantic import (
     model_validator,
 )
 
+from ai_service.application.ports.accessories import AccessorySpec
 from ai_service.application.ports.hardware import ComponentCategory, ComponentSpec
 from ai_service.capabilities.assistant.conversation_core import (
     CompletedOptimizationV1,
@@ -61,7 +62,7 @@ class CatalogRowV1(Contract):
     product_status: Literal["ACTIVE"]
     variant_status: Literal["ACTIVE"]
     quantity: NonNegativeInt
-    component: ComponentSpec
+    component: ComponentSpec | AccessorySpec
     retrieved_at: AwareDatetime
     backend_revision: Text | None = None
     evidence_refs: list[Text] = Field(min_length=1)
@@ -234,7 +235,7 @@ class ReplaySnapshotV1(Contract):
                     )
         for source in self.normalized_input.synthetic_sources:
             parent = catalog_by_id.get(source.parent_variant_id)
-            if parent is None or parent.component.category != ComponentCategory.CPU:
+            if parent is None or not isinstance(parent.component, ComponentSpec) or parent.component.category != ComponentCategory.CPU:
                 raise ValueError("Synthetic source requires canonical CPU parent")
             if source.kind == "INTEGRATED_GPU":
                 valid = (

@@ -101,6 +101,60 @@ async def test_variant_capacity_price_stock_and_visibility_are_canonical():
 
 
 @pytest.mark.asyncio
+async def test_accessory_taxonomy_maps_canonical_price_without_fake_core_category():
+    from ai_service.application.ports.accessories import AccessorySpec
+
+    category, product, variant = uuid4(), uuid4(), uuid4()
+
+    def respond(request):
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "items": [
+                        {
+                            "id": str(product),
+                            "name": "Mouse",
+                            "categoryId": str(category),
+                            "brandName": "Logitech",
+                            "status": "ACTIVE",
+                            "specifications": {},
+                            "variants": [
+                                {
+                                    "id": str(variant),
+                                    "productId": str(product),
+                                    "sku": "GEAR-1",
+                                    "price": 500_000,
+                                    "quantity": 2,
+                                    "status": "ACTIVE",
+                                }
+                            ],
+                        }
+                    ],
+                    "hasNext": False,
+                    "nextCursor": None,
+                },
+                "message": "SUCCESS",
+                "errors": [],
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        catalog = BackendRequirementCatalog(
+            client,
+            "https://catalog.test",
+            Budget(),
+            HardwareCatalogMapping(categories={category: "MOUSE"}),
+        )
+        result = await catalog.load(Draft(items=[]), CanonicalRequirementState())
+    assert len(result) == 1
+    assert isinstance(result[0].component, AccessorySpec)
+    assert result[0].component.id == variant
+    assert result[0].component.category == "MOUSE"
+    assert result[0].component.price == 500_000
+
+
+@pytest.mark.asyncio
 async def test_candidate_scan_uses_all_pages_and_rejects_truncation():
     category, p1, p2 = uuid4(), uuid4(), uuid4()
 

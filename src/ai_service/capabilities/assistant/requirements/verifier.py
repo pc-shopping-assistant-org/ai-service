@@ -4,6 +4,7 @@ from uuid import UUID, uuid5
 
 from pydantic import Field
 
+from ai_service.application.ports.accessories import AccessorySpec, AccessoryType
 from ai_service.application.ports.hardware import ComponentCategory, ComponentSpec
 from ai_service.capabilities.assistant.provenance import CatalogRowV1, canonical_hash
 from ai_service.capabilities.assistant.stateful_contracts import Contract
@@ -15,13 +16,14 @@ from ai_service.capabilities.pc_builder.optimizer import (
 )
 from ai_service.capabilities.pc_builder.schemas import RankedBuild, UseCaseProfile
 
-from .compiler import Compilation
+from .compiler import Compilation, predicate_value
 from .contracts import (
     CanonicalRequirementState,
     QuantityValue,
     ReferenceValue,
     TextValue,
 )
+from .setup import accessory_match
 
 
 class Satisfaction(Contract):
@@ -159,6 +161,55 @@ def verify_satisfaction(
         spending += actual_spending
     if spending != build.total_price or set(build.owned_categories) != expected_owned:
         report.errors.append("TOTAL_OR_OWNED_MISMATCH")
+    accessory_spending = 0
+    accessories: dict[AccessoryType, AccessorySpec] = {}
+    if compilation.setup:
+        for item in compilation.setup.accessories:
+            row = rows.get(item.row.variant_id)
+            accessory = item.row.component
+            if (
+                not isinstance(accessory, AccessorySpec)
+                or row != item.row
+                or accessory.category in accessories
+            ):
+                report.errors.append("ACCESSORY_NOT_CANONICAL_OR_DUPLICATE")
+                continue
+            rules = [r for r in requirements if r.subject == accessory.category]
+            is_owned = any(
+                r.predicate == "use_resource"
+                and isinstance(r.value, ReferenceValue)
+                and r.value.variant_id == accessory.id
+                for r in rules
+            )
+            is_pinned = any(
+                r.predicate == "identity"
+                and isinstance(r.value, ReferenceValue)
+                and r.value.variant_id == accessory.id
+                for r in rules
+            )
+            if (
+                item.owned != is_owned
+                or item.pinned != is_pinned
+                or (
+                    is_owned
+                    and accessory.id
+                    not in {
+                        resource.variant_id
+                        for resource in state.available_resources.values()
+                    }
+                )
+                or (not is_owned and row.quantity == 0)
+                or not rules
+            ):
+                report.errors.append("ACCESSORY_BINDING_OR_STOCK_MISMATCH")
+            accessories[accessory.category] = accessory
+            accessory_spending += 0 if is_owned else accessory.price
+        if set(accessories) != {
+            AccessoryType(r.subject)
+            for r in requirements
+            if r.subject in set(AccessoryType)
+        }:
+            report.errors.append("ACCESSORY_SLOT_MISMATCH")
     for r in requirements:
         value = r.value
         ok = False
@@ -169,7 +220,28 @@ def verify_satisfaction(
             and isinstance(value, QuantityValue)
             and value.unit == "VND"
         ):
-            ok = spending <= value.amount
+            ok = spending + accessory_spending <= value.amount
+        elif (
+            r.subject == "SETUP"
+            and r.predicate == "accessory_budget"
+            and isinstance(value, QuantityValue)
+        ):
+            ok = accessory_spending <= value.amount
+        elif (
+            r.subject == "SETUP"
+            and r.predicate == "scope"
+            and isinstance(value, TextValue)
+        ):
+            ok = (
+                compilation.setup is not None
+                and compilation.setup.scope.value == value.text
+            )
+        elif r.subject in set(AccessoryType):
+            selected_accessory = accessories.get(AccessoryType(r.subject))
+            ok = (
+                selected_accessory is not None
+                and accessory_match(r, selected_accessory) is True
+            )
         elif (
             r.subject == "WORKLOAD"
             and r.predicate == "use_case"
@@ -180,7 +252,9 @@ def verify_satisfaction(
             category = ComponentCategory(r.subject)
             selected = build.parts.get(category)
             if selected is not None:
-                if r.predicate in ("identity", "use_resource") and isinstance(
+                if r.predicate == "model" and r.strength == "SOFT":
+                    ok = predicate_value(r, selected) is True
+                elif r.predicate in ("identity", "use_resource") and isinstance(
                     value, ReferenceValue
                 ):
                     ok = selected.id == value.variant_id and (

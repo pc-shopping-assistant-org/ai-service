@@ -27,8 +27,9 @@ from .contracts import (
     Requirement,
     TextValue,
 )
+from .setup import SetupPlan, compile_setup
 
-COMPILER_VERSION: Literal["requirements-v1"] = "requirements-v1"
+COMPILER_VERSION: Literal["requirements-v2"] = "requirements-v2"
 
 
 class Mapping(Contract):
@@ -42,10 +43,13 @@ class Mapping(Contract):
 
 
 class Compilation(Contract):
-    compiler_version: Literal["requirements-v1"] = COMPILER_VERSION
+    compiler_version: Literal["requirements-v1", "requirements-v2"] = COMPILER_VERSION
     state_hash: Text
     mapping: list[Mapping]
     optimizer_input: OptimizerInputV1 | None = None
+    setup: SetupPlan | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @property
     def ready(self) -> bool:
@@ -59,6 +63,11 @@ def predicate_value(requirement: Requirement, part: ComponentSpec) -> bool | Non
     value = requirement.value
     if requirement.predicate == "identity" and isinstance(value, ReferenceValue):
         return part.id == value.variant_id
+    if requirement.predicate == "model" and isinstance(value, TextValue):
+        # Canonical variant/model name only, not an inferred performance tier.
+        needle = "".join(char for char in value.text.casefold() if char.isalnum())
+        name = "".join(char for char in part.name.casefold() if char.isalnum())
+        return bool(needle) and needle in name
     if requirement.predicate == "capacity" and isinstance(value, QuantityValue):
         if value.unit not in ("GB", "TB") or part.capacity_gb is None:
             return None
@@ -96,6 +105,8 @@ def compile_requirements(
     pinned: dict[ComponentCategory, UUID] = {}
     owned: dict[ComponentCategory, UUID] = {}
     predicates: dict[ComponentCategory, list[Requirement]] = {}
+    soft: list[Requirement] = []
+    setup, setup_decisions, setup_problems = compile_setup(state, catalog)
 
     def outcome(
         r: Requirement,
@@ -120,8 +131,39 @@ def compile_requirements(
         [*state.goals.values(), *state.requirements.values()], key=lambda r: str(r.id)
     ):
         v = r.value
-        if r.strength == "SOFT":
-            outcome(r, "UNSUPPORTED", "SOFT_SCORER_NOT_IMPLEMENTED")
+        if r.id in setup_decisions:
+            status, reason = setup_decisions[r.id]
+            outcome(r, status, reason)
+        elif r.strength == "SOFT":
+            supported = r.subject in set(ComponentCategory) and (
+                (
+                    r.predicate in ("brand", "model")
+                    and r.operator == "EQ"
+                    and isinstance(v, TextValue)
+                )
+                or (
+                    r.predicate == "identity"
+                    and r.operator == "EQ"
+                    and isinstance(v, ReferenceValue)
+                )
+                or (
+                    r.predicate == "capacity"
+                    and r.subject in ("RAM", "STORAGE")
+                    and isinstance(v, QuantityValue)
+                    and v.unit in ("GB", "TB")
+                )
+                or (
+                    r.predicate == "media"
+                    and r.subject == "STORAGE"
+                    and r.operator == "EQ"
+                    and isinstance(v, TextValue)
+                )
+            )
+            if supported:
+                soft.append(r)
+                outcome(r, "APPLIED", "SOFT_UTILITY")
+            else:
+                outcome(r, "UNSUPPORTED", "SOFT_PREDICATE_NOT_SUPPORTED")
         elif (
             r.subject == "SETUP"
             and r.predicate == "budget"
@@ -243,13 +285,18 @@ def compile_requirements(
         )
 
     usable = [
-        row for row in catalog if row.quantity > 0 or row.variant_id in owned.values()
+        row
+        for row in catalog
+        if isinstance(row.component, ComponentSpec)
+        and (row.quantity > 0 or row.variant_id in owned.values())
     ]
     for category, rules in predicates.items():
         candidates = [row for row in usable if row.component.category == category]
         for rule in rules:
             if not candidates or all(
-                predicate_value(rule, row.component) is None for row in candidates
+                predicate_value(rule, row.component) is None
+                for row in candidates
+                if isinstance(row.component, ComponentSpec)
             ):
                 mapping = [
                     m.model_copy(
@@ -263,9 +310,9 @@ def compile_requirements(
                     for m in mapping
                 ]
             bound_id = pinned.get(category) or owned.get(category)
-            if (
-                bound_id is not None
-                and predicate_value(rule, by_id[bound_id].component) is not True
+            if bound_id is not None and (
+                not isinstance(bound_part := by_id[bound_id].component, ComponentSpec)
+                or predicate_value(rule, bound_part) is not True
             ):
                 mapping = [
                     m.model_copy(
@@ -282,30 +329,61 @@ def compile_requirements(
             row
             for row in usable
             if row.component.category != category
-            or all(predicate_value(rule, row.component) is True for rule in rules)
+            or (
+                isinstance(row.component, ComponentSpec)
+                and all(predicate_value(rule, row.component) is True for rule in rules)
+            )
         ]
+    mapping.extend(
+        Mapping(requirement_id=None, status=status, reason=reason)
+        for status, reason in setup_problems
+    )
+    if setup and budget is not None and setup.spending > budget:
+        mapping.append(
+            Mapping(
+                requirement_id=None, status="CONFLICT", reason="SETUP_BUDGET_EXCEEDED"
+            )
+        )
     result = Compilation(
-        state_hash=canonical_hash(state.model_dump(mode="json")), mapping=mapping
+        state_hash=canonical_hash(state.model_dump(mode="json")),
+        mapping=mapping,
+        setup=setup,
     )
     if any(m.status != "APPLIED" for m in mapping):
         return result
     assert budget is not None and use_case is not None
     constraints = PCBuildConstraints(
         target_budget_vnd=ConstraintValue[int](
-            value=budget, source=ConstraintSource.USER
+            value=budget - (setup.spending if setup else 0),
+            source=ConstraintSource.USER,
         ),
         use_case=ConstraintValue[UseCaseProfile](
             value=use_case, source=ConstraintSource.USER
         ),
         pinned_parts=pinned,
+        preference_scores={
+            row.variant_id: sum(
+                predicate_value(rule, row.component) is True
+                for rule in soft
+                if rule.subject == row.component.category
+                and isinstance(row.component, ComponentSpec)
+            )
+            / len(soft)
+            for row in usable
+        }
+        if soft
+        else {},
         owned_parts=[
-            OwnedComponent(category=category, component=by_id[identifier].component)
+            OwnedComponent(category=category, component=part)
             for category, identifier in owned.items()
+            if isinstance(part := by_id[identifier].component, ComponentSpec)
         ],
     )
     result.optimizer_input = OptimizerInputV1(
         constraints=constraints,
-        candidates=[row.component for row in usable],
+        candidates=[
+            row.component for row in usable if isinstance(row.component, ComponentSpec)
+        ],
         pinned_parts=pinned,
         effective_spending_vnd={
             row.variant_id: 0

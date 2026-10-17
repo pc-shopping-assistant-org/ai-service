@@ -165,10 +165,13 @@ class Extractor:
 
 
 class Model:
-    def __init__(self, missing_unit=False, missing_reference=False, multi=False):
+    def __init__(
+        self, missing_unit=False, missing_reference=False, multi=False, full_setup=False
+    ):
         self.missing_unit = missing_unit
         self.missing_reference = missing_reference
         self.multi = multi
+        self.full_setup = full_setup
 
     async def decide(self, message, transcript, allowed, repair, context=None):
         if message == "Explain saved build":
@@ -228,6 +231,31 @@ class Model:
                         end=len(source) + len(" RAM 32"),
                         value={"kind": "UNRESOLVED_QUANTITY", "amount": 32},
                     )
+                )
+            if self.full_setup:
+                from ai_service.capabilities.assistant.requirements.resolver import (
+                    DraftItem,
+                )
+
+                source_text = decision.action.source_text
+                decision.action.source_text += " FULL_SETUP Canonical Mouse"
+                decision.action.draft.items.extend(
+                    [
+                        DraftItem(
+                            subject="SETUP",
+                            predicate="scope",
+                            start=len(source_text) + 1,
+                            end=len(source_text) + len(" FULL_SETUP"),
+                            value={"kind": "TEXT", "text": "FULL_SETUP"},
+                        ),
+                        DraftItem(
+                            subject="MOUSE",
+                            predicate="identity",
+                            start=len(source_text) + len(" FULL_SETUP "),
+                            end=len(decision.action.source_text),
+                            value={"kind": "TEXT", "text": "Canonical Mouse"},
+                        ),
+                    ]
                 )
             if self.missing_reference:
                 from ai_service.capabilities.assistant.requirements.resolver import (
@@ -326,6 +354,7 @@ class CountingService(PCBuildApplicationService):
         "UNIT_AMEND",
         "UNIT_DISCARD",
         "MULTI",
+        "FULL_SETUP",
     ],
 )
 async def test_managed_confirmation_build_and_saved_explanation_preserve_snapshot(
@@ -349,6 +378,24 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
         None,
     )
     service, extractor, catalog = CountingService(), Extractor(multi), hardware()
+    if selection == "FULL_SETUP":
+        from ai_service.application.ports.accessories import AccessorySpec
+
+        mouse_id = uuid4()
+        catalog.append(
+            catalog[0].model_copy(
+                update={
+                    "variant_id": mouse_id,
+                    "sku": "MOUSE-FIXTURE",
+                    "component": AccessorySpec(
+                        id=mouse_id,
+                        category="MOUSE",
+                        name="Canonical Mouse",
+                        price=500_000,
+                    ),
+                }
+            )
+        )
 
     class Reader:
         calls = 0
@@ -516,7 +563,12 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                 )
                 products = Products()
                 graph = build_flexible_graph(
-                    Model(missing_unit, missing_reference, multi),
+                    Model(
+                        missing_unit,
+                        missing_reference,
+                        multi,
+                        selection == "FULL_SETUP",
+                    ),
                     ToolDispatcher(
                         products, service, reader=web_reader if multi else None
                     ),
@@ -710,6 +762,14 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                     for part in built.public_build.parts
                 )
             historical = built.public_build.model_dump(mode="json")
+            if selection == "FULL_SETUP":
+                mouse = next(
+                    part for part in built.public_build.parts if part.slot == "MOUSE"
+                )
+                assert mouse.variant_id == mouse_id and mouse.spending_vnd == 500_000
+                catalog[
+                    -1
+                ].component.price = 999_999  # history must not use current catalog
             explained = await run(
                 TurnRequestV2(
                     conversation_id=conversation.id,

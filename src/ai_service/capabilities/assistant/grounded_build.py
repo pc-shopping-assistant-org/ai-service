@@ -11,6 +11,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
 
+from ai_service.application.ports.hardware import ComponentSpec
 from ai_service.capabilities.assistant.conversation_core import (
     ConsultationStateV1,
     SetupBudgetV1,
@@ -140,7 +141,7 @@ def prepare_build_input(
             core_row = by_id.get(ref.variant_id)
             if core_row is None:
                 reasons.append(ClarificationReason.PART_REFERENCE_REQUIRED)
-            elif core_row.component.category != category:
+            elif not isinstance(core_row.component, ComponentSpec) or core_row.component.category != category:
                 reasons.append(ClarificationReason.PART_CATEGORY_MISMATCH)
             elif not is_owned and core_row.quantity == 0:
                 reasons.append(ClarificationReason.PIN_UNAVAILABLE)
@@ -175,7 +176,7 @@ def prepare_build_input(
     )
     normalized = OptimizerInputV1(
         constraints=constraints,
-        candidates=[row.component for row in available],
+        candidates=[row.component for row in available if isinstance(row.component, ComponentSpec)],
         pinned_parts=constraints.pinned_parts,
         effective_spending_vnd={
             row.variant_id: 0 if row.variant_id in owned_ids else row.component.price

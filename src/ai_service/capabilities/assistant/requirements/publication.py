@@ -1,5 +1,6 @@
 """Public projection of verified requirements/build; never a second state authority."""
 
+from ai_service.application.ports.accessories import AccessorySpec
 from ai_service.application.ports.hardware import ComponentCategory
 from ai_service.capabilities.assistant.conversation_core import ConsultationStateV1
 from ai_service.capabilities.assistant.provenance import canonical_hash
@@ -8,6 +9,7 @@ from ai_service.capabilities.assistant.public_contracts import (
     PublicBuildV1,
 )
 from ai_service.capabilities.assistant.stateful_contracts import (
+    AccessoryRequestV1,
     OwnedPartRefV1,
     PinnedPartRefV1,
 )
@@ -69,6 +71,31 @@ def public_projection(
         if compilation
         else None
     )
+    setup = (
+        receipt.compilation.setup
+        if receipt
+        else compilation.setup
+        if compilation
+        else None
+    )
+    if setup:
+        consultation.constraints.budget_scope = ConstraintValue(
+            value=setup.scope, source=ConstraintSource.USER
+        )
+    accessory_caps = [
+        r.value.amount
+        for r in requirements
+        if r.subject == "SETUP"
+        and r.predicate == "accessory_budget"
+        and r.operator == "LTE"
+        and r.strength == "HARD"
+        and isinstance(r.value, QuantityValue)
+        and r.value.unit == "VND"
+    ]
+    if accessory_caps:
+        consultation.constraints.accessory_budget_vnd = ConstraintValue(
+            value=min(accessory_caps), source=ConstraintSource.USER
+        )
     if normalized is not None:
         consultation.owned_parts = {
             part.category: OwnedPartRefV1(variant_id=part.component.id)
@@ -79,6 +106,21 @@ def public_projection(
             slot: PinnedPartRefV1(variant_id=identity)
             for slot, identity in normalized.constraints.pinned_parts.items()
         }
+        if setup:
+            consultation.accessories = {
+                item.row.component.category: AccessoryRequestV1(
+                    kind="OWNED"
+                    if item.owned
+                    else "PINNED"
+                    if item.pinned
+                    else "RECOMMEND",
+                    variant_id=item.row.variant_id
+                    if item.owned or item.pinned
+                    else None,
+                )
+                for item in setup.accessories
+                if isinstance(item.row.component, AccessorySpec)
+            }
     elif compilation is not None:
         # Partial requirements need no invented optimizer receipt. Only bindings
         # independently admitted by the compiler can enter this legacy view.
@@ -135,10 +177,23 @@ def public_projection(
                 is_pinned=slot in consultation.pinned_parts,
             )
         )
+    setup = receipt.compilation.setup
+    if setup:
+        parts.extend(
+            PublicBuildPartV1(
+                slot=item.row.component.category,
+                variant_id=item.row.variant_id,
+                name=item.row.component.name,
+                spending_vnd=item.spending,
+                is_owned=item.owned,
+                is_pinned=item.pinned,
+            )
+            for item in setup.accessories
+        )
     published = PublicBuildV1(
         objective=build.objective,
         parts=parts,
-        total_spending_vnd=build.total_price,
+        total_spending_vnd=build.total_price + (setup.spending if setup else 0),
         stale=False,
     )
     consultation.published_build_hash = canonical_hash(published)
