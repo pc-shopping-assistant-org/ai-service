@@ -47,6 +47,7 @@ from ai_service.infrastructure.persistence.conversations import (
     PostgresConversationStore,
 )
 from ai_service.infrastructure.persistence.runs import PostgresRunCoordinator
+from ai_service.infrastructure.persistence.user_memory import PostgresUserMemoryStore
 from ai_service.infrastructure.providers.factory import build_model_provider
 from ai_service.infrastructure.providers.react_model import (
     NativeFlexibleModel,
@@ -193,6 +194,9 @@ async def open_build_runtime(
                 conversation_id=claim.conversation_id,
                 run_id=claim.run_id,
                 requirements=accepted.requirement_state,
+                memories=await PostgresUserMemoryStore(engine).list(
+                    await coordinator.owner(claim)
+                ),
                 read_catalog_allowed=True,
                 execution_allowed=True,
                 catalog=catalog,

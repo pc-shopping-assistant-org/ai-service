@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import httpx
 
 from ai_service.application.ports.stateful_conversation import AccessTokenVerifier
+from ai_service.application.ports.user_memory import UserMemoryStore
 from ai_service.application.use_cases.run_events import StatefulRunEventService
 from ai_service.application.use_cases.stateful_conversations import (
     StatefulConversationService,
@@ -27,6 +28,7 @@ class StatefulResources:
     authenticator: AccessTokenVerifier
     runs: StatefulRunService | None = None
     events: StatefulRunEventService | None = None
+    memories: UserMemoryStore | None = None
 
 
 @asynccontextmanager
@@ -47,7 +49,7 @@ async def open_stateful_resources(settings: Settings):
                     text("SELECT version_num FROM alembic_version")
                 )
             ).scalar_one()
-            if version != "0005_event_payload":
+            if version != "0006_user_memory":
                 raise RuntimeError(
                     "AI application migration revision does not match this release"
                 )
@@ -78,9 +80,14 @@ async def open_stateful_resources(settings: Settings):
             )
 
             async with open_build_runtime(settings, engine, saver, client) as runs:
+                from ai_service.infrastructure.persistence.user_memory import (
+                    PostgresUserMemoryStore,
+                )
+
                 yield StatefulResources(
                     resources.conversations,
                     resources.authenticator,
                     runs,
                     StatefulRunEventService(PostgresRunEventStore(engine), runs.store),
+                    PostgresUserMemoryStore(engine),
                 )

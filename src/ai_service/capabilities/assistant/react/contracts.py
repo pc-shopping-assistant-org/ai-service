@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, JsonValue, StrictInt, model_validator
 
+from ai_service.application.ports.user_memory import MAX_MEMORIES, MemoryEntry
 from ai_service.application.ports.web_search import (
     ExtractedWebFact,
     WebExtractionStatus,
@@ -458,6 +459,11 @@ class ToolContext(Contract):
     conversation_id: UUID
     run_id: UUID
     requirements: CanonicalRequirementState
+    memories: list[MemoryEntry] = Field(
+        default_factory=list,
+        max_length=MAX_MEMORIES,
+        exclude_if=lambda value: not value,
+    )
     catalog: list[CatalogRowV1] = Field(default_factory=list, max_length=100)
     read_catalog_allowed: bool
     execution_allowed: bool

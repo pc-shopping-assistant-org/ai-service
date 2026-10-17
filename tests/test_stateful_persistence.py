@@ -18,6 +18,7 @@ def test_application_schema_preserves_scoped_execution_and_message_invariants():
         "agent_call_budgets",
         "agent_call_attempts",
         "agent_run_events",
+        "user_memories",
     }
     assert "revision = 0 OR accepted_checkpoint_id IS NOT NULL" in sql
     assert "UNIQUE (conversation_id, request_id)" in sql

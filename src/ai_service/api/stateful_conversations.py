@@ -74,7 +74,9 @@ async def stateful_exception_handler(
         errors=[
             ErrorDetail(
                 code=exc.message.value,
-                message=details[exc.status_code],
+                message="Account memory limit reached; delete an entry before adding another"
+                if exc.message == ResponseMessage.AI_MEMORY_LIMIT_REACHED
+                else details[exc.status_code],
                 field=exc.field
                 or {400: "cursor", 422: "conversation_id"}.get(exc.status_code),
             )

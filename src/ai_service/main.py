@@ -112,6 +112,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application.exception_handler(StatefulApiError)(stateful_exception_handler)
     application.include_router(stateful_router, prefix="/api/v1")
+    from ai_service.api.user_memory import router as memory_router
+
+    application.include_router(memory_router, prefix="/api/v1")
     return application
 
 
