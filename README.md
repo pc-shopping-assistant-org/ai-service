@@ -84,10 +84,10 @@ before running `integration_tests`. No live model/auth/catalog credentials are n
 
 Only pushes/manual dispatches on the exact `release` branch build/publish an image,
 tagged `release` and `sha-<full commit>`. Other branches/tags, PRs and merge queues
-verify only. Release then SSHes to the server: pull AI image, stop the old executor,
-run Alembic/checkpointer bootstrap, start AI and wait for health. Server env comes
-from `infra/.env.docker`, never from an env file baked into the image. Configure
-Environment `release` SSH variables/secrets using `../infra/README.md`.
+verify only. This repository does not deploy. The infra repository's `release`
+workflow owns SSH deployment, stopping the old executor and running migrations
+before starting AI. Server env comes from `infra/.env.docker`, never from an env
+file baked into the image. Configure SSH only in infra; see `../infra/README.md`.
 Select `Verify Python service` as a required branch check; no branch rules are
 modified by this workflow. Migration failures require operator action, not an
 automatic schema rollback.
