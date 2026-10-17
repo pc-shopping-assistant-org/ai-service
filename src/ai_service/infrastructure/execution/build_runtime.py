@@ -75,7 +75,7 @@ async def open_build_runtime(
     saver: BaseCheckpointSaver,
     client: httpx.AsyncClient,
 ):
-    mapping = HardwareCatalogMapping.model_validate(settings.hardware_catalog_mapping)
+    mapping = HardwareCatalogMapping.model_validate(settings.hardware_catalog_mapping or {})
     provider = build_model_provider(settings)
     if provider is None:
         raise ValueError("Stateful execution requires a model provider")

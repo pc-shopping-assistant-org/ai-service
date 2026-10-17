@@ -23,6 +23,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         env_prefix="AI_",
+        env_ignore_empty=True,
         extra="ignore",
     )
 
@@ -44,8 +45,6 @@ class Settings(BaseSettings):
             raise ValueError("Stateful mode requires AI_DATABASE_URL and AI_JWT_JWKS_URL")
         if not self.database_url.get_secret_value().startswith("postgresql+psycopg://"):
             raise ValueError("AI_DATABASE_URL must use postgresql+psycopg")
-        if not self.hardware_catalog_mapping:
-            raise ValueError("Stateful execution requires hardware catalog mapping")
         if self.provider == AIProvider.QWEN:
             if self.qwen_base_url is None:
                 raise ValueError("Qwen requires AI_QWEN_BASE_URL")

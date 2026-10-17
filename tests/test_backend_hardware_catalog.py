@@ -16,6 +16,60 @@ from ai_service.infrastructure.commerce.hardware_catalog import (
 
 
 @pytest.mark.asyncio
+async def test_hardware_type_is_loaded_from_each_snapshot_without_category_env():
+    product, category = uuid4(), uuid4()
+    hardware_type: str | None = "RAM"
+
+    def respond(request):
+        return httpx.Response(
+            200,
+            json={
+                "message": "SUCCESS",
+                "errors": [],
+                "data": {
+                    "items": [
+                        {
+                            "id": str(product),
+                            "name": "Renamed product",
+                            "categoryId": str(category),
+                            "hardwareType": hardware_type,
+                            "status": "ACTIVE",
+                            "specifications": {},
+                            "variants": [
+                                {
+                                    "id": str(product),
+                                    "productId": str(product),
+                                    "sku": "PART",
+                                    "price": 100,
+                                    "quantity": 1,
+                                    "status": "ACTIVE",
+                                }
+                            ],
+                        }
+                    ],
+                    "hasNext": False,
+                    "nextCursor": None,
+                },
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        catalog = BackendRequirementCatalog(
+            client, "https://catalog.test", Budget(), HardwareCatalogMapping()
+        )
+        rows = await catalog.load(Draft(items=[]), CanonicalRequirementState())
+        assert rows[0].component.category == "RAM"
+        hardware_type = "GPU"
+        rows = await catalog.load(Draft(items=[]), CanonicalRequirementState())
+        assert rows[0].component.category == "GPU"
+        hardware_type = None
+        assert await catalog.load(Draft(items=[]), CanonicalRequirementState()) == []
+        hardware_type = "UNSUPPORTED"
+        with pytest.raises(BackendUnavailableError):
+            await catalog.load(Draft(items=[]), CanonicalRequirementState())
+
+
+@pytest.mark.asyncio
 async def test_variant_capacity_price_stock_and_visibility_are_canonical():
     category, product, capacity_option, first, second = (uuid4() for _ in range(5))
     other_capacity_option = uuid4()
@@ -60,6 +114,7 @@ async def test_variant_capacity_price_stock_and_visibility_are_canonical():
                     "id": str(product),
                     "name": "RAM",
                     "categoryId": str(category),
+                    "hardwareType": "RAM",
                     "status": "ACTIVE",
                     "specifications": {"ram_type": "DDR5", "capacity_gb": 16},
                     "variants": variants,
@@ -79,7 +134,6 @@ async def test_variant_capacity_price_stock_and_visibility_are_canonical():
             "https://catalog.test",
             budget,
             HardwareCatalogMapping(
-                categories={category: "RAM"},
                 option_fields={
                     capacity_option: "capacity_gb",
                     other_capacity_option: "capacity_gb",
@@ -116,6 +170,7 @@ async def test_accessory_taxonomy_maps_canonical_price_without_fake_core_categor
                             "id": str(product),
                             "name": "Mouse",
                             "categoryId": str(category),
+                            "hardwareType": "MOUSE",
                             "brandName": "Logitech",
                             "status": "ACTIVE",
                             "specifications": {},
@@ -144,7 +199,7 @@ async def test_accessory_taxonomy_maps_canonical_price_without_fake_core_categor
             client,
             "https://catalog.test",
             Budget(),
-            HardwareCatalogMapping(categories={category: "MOUSE"}),
+            HardwareCatalogMapping(),
         )
         result = await catalog.load(Draft(items=[]), CanonicalRequirementState())
     assert len(result) == 1
@@ -168,6 +223,7 @@ async def test_candidate_scan_uses_all_pages_and_rejects_truncation():
                     "id": str(identity),
                     "name": "GPU",
                     "categoryId": str(category),
+                    "hardwareType": "GPU",
                     "status": "ACTIVE",
                     "specifications": {},
                     "variants": [
@@ -194,7 +250,7 @@ async def test_candidate_scan_uses_all_pages_and_rejects_truncation():
             client,
             "https://catalog.test",
             Budget(),
-            HardwareCatalogMapping(categories={category: "GPU"}),
+            HardwareCatalogMapping(),
         )
         assert (
             len(await catalog.load(Draft(items=[]), CanonicalRequirementState())) == 2
@@ -203,7 +259,7 @@ async def test_candidate_scan_uses_all_pages_and_rejects_truncation():
             client,
             "https://catalog.test",
             Budget(),
-            HardwareCatalogMapping(categories={category: "GPU"}),
+            HardwareCatalogMapping(),
             max_rows=1,
         )
         with pytest.raises(BackendUnavailableError, match="bound"):
@@ -238,6 +294,7 @@ async def test_backend_snapshot_flows_into_real_optimizer_and_satisfaction(
             "name": part.name,
             "status": "ACTIVE",
             "categoryId": str(categories[part.category]),
+            "hardwareType": part.category,
             "specifications": specs,
             "variants": [
                 {
@@ -268,11 +325,7 @@ async def test_backend_snapshot_flows_into_real_optimizer_and_satisfaction(
             client,
             "https://catalog.test",
             budget,
-            HardwareCatalogMapping(
-                categories={
-                    identifier: category for category, identifier in categories.items()
-                }
-            ),
+            HardwareCatalogMapping(),
         )
         result = await build_requirement_graph(Extractor(), catalog).ainvoke(
             graph_input()

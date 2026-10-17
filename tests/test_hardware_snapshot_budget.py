@@ -46,6 +46,7 @@ async def test_sixteen_products_are_complete_without_exhausting_call_budget():
                             "id": str(p),
                             "name": "GPU",
                             "categoryId": str(category),
+                            "hardwareType": "GPU",
                             "status": "ACTIVE",
                             "specifications": {},
                             "variants": [
@@ -71,7 +72,7 @@ async def test_sixteen_products_are_complete_without_exhausting_call_budget():
             client,
             "https://catalog.test",
             budget,
-            HardwareCatalogMapping(categories={category: "GPU"}),
+            HardwareCatalogMapping(),
         )
         rows = await catalog.load(Draft(items=[]), CanonicalRequirementState())
     assert {r.variant_id for r in rows} == set(products)
@@ -113,7 +114,7 @@ async def test_summary_shaped_response_is_not_an_empty_hardware_snapshot():
             client,
             "https://catalog.test",
             Budget(),
-            HardwareCatalogMapping(categories={category: "GPU"}),
+            HardwareCatalogMapping(),
         )
         with pytest.raises(BackendUnavailableError, match="invalid"):
             await catalog.load(Draft(items=[]), CanonicalRequirementState())

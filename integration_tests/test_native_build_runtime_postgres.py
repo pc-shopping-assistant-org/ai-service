@@ -285,7 +285,6 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
         backend_api_url="https://catalog.test",
         database_url=postgres_dsn.replace("postgresql://", "postgresql+psycopg://", 1),
         jwt_jwks_url="http://identity.test/jwks",
-        hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}},
     )
     app = create_app(settings)
     conversation_id = None

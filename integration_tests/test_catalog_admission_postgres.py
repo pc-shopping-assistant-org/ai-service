@@ -104,7 +104,6 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
         backend_api_url="https://catalog.test",
         database_url=postgres_dsn.replace("postgresql://", "postgresql+psycopg://", 1),
         jwt_jwks_url="http://identity.test/jwks",
-        hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}},
     )
     app, conversation_id = create_app(settings), None
     try:

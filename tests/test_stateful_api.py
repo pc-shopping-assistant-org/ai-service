@@ -117,7 +117,6 @@ async def test_enabled_lifecycle_auth_owner_and_public_envelope(monkeypatch):
         database_url="postgresql+psycopg://postgres:postgres@localhost:5433/ai_db",
         jwt_jwks_url="http://identity.test/.well-known/jwks.json",
         provider="openai", openai_api_key="fixture",
-        hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}},
     )
     app = create_app(settings)
     async with app.router.lifespan_context(app):  # noqa: SIM117 - make lifecycle ordering explicit
@@ -203,16 +202,28 @@ def test_persistence_is_required_and_startup_requires_configuration():
         Settings(_env_file=None).require_stateful_configuration()
 
 
-def test_native_runtime_requires_explicit_model_and_mapping():
+def test_native_runtime_requires_explicit_model_but_not_category_mapping():
     base = {
         "_env_file": None,
         "database_url": "postgresql+psycopg://postgres:postgres@localhost:5433/ai_db",
         "jwt_jwks_url": "http://identity.test/jwks",
     }
-    with pytest.raises(ValueError, match="mapping"):
-        Settings(**base).require_stateful_configuration()
     with pytest.raises(ValueError, match="provider/key"):
-        Settings(**base, hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}}).require_stateful_configuration()
+        Settings(**base).require_stateful_configuration()
+    settings = Settings(**base, provider="openai", openai_api_key="test-key")
+    assert settings.require_stateful_configuration() is settings
+
+
+def test_blank_optional_mapping_env_from_compose_does_not_break_startup(monkeypatch):
+    monkeypatch.setenv("AI_HARDWARE_CATALOG_MAPPING", "")
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://postgres:postgres@localhost:5433/ai_db",
+        jwt_jwks_url="http://identity.test/jwks",
+        provider="openai", openai_api_key="test-key",
+    )
+    assert settings.hardware_catalog_mapping is None
+    assert settings.require_stateful_configuration() is settings
 
 
 @pytest.mark.asyncio
@@ -271,7 +282,6 @@ async def test_run_http_auth_scope_validation_static_errors_and_wake(monkeypatch
             database_url="postgresql+psycopg://postgres:postgres@localhost:5433/ai_db",
             jwt_jwks_url="http://identity.test/jwks",
             provider="openai", openai_api_key="fixture",
-            hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}},
         )
     )
     async with app.router.lifespan_context(app):  # noqa: SIM117 - explicit lifespan ordering

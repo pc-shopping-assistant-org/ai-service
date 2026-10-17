@@ -61,7 +61,6 @@ async def test_v2_http_schema_requires_version_and_keeps_envelope_owner_boundari
         openai_api_key="fixture",
         database_url="postgresql+psycopg://fixture:fixture@localhost/ai_db",
         jwt_jwks_url="http://identity.test/jwks",
-        hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}},
     )
     app = create_app(settings)
     async with app.router.lifespan_context(app):  # noqa: SIM117 -- lifespan must start before client

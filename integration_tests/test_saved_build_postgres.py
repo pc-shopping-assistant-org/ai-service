@@ -196,7 +196,6 @@ async def test_v2_rejects_legacy_saved_snapshot_after_orphan_and_reopen(
                 jwt_jwks_url="http://identity.test/jwks",
                 provider="openai",
                 openai_api_key="fixture-key",
-                hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}},
             )
 
             def reject_network(request):

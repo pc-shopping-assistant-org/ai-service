@@ -1,4 +1,4 @@
-"""Explicit taxonomy/attribute mapping for complete bounded hardware snapshots."""
+"""Catalog-owned hardware taxonomy and optional custom attribute mapping."""
 
 import json
 from datetime import UTC, datetime
@@ -27,7 +27,6 @@ SPEC_FIELDS = (
 
 class HardwareCatalogMapping(Contract):
     version: str = Field(default="catalog-hardware-v1", min_length=1)
-    categories: dict[UUID, ComponentCategory | AccessoryType] = Field(min_length=1)
     # Destination canonical field -> source product attribute key.
     spec_fields: dict[str, str] = Field(default_factory=dict)
     # Option IDs are stable even though the current backend DTO omits option type.
@@ -48,6 +47,7 @@ class HardwareCatalogMapping(Contract):
 
 class HardwareSummary(Summary):
     category_id: UUID = Field(alias="categoryId")
+    hardware_type: ComponentCategory | AccessoryType | None = Field(alias="hardwareType")
 
 
 class Option(BaseModel):
@@ -117,7 +117,7 @@ class BackendRequirementCatalog(BackendProductCatalog):
                     seen.add(detail.id)
                     if (
                         detail.status != "ACTIVE"
-                        or detail.category_id not in self.mapping.categories
+                        or detail.hardware_type is None
                     ):
                         continue
                     rows.extend(self._map(detail))
@@ -180,7 +180,7 @@ class BackendRequirementCatalog(BackendProductCatalog):
                 if "storage_media" in specs
                 else {}
             )
-            category = self.mapping.categories[detail.category_id]
+            category = detail.hardware_type
             component = (
                 ComponentSpec
                 if isinstance(category, ComponentCategory)

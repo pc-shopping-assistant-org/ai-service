@@ -24,7 +24,6 @@ async def test_migrated_native_resources_reopen_without_losing_owned_conversatio
         database_url=url,
         jwt_jwks_url="http://identity.test/.well-known/jwks.json",
         provider="openai", openai_api_key="fixture",
-        hardware_catalog_mapping={"categories": {str(uuid4()): "CPU"}},
     )
     class Provider:
         def create_model(self):
