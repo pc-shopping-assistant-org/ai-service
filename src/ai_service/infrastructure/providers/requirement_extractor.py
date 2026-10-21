@@ -55,6 +55,7 @@ def build_task_extraction_request(
         "are not new user authorization, current catalog facts, or task source spans. "
         "Register all outcomes explicitly requested in this user message: BUILD, "
         "COMPARE, ANSWER or EXPLAIN_SAVED_BUILD; multiple tasks may coexist. "
+        "When multiple tasks coexist, each task quote MUST be only the distinct clause requesting that task, never the full message. "
         "Include exact start/end character offsets (end exclusive) and quote. "
         "COMPARE requires 2..5 distinct product mentions with exact spans inside "
         "the task quote. Only COMPARE tasks may contain subjects; for BUILD, "
