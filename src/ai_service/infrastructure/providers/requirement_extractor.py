@@ -60,6 +60,7 @@ def build_task_extraction_request(
         "COMPARE requires 2..5 distinct product mentions with exact spans inside "
         "the task quote. Only COMPARE tasks may contain subjects; for BUILD, "
         "ANSWER, and EXPLAIN_SAVED_BUILD, subjects MUST be an empty array []. "
+        "Adding, upgrading, or selecting compatible components for an existing build is a BUILD task, never COMPARE. "
         "Never invent catalog IDs. Do not downgrade BUILD to "
         "ANSWER because budget, workload or parts are missing. Registration "
         "does not prescribe tools or merge requirements. Do not extract budgets, "
