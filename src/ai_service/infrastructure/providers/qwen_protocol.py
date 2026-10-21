@@ -11,10 +11,13 @@ def prepare_qwen_request(request: dict[str, Any]) -> dict[str, Any]:
     if response_format is not None:
         if response_format.get("type") != "json_schema":
             raise ValueError("QWEN_JSON_SCHEMA_REQUIRED")
-        instruction = "\nReturn only JSON matching this response schema: " + json.dumps(
-            response_format["json_schema"],
-            ensure_ascii=False,
-            sort_keys=True,
+        instruction = (
+            "\nReturn only a JSON object starting directly with the root key matching this response schema: "
+            + json.dumps(
+                response_format["json_schema"],
+                ensure_ascii=False,
+                sort_keys=True,
+            )
         )
         messages = projected["messages"]
         if messages and messages[0]["role"] == "system":
