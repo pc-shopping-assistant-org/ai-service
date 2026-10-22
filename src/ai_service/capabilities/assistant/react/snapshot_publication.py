@@ -18,7 +18,7 @@ from ai_service.capabilities.assistant.requirements.proposals import (
 )
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.assistant.requirements.user_admission import (
-    UserRequirementReceipt,
+    decode_user_requirement_receipt,
 )
 from ai_service.capabilities.assistant.stateful_contracts import (
     CheckpointRefV1,
@@ -488,7 +488,7 @@ class FlexiblePublicationInput(Contract):
         proposal = proposal if self.confirmation else None
         prepared: PreparedWaitingPublication | PreparedAnswerPublication
         user_receipts = [
-            UserRequirementReceipt.model_validate(row)
+            decode_user_requirement_receipt(row, message=self.request_message)
             for row in values.get("user_receipts", [])
         ]
         if values.get("phase") == "WAITING_INPUT":

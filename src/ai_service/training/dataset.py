@@ -31,7 +31,7 @@ from ai_service.capabilities.assistant.react.tools import (
     project_current_tools,
 )
 from ai_service.capabilities.assistant.requirements.contracts import QuantityValue
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.assistant.requirements.units import verify_quantity
 from ai_service.capabilities.assistant.stateful_contracts import Contract, Text
@@ -127,7 +127,7 @@ class TaskExtractionSample(SampleMetadata):
 
 class RequirementExtractionSample(SampleMetadata):
     task: Literal[DatasetTask.REQUIREMENT_EXTRACTION]
-    target: Draft
+    target: RequirementDraft
 
 
 class ReactDecisionSample(SampleMetadata):
@@ -153,9 +153,9 @@ class DatasetReport(Contract):
     train_ready: bool
 
 
-def validate_draft(draft: Draft, source: str, context: ToolContext) -> None:
-    if draft.tasks:
-        raise ValueError("REQUIREMENTS_CANNOT_REPLACE_TASKS")
+def validate_requirement_draft(
+    draft: RequirementDraft, source: str, context: ToolContext
+) -> None:
     for item in draft.items:
         if (
             not 0 <= item.start < item.end <= len(source)
@@ -186,7 +186,7 @@ def validate_label(sample: TrainingSample, snapshot: DatasetSnapshot) -> None:
     if isinstance(sample, TaskExtractionSample):
         sample.target.validate_source(sample.message)
     elif isinstance(sample, RequirementExtractionSample):
-        validate_draft(sample.target, sample.message, snapshot.context)
+        validate_requirement_draft(sample.target, sample.message, snapshot.context)
     else:
         action = sample.target.action
         if isinstance(action, CallToolAction):
@@ -197,7 +197,7 @@ def validate_label(sample: TrainingSample, snapshot: DatasetSnapshot) -> None:
             if isinstance(arguments, BuildPCArgs) and arguments.objective is not None:
                 raise ValueError("UNSUPPORTED_BUILD_OBJECTIVE")
         elif isinstance(action, ProposeRequirementsAction):
-            validate_draft(
+            validate_requirement_draft(
                 action.draft, action.source_text or sample.message, snapshot.context
             )
         elif isinstance(action, FinalAnswerAction):

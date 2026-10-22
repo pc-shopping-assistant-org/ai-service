@@ -29,7 +29,7 @@ from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
     QuantityValue,
 )
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
@@ -201,7 +201,7 @@ async def test_admitted_build_goals_load_candidates_after_merge_and_publish(
     ctx, message = unloaded_context(), "Build 30 triệu gaming"
     source = binding(ctx, message)
     before = source.accepted.model_dump(mode="json")
-    draft = Draft(
+    draft = RequirementDraft(
         items=[
             {
                 "target": "GOAL",
@@ -320,7 +320,9 @@ async def test_part_reference_still_loads_catalog_before_asking_for_variant():
                 action={
                     "kind": "PROPOSE_REQUIREMENTS",
                     "source_text": message,
-                    "draft": pending.draft.resolution.draft.model_dump(),
+                    "draft": RequirementDraft(
+                        items=pending.draft.resolution.draft.items
+                    ).model_dump(),
                 }
             )
 

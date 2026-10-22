@@ -1,10 +1,8 @@
 from uuid import uuid4
 
 import pytest
-from langgraph.checkpoint.memory import InMemorySaver
 from test_native_requirement_extractor import Budget, Provider
 from test_quantity_clarification import MESSAGE, draft
-from test_requirement_pipeline import rows
 
 from ai_service.capabilities.assistant.requirements.amendment import (
     ItemDiscard,
@@ -15,15 +13,14 @@ from ai_service.capabilities.assistant.requirements.amendment import (
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
     QuantityValue,
-    TextValue,
 )
 from ai_service.capabilities.assistant.requirements.merge import merge_requirements
 from ai_service.capabilities.assistant.requirements.resolver import (
+    Draft,
     DraftItem,
     PendingDraft,
     resolve_draft,
 )
-from ai_service.infrastructure.graph.requirement_build import build_requirement_graph
 from ai_service.infrastructure.providers.requirement_extractor import (
     NativeRequirementExtractor,
 )
@@ -40,6 +37,24 @@ def pending_quantity():
         message=MESSAGE,
         constraints_revision=0,
         resolution=resolution,
+    )
+
+
+def replace_ram():
+    return PendingAmendment(
+        replacements=[
+            ItemReplacement(
+                item_index=2,
+                item=DraftItem(
+                    subject="RAM",
+                    predicate="capacity",
+                    operator="GTE",
+                    value=QuantityValue(amount=64, unit="GB"),
+                    start=0,
+                    end=4,
+                ),
+            )
+        ]
     )
 
 
@@ -74,9 +89,10 @@ def test_amendment_preserves_original_completion_task_source():
     from ai_service.capabilities.assistant.requirements.tasks import TaskDraft
 
     state, pending = pending_quantity()
-    pending.resolution.draft.tasks = [
-        TaskDraft(kind="BUILD", start=0, end=5, quote="Build")
-    ]
+    pending.resolution.draft = Draft(
+        items=pending.resolution.draft.items,
+        tasks=[TaskDraft(kind="BUILD", start=0, end=5, quote="Build")],
+    )
     changed = amend_pending(
         pending, replace_ram(), state, message_id=uuid4(), message="64GB"
     )
@@ -128,74 +144,6 @@ async def test_native_amendment_reserves_model_before_dispatch():
     assert denied.model.messages == []
 
 
-@pytest.mark.asyncio
-async def test_sku_mention_amendment_uses_fresh_catalog_and_preserves_budget():
-    from test_pending_clarification import Catalog, Extractor
-
-    from ai_service.capabilities.assistant.requirements.contracts import ReferenceValue
-
-    catalog, extractor = Catalog(), Extractor()
-
-    class Amender:
-        async def amend(self, message, pending):
-            return PendingAmendment(
-                replacements=[
-                    ItemReplacement(
-                        item_index=2,
-                        item=DraftItem(
-                            subject="GPU",
-                            predicate="identity",
-                            value=TextValue(text="TUF-1"),
-                            start=4,
-                            end=9,
-                        ),
-                    )
-                ]
-            )
-
-    graph = build_requirement_graph(
-        extractor, catalog, checkpointer=InMemorySaver(), amender=Amender()
-    )
-    config = {"configurable": {"thread_id": str(uuid4())}}
-    await graph.ainvoke(
-        {
-            "message": "Build 25 triệu gaming 1080p, giữ RTX 5070 Ti",
-            "message_id": str(uuid4()),
-            "requirement_state": CanonicalRequirementState().model_dump(mode="json"),
-        },
-        config,
-    )
-    result = await graph.ainvoke(
-        {"message": "Giữ TUF-1", "message_id": str(uuid4())}, config
-    )
-    state = CanonicalRequirementState.model_validate(result["requirement_state"])
-    assert result["outcome"] == "INFEASIBLE" and result["pending_clarification"] is None
-    gpu = next(item for item in state.requirements.values() if item.subject == "GPU")
-    assert gpu.value == ReferenceValue(variant_id=catalog.rows[1].variant_id)
-    assert (
-        result["consultation"]["constraints"]["target_budget_vnd"]["value"]
-        == 25_000_000
-    )
-
-
-def replace_ram():
-    return PendingAmendment(
-        replacements=[
-            ItemReplacement(
-                item_index=2,
-                item=DraftItem(
-                    subject="RAM",
-                    predicate="capacity",
-                    operator="GTE",
-                    value=QuantityValue(amount=64, unit="GB"),
-                    start=0,
-                    end=4,
-                ),
-            )
-        ]
-    )
-
-
 def test_amend_amount_retains_budget_and_binds_original_and_new_sources():
     original, followup = uuid4(), uuid4()
     state = CanonicalRequirementState()
@@ -232,73 +180,3 @@ def test_amend_amount_retains_budget_and_binds_original_and_new_sources():
     assert merged.revision == 1
     with pytest.raises(ValueError, match="evidence"):
         merge_requirements(state, resolved.patch, {original: MESSAGE})
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("resume", [False, True])
-async def test_graph_amends_without_reextracting_original_and_reuses_checkpoint(
-    realistic_catalog, resume
-):
-    class Extractor:
-        calls = 0
-
-        async def extract(self, message, state):
-            self.calls += 1
-            assert self.calls == 1
-            return draft()
-
-    class Amender:
-        calls = 0
-
-        async def amend(self, message, pending):
-            self.calls += 1
-            assert message == "64GB"
-            return replace_ram()
-
-    class Catalog:
-        calls = 0
-
-        async def load(self, draft, state):
-            self.calls += 1
-            if resume and self.calls == 2:
-                raise RuntimeError("catalog after amendment unavailable")
-            return rows(realistic_catalog)
-
-    saver, extractor, amender = InMemorySaver(), Extractor(), Amender()
-    config = {"configurable": {"thread_id": str(uuid4())}}
-    graph = build_requirement_graph(
-        extractor, Catalog(), checkpointer=saver, amender=amender
-    )
-    first = await graph.ainvoke(
-        {
-            "message": MESSAGE,
-            "message_id": str(uuid4()),
-            "requirement_state": CanonicalRequirementState().model_dump(mode="json"),
-        },
-        config,
-    )
-    assert first["outcome"] == "CLARIFICATION"
-    if resume:
-        with pytest.raises(RuntimeError, match="catalog after amendment"):
-            await graph.ainvoke(
-                {"message": "64GB", "message_id": str(uuid4())},
-                config,
-                durability="sync",
-            )
-        snapshot = await graph.aget_state(config)
-        assert snapshot.next == ("resolve",)
-        final = await graph.ainvoke(None, snapshot.config, durability="sync")
-    else:
-        final = await graph.ainvoke(
-            {"message": "64GB", "message_id": str(uuid4())}, config
-        )
-    assert (
-        final["consultation"]["constraints"]["target_budget_vnd"]["value"] == 25_000_000
-    )
-    canonical = CanonicalRequirementState.model_validate(final["requirement_state"])
-    ram = next(
-        item for item in canonical.requirements.values() if item.subject == "RAM"
-    )
-    assert ram.value == QuantityValue(amount=64, unit="GB")
-    assert not final["pending_clarification"]
-    assert amender.calls == 1

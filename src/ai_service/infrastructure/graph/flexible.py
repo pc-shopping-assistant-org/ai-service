@@ -22,6 +22,7 @@ from ai_service.capabilities.assistant.react.actions import (
     FlexibleDecision,
     ProposeRequirementsAction,
     RepairFeedback,
+    decode_flexible_decision,
 )
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
@@ -99,7 +100,7 @@ from ai_service.capabilities.assistant.requirements.proposals import (
 from ai_service.capabilities.assistant.requirements.quantity_clarification import (
     UnitClarificationExtractor,
 )
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import (
     TaskDraftBatch,
     TaskExtractor,
@@ -464,7 +465,9 @@ def build_flexible_graph(
         ctx = base_context(state)
         if ctx.catalog_ready or catalog_loader is None:
             return {}
-        rows = await catalog_loader.load(Draft(items=[]), current(state).requirements)
+        rows = await catalog_loader.load(
+            RequirementDraft(items=[]), current(state).requirements
+        )
         ctx.catalog = [CatalogRowV1.model_validate(row.model_dump()) for row in rows]
         ctx.catalog_ready = True
         update: dict[str, Any] = {
@@ -489,7 +492,7 @@ def build_flexible_graph(
         return {}
 
     async def load_proposal_catalog(state: FlexibleState) -> dict[str, Any]:
-        action = FlexibleDecision.model_validate(state["decision"]).action
+        action = decode_flexible_decision(state["decision"]).action
         assert isinstance(action, ProposeRequirementsAction)
         return await load_catalog(state) if draft_needs_catalog(action.draft) else {}
 
@@ -727,7 +730,7 @@ def build_flexible_graph(
     def validate(state: FlexibleState) -> dict[str, Any]:
         if state.get("decision") is None:
             return repair(state, "INVALID_ACTION")
-        action = FlexibleDecision.model_validate(state["decision"]).action
+        action = decode_flexible_decision(state["decision"]).action
         ctx = current(state)
         if isinstance(action, CallToolAction):
             entries = records(state)
@@ -849,7 +852,7 @@ def build_flexible_graph(
         )
 
     async def resolve(state: FlexibleState) -> dict[str, Any]:
-        action = FlexibleDecision.model_validate(state["decision"]).action
+        action = decode_flexible_decision(state["decision"]).action
         assert isinstance(action, ProposeRequirementsAction)
         ctx = current(state)
         if state.get("pending_proposal"):

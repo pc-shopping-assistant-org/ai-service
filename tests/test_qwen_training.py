@@ -14,9 +14,13 @@ class Tokenizer:
 
     chat_template = "fixture-template"
 
+    def __init__(self):
+        self.messages_seen = []
+
     def apply_chat_template(
         self, messages, *, tokenize, add_generation_prompt, **kwargs
     ):
+        self.messages_seen.append(messages)
         assert kwargs["enable_thinking"] is False
         text = "".join(
             f"<{message['role']}>{message.get('content', '')}{json.dumps(message['tool_calls']) if message.get('tool_calls') else ''}</end>"
@@ -62,6 +66,29 @@ def test_only_final_completion_has_loss_and_schema_reaches_model():
         if label == -100
     ).decode()
     assert "Draft" in prompt and "RAM" in prompt
+
+
+def test_requirement_training_prompt_uses_exact_runtime_qwen_projection():
+    from ai_service.infrastructure.providers.qwen_protocol import prepare_qwen_request
+    from ai_service.training.dataset import load_dataset
+    from ai_service.training.export import build_example
+
+    pilot = Path(__file__).parents[1] / "training" / "pilot-v1"
+    loaded = load_dataset(pilot)
+    sample = next(
+        item for item in loaded.samples if item.task == "REQUIREMENT_EXTRACTION"
+    )
+    example = build_example(sample, loaded.snapshots[sample.snapshot_id])
+    expected = prepare_qwen_request(example["request"])
+    tokenizer = Tokenizer()
+
+    tokenize_example(example, tokenizer, max_length=8192)
+
+    assert tokenizer.messages_seen[0] == expected["messages"]
+    schema = sample.target.__class__.model_json_schema()
+    assert json.dumps(schema, ensure_ascii=False, sort_keys=True) in (
+        expected["messages"][0]["content"]
+    )
 
 
 def test_overlong_examples_fail_instead_of_silently_truncating():

@@ -10,12 +10,14 @@ from langchain_core.messages import (
 )
 from pydantic import BaseModel
 
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.config.enums import AIProvider
 from ai_service.config.qwen import QWEN_MODEL_ID, QWEN_REQUEST_TIMEOUT_SECONDS
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.providers.qwen_protocol import prepare_qwen_request
+
+ADAPTER_STRUCTURED_SCHEMAS = frozenset({RequirementDraft, TaskDraftBatch})
 
 
 class QwenChatClient:
@@ -85,7 +87,11 @@ class QwenChatModel:
     ) -> "QwenChatModel":
         # Only trained heads use the adapter. Auxiliary choice/amendment heads
         # keep the original base weights until they have their own quality gate.
-        model = self.model_name if schema in {Draft, TaskDraftBatch} else QWEN_MODEL_ID
+        model = (
+            self.model_name
+            if schema in ADAPTER_STRUCTURED_SCHEMAS
+            else QWEN_MODEL_ID
+        )
         return QwenChatModel(self.client, model, self.max_tokens, schema=schema)
 
     async def ainvoke(self, input: Any) -> Any:

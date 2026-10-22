@@ -20,19 +20,19 @@ from ai_service.capabilities.pc_builder.schemas import (
 
 from .compiler import Compilation, compile_requirements
 from .contracts import CanonicalRequirementState
-from .resolver import ChoiceDraft, Draft
+from .resolver import ChoiceDraft, RequirementDraft
 from .verifier import SatisfactionReport, verify_satisfaction
 
 
 class RequirementExtractor(Protocol):
     async def extract(
         self, message: str, state: CanonicalRequirementState
-    ) -> Draft: ...
+    ) -> RequirementDraft: ...
 
 
 class RequirementCatalog(Protocol):
     async def load(
-        self, draft: Draft, state: CanonicalRequirementState
+        self, draft: RequirementDraft, state: CanonicalRequirementState
     ) -> list[CatalogRowV1]: ...
 
 

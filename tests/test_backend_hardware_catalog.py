@@ -8,7 +8,7 @@ from ai_service.application.errors import BackendUnavailableError
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
 )
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.infrastructure.commerce.hardware_catalog import (
     BackendRequirementCatalog,
     HardwareCatalogMapping,
@@ -57,16 +57,16 @@ async def test_hardware_type_is_loaded_from_each_snapshot_without_category_env()
         catalog = BackendRequirementCatalog(
             client, "https://catalog.test", Budget(), HardwareCatalogMapping()
         )
-        rows = await catalog.load(Draft(items=[]), CanonicalRequirementState())
+        rows = await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
         assert rows[0].component.category == "RAM"
         hardware_type = "GPU"
-        rows = await catalog.load(Draft(items=[]), CanonicalRequirementState())
+        rows = await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
         assert rows[0].component.category == "GPU"
         hardware_type = None
-        assert await catalog.load(Draft(items=[]), CanonicalRequirementState()) == []
+        assert await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState()) == []
         hardware_type = "UNSUPPORTED"
         with pytest.raises(BackendUnavailableError):
-            await catalog.load(Draft(items=[]), CanonicalRequirementState())
+            await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
 
 
 @pytest.mark.asyncio
@@ -140,7 +140,7 @@ async def test_variant_capacity_price_stock_and_visibility_are_canonical():
                 },
             ),
         )
-        rows = await catalog.load(Draft(items=[]), CanonicalRequirementState())
+        rows = await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
         assert [row.variant_id for row in rows] == [first, second]
         assert [row.component.capacity_gb for row in rows] == [32, 64]
         assert [row.component.price for row in rows] == [2_000_000, 3_000_000]
@@ -150,7 +150,7 @@ async def test_variant_capacity_price_stock_and_visibility_are_canonical():
         assert rows[0].evidence_refs != rows[1].evidence_refs
         variants[0]["options"][0]["id"] = str(uuid4())
         with pytest.raises(BackendUnavailableError, match="mapping"):
-            await catalog.load(Draft(items=[]), CanonicalRequirementState())
+            await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
     assert budget.calls == ["TOOL_IO"] * 2
 
 
@@ -201,7 +201,7 @@ async def test_accessory_taxonomy_maps_canonical_price_without_fake_core_categor
             Budget(),
             HardwareCatalogMapping(),
         )
-        result = await catalog.load(Draft(items=[]), CanonicalRequirementState())
+        result = await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
     assert len(result) == 1
     assert isinstance(result[0].component, AccessorySpec)
     assert result[0].component.id == variant
@@ -253,7 +253,7 @@ async def test_candidate_scan_uses_all_pages_and_rejects_truncation():
             HardwareCatalogMapping(),
         )
         assert (
-            len(await catalog.load(Draft(items=[]), CanonicalRequirementState())) == 2
+            len(await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())) == 2
         )
         bounded = BackendRequirementCatalog(
             client,
@@ -263,20 +263,24 @@ async def test_candidate_scan_uses_all_pages_and_rejects_truncation():
             max_rows=1,
         )
         with pytest.raises(BackendUnavailableError, match="bound"):
-            await bounded.load(Draft(items=[]), CanonicalRequirementState())
+            await bounded.load(RequirementDraft(items=[]), CanonicalRequirementState())
 
 
 @pytest.mark.asyncio
 async def test_backend_snapshot_flows_into_real_optimizer_and_satisfaction(
     realistic_catalog,
 ):
-    from test_requirement_graph import Extractor, graph_input
+    from test_requirement_pipeline import state
 
+    from ai_service.capabilities.assistant.requirements.build import (
+        optimize_requirements,
+        verify_receipt,
+    )
     from ai_service.capabilities.assistant.requirements.verifier import (
         SatisfactionReport,
     )
-    from ai_service.infrastructure.graph.requirement_build import (
-        build_requirement_graph,
+    from ai_service.capabilities.pc_builder.application.service import (
+        PCBuildApplicationService,
     )
 
     categories = {part.category: uuid4() for part in realistic_catalog}
@@ -327,10 +331,14 @@ async def test_backend_snapshot_flows_into_real_optimizer_and_satisfaction(
             budget,
             HardwareCatalogMapping(),
         )
-        result = await build_requirement_graph(Extractor(), catalog).ainvoke(
-            graph_input()
+        requirements = state()
+        rows = await catalog.load(RequirementDraft(items=[]), requirements)
+        receipt = optimize_requirements(
+            requirements, rows, PCBuildApplicationService()
         )
-    assert result["outcome"] == "BUILT"
-    assert SatisfactionReport.model_validate(result["satisfaction"]).hard_satisfied
-    assert result["public_build"]["total_spending_vnd"] <= 30_000_000
+    assert receipt.outcome == "BUILT" and receipt.build is not None
+    satisfaction = verify_receipt(requirements, receipt, rows)
+    assert satisfaction is not None
+    assert SatisfactionReport.model_validate(satisfaction.model_dump()).hard_satisfied
+    assert receipt.build.total_price <= 30_000_000
     assert len(budget.calls) == 1

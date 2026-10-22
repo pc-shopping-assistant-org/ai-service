@@ -60,9 +60,23 @@ class DraftItem(Contract):
 
 
 class Draft(Contract):
+    """Legacy combined payload; retained only for persisted state/old graph reads."""
+
     schema_version: Literal[1] = 1
     items: list[DraftItem] = Field(max_length=100)
     tasks: list[TaskDraft] = Field(default_factory=list, max_length=8)
+
+
+class RequirementDraft(Contract):
+    """Model proposal containing requirement items only."""
+
+    schema_version: Literal[2] = 2
+    items: list[DraftItem] = Field(max_length=100)
+
+
+# Historical checkpoints may still contain the V1 combined shape. Current
+# requirement/application ports accept RequirementDraft only.
+type PersistedRequirementDraft = RequirementDraft | Draft
 
 
 class Pending(Contract):
@@ -72,7 +86,8 @@ class Pending(Contract):
 
 
 class Resolution(Contract):
-    draft: Draft
+    # Draft is accepted only to reopen historical V1 persisted artifacts.
+    draft: PersistedRequirementDraft
     patch: RequirementPatch | None
     pending: list[Pending] = Field(default_factory=list)
 
@@ -178,7 +193,7 @@ def _normalized(text: str) -> str:
 
 
 def resolve_draft(
-    draft: Draft,
+    draft: PersistedRequirementDraft,
     *,
     message_id: UUID,
     message: str,
@@ -189,9 +204,12 @@ def resolve_draft(
     item_sources: dict[int, DraftSource] | None = None,
     discarded_items: list[int] | None = None,
 ) -> Resolution:
-    draft = Draft.model_validate(draft.model_dump())
-    for task in draft.tasks:
-        task.validate_source(message)
+    if isinstance(draft, RequirementDraft):
+        draft = RequirementDraft.model_validate(draft.model_dump())
+    else:
+        draft = Draft.model_validate(draft.model_dump())
+        for task in draft.tasks:
+            task.validate_source(message)
     state = CanonicalRequirementState.model_validate(state.model_dump())
     catalog = [CatalogRowV1.model_validate(row.model_dump()) for row in catalog]
     if len({row.variant_id for row in catalog}) != len(catalog):

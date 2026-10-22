@@ -7,7 +7,7 @@ from ai_service.capabilities.assistant.react.actions import ProposeRequirementsA
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
 )
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.user_admission import (
     apply_user_receipt,
     assess_user_draft,
@@ -15,7 +15,7 @@ from ai_service.capabilities.assistant.requirements.user_admission import (
 
 
 def draft(amount=32):
-    return Draft(
+    return RequirementDraft(
         items=[
             {
                 "subject": "RAM",
@@ -68,7 +68,7 @@ def test_explicit_clear_preserves_unmentioned_budget_and_goals():
         for identifier, item in with_ram.requirements.items()
         if item.subject == "RAM"
     )
-    removal = Draft(
+    removal = RequirementDraft(
         items=[
             {
                 "operation": "CLEAR",
@@ -114,7 +114,7 @@ def test_source_quote_alone_cannot_grant_user_merge_authority(problem):
         payload = proposed.model_dump()
         payload["items"][0]["value"] = {"kind": "UNRESOLVED_QUANTITY", "amount": 32}
         payload["items"][0]["end"] = len(message)
-        proposed = Draft.model_validate(payload)
+        proposed = RequirementDraft.model_validate(payload)
         extracted = proposed.model_copy(deep=True)
     action = ProposeRequirementsAction(draft=proposed, source_text=source_text)
     receipt = assess_user_draft(

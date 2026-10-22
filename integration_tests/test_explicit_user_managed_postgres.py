@@ -22,7 +22,7 @@ from ai_service.capabilities.assistant.recovery_policy import RetryFailure
 from ai_service.capabilities.assistant.requirements.proposals import (
     ProposalConfirmation,
 )
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.assistant.stateful_contracts import CheckpointRefV1
 from ai_service.infrastructure.execution.conversation import ConversationExecution
@@ -53,7 +53,7 @@ MESSAGE = "Build 30000000 VND GAMING_1080P"
 
 
 def user_draft():
-    return Draft(
+    return RequirementDraft(
         items=[
             {
                 "subject": "SETUP",
