@@ -88,6 +88,8 @@ async def test_v2_request_admission_preserves_commands_and_idempotency(postgres_
             assert len(rows) == 1
             assert parse_turn_request(rows[0]["request_payload"]) == request
             assert rows[0]["status"] == "PENDING"
+            assert submitted.trace_id == submitted.run_id.hex
+            assert rows[0]["trace_id"] == submitted.trace_id
     finally:
         if conversation is not None:
             async with engine.begin() as conn:

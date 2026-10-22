@@ -6,7 +6,10 @@ from test_react_graph import Budget
 from test_react_tools import Catalog, context
 
 from ai_service.capabilities.assistant.react.actions import FlexibleDecision
-from ai_service.capabilities.assistant.react.contracts import CompletionRequirement
+from ai_service.capabilities.assistant.react.contracts import (
+    CompletionRequirement,
+    ReactLimits,
+)
 from ai_service.capabilities.assistant.react.tools import ToolDispatcher
 from ai_service.capabilities.assistant.requirements.proposals import (
     PendingRequirementProposal,
@@ -231,7 +234,7 @@ async def test_flexible_build_uses_real_optimizer_and_trusted_task(
 
     class Loader:
         async def load(self, draft, requirements):
-            loaded.append(True)
+            loaded.append(requirements)
             return trusted.catalog
 
     runtime = (
@@ -252,11 +255,37 @@ async def test_flexible_build_uses_real_optimizer_and_trusted_task(
         conversation_revision=0,
         catalog_loader=Loader() if lazy else None,
     ).ainvoke({"message": "Build PC"})
-    assert loaded == ([True] if lazy else [])
+    assert loaded == ([trusted.requirements] if lazy else [])
     assert result["phase"] == "READY_TO_PUBLISH"
     assert result["ledger"][0]["result"]["result"]["receipt"]["outcome"] == "BUILT"
     assert "Every game" not in result["answer"]["text"]
     assert result["answer"]["build_ref"] is not None
+
+
+@pytest.mark.asyncio
+async def test_state_size_bound_rejects_before_model_or_catalog_access():
+    class NeverModel:
+        calls = 0
+
+        async def decide(self, *args):
+            self.calls += 1
+            raise AssertionError("Oversized state must be rejected before inference")
+
+    model, catalog = NeverModel(), Catalog()
+    flow = build_flexible_graph(
+        model,
+        ToolDispatcher(catalog, PCBuildApplicationService()),
+        context(),
+        [CompletionRequirement(kind="ANSWER")],
+        Budget(),
+        conversation_revision=0,
+        limits=ReactLimits(max_state_bytes=1),
+    )
+
+    with pytest.raises(ValueError, match="REACT_STATE_TOO_LARGE"):
+        await flow.ainvoke({"message": "Find GPU"})
+
+    assert model.calls == 0 and catalog.calls == 0
 
 
 @pytest.mark.asyncio

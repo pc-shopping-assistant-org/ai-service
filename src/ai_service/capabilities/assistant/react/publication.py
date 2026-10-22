@@ -32,7 +32,7 @@ from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
 )
 
-from .actions import FinalAnswerAction, FlexibleDecision
+from .actions import FinalAnswerAction, decode_flexible_decision
 from .contracts import BuildResult, CompletionRequirement, ToolContext, ToolRecord
 from .outcomes import FlexibleAnswer, validate_final_answer
 from .tools import project_current_tools
@@ -179,7 +179,7 @@ def prepare_answer_publication(
             "Requirement change requires explicit command-bound publication"
         )
     action = FinalAnswerAction.model_validate(
-        FlexibleDecision.model_validate(values.get("decision")).action.model_dump()
+        decode_flexible_decision(values.get("decision")).action.model_dump()
     )
     records = [ToolRecord.model_validate(row) for row in values.get("ledger", [])]
     if len({(row.origin_run_id, row.call.call_id) for row in records}) != len(

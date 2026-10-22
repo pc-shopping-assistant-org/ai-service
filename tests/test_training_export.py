@@ -89,6 +89,7 @@ async def test_export_structured_prompt_schema_matches_runtime():
     from ai_service.infrastructure.providers.requirement_extractor import (
         NativeRequirementExtractor,
     )
+    from ai_service.infrastructure.providers.task_extractor import NativeTaskExtractor
 
     loaded = load_dataset(PILOT)
     for task in ("TASK_EXTRACTION", "REQUIREMENT_EXTRACTION"):
@@ -96,12 +97,13 @@ async def test_export_structured_prompt_schema_matches_runtime():
         snapshot = loaded.snapshots[record.snapshot_id]
         example = build_example(record, snapshot)
         provider = DraftProvider(record.target.model_dump(mode="json"))
-        extractor = NativeRequirementExtractor(
-            provider, Budget(), context=snapshot.context
-        )
         if task == "TASK_EXTRACTION":
+            extractor = NativeTaskExtractor(
+                provider, Budget(), context=snapshot.context
+            )
             await extractor.extract_tasks(record.message)
         else:
+            extractor = NativeRequirementExtractor(provider, Budget())
             await extractor.extract(record.message, snapshot.context.requirements)
         assert example["request"]["messages"] == [
             {"role": "system" if role == "system" else "user", "content": content}

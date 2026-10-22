@@ -20,7 +20,7 @@ from ai_service.capabilities.assistant.react.snapshot_publication import (
 from ai_service.capabilities.assistant.react.tools import ToolDispatcher
 from ai_service.capabilities.assistant.react.turn_contracts import TurnRequestV2
 from ai_service.capabilities.assistant.requirements.contracts import requirements_hash
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.assistant.stateful_contracts import CheckpointRefV1
 from ai_service.capabilities.pc_builder.application.service import (
@@ -213,7 +213,7 @@ async def test_user_admission_updates_working_state_and_rederives_before_publish
             return (
                 draft()
                 if mode in {"MATCH", "READ_FIRST", "WAITING"}
-                else Draft(items=[])
+                else RequirementDraft(items=[])
             )
 
     class Model:

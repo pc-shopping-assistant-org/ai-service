@@ -49,7 +49,11 @@ from ai_service.capabilities.assistant.stateful_contracts import (
     UnitClarificationReplyV1,
 )
 
-from .actions import AskClarificationAction, FlexibleDecision, ProposeRequirementsAction
+from .actions import (
+    AskClarificationAction,
+    ProposeRequirementsAction,
+    decode_flexible_decision,
+)
 from .contracts import CompletionRequirement, ToolContext
 from .outcomes import TaskOutcome
 from .publication import bind_publication_context, snapshot_for_requirements
@@ -232,7 +236,7 @@ def prepare_waiting_publication(
             pending_proposal=actual_proposal,
             assistant_message="Yêu cầu đã được làm rõ; đề xuất đang chờ bạn xác nhận trước khi thay đổi state.",
         )
-    action = FlexibleDecision.model_validate(values.get("decision")).action
+    action = decode_flexible_decision(values.get("decision")).action
     if isinstance(action, AskClarificationAction):
         checked = AskClarificationAction.model_validate(values.get("clarification"))
         missing = build_clarification_reasons(

@@ -8,7 +8,7 @@ from ai_service.application.errors import BackendUnavailableError
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
 )
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.infrastructure.commerce.hardware_catalog import (
     BackendRequirementCatalog,
     HardwareCatalogMapping,
@@ -74,7 +74,7 @@ async def test_sixteen_products_are_complete_without_exhausting_call_budget():
             budget,
             HardwareCatalogMapping(),
         )
-        rows = await catalog.load(Draft(items=[]), CanonicalRequirementState())
+        rows = await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
     assert {r.variant_id for r in rows} == set(products)
     assert budget.calls == 1
     assert requests == ["/products/snapshot"]
@@ -117,4 +117,4 @@ async def test_summary_shaped_response_is_not_an_empty_hardware_snapshot():
             HardwareCatalogMapping(),
         )
         with pytest.raises(BackendUnavailableError, match="invalid"):
-            await catalog.load(Draft(items=[]), CanonicalRequirementState())
+            await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())

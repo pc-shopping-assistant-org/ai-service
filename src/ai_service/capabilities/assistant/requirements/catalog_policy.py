@@ -4,7 +4,7 @@ from ai_service.capabilities.assistant.provenance import CatalogRowV1
 
 from .compiler import compile_requirements
 from .contracts import CanonicalRequirementState
-from .resolver import Draft
+from .resolver import RequirementDraft
 
 CATALOG_DEPENDENT_REASONS = frozenset(
     {
@@ -29,9 +29,9 @@ def build_needs_catalog(state: CanonicalRequirementState) -> bool:
     )
 
 
-def draft_needs_catalog(draft: Draft) -> bool:
+def draft_needs_catalog(draft: RequirementDraft) -> bool:
     """Scalar/unit changes and CLEAR do not require SKU resolution."""
-    checked = Draft.model_validate(draft.model_dump())
+    checked = type(draft).model_validate(draft.model_dump())
     return any(
         item.operation == "SET"
         and (item.target == "RESOURCE" or item.predicate in REFERENCE_PREDICATES)

@@ -24,7 +24,7 @@ from ai_service.capabilities.assistant.react.turn_contracts import TurnRequestV2
 from ai_service.capabilities.assistant.requirements.catalog_policy import (
     draft_needs_catalog,
 )
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
 )
@@ -55,6 +55,7 @@ from ai_service.infrastructure.providers.react_model import (
 from ai_service.infrastructure.providers.requirement_extractor import (
     NativeRequirementExtractor,
 )
+from ai_service.infrastructure.providers.task_extractor import NativeTaskExtractor
 from ai_service.infrastructure.search.budgeted import (
     BudgetedWebReader,
     BudgetedWebSearch,
@@ -96,7 +97,6 @@ async def open_build_runtime(
 
     async def graph_factory(claim: ExecutionClaim) -> DurableConversationGraph:
         attempts = AttemptBoundary(coordinator.ledger, claim)
-        extractor = NativeRequirementExtractor(provider, attempts)
         request, head = await coordinator.load(claim)
         if (
             not isinstance(request, TurnRequestV2)
@@ -144,12 +144,14 @@ async def open_build_runtime(
             accepted.flexible
             and accepted.flexible.pending_resolution
             and draft_needs_catalog(
-                accepted.flexible.pending_resolution.draft.resolution.draft
+                RequirementDraft(
+                    items=accepted.flexible.pending_resolution.draft.resolution.draft.items
+                )
             )
         ):
             catalog = await BackendRequirementCatalog(
                 client, settings.backend_api_url, attempts, mapping
-            ).load(Draft(items=[]), accepted.requirement_state)
+            ).load(RequirementDraft(items=[]), accepted.requirement_state)
         else:
             catalog = []
         products = BackendProductCatalog(client, settings.backend_api_url, attempts)
@@ -214,7 +216,10 @@ async def open_build_runtime(
                 ),
             )
         )
-        extractor = NativeRequirementExtractor(provider, attempts, context=tool_context)
+        requirement_extractor = NativeRequirementExtractor(provider, attempts)
+        task_extractor = NativeTaskExtractor(
+            provider, attempts, context=tool_context
+        )
         return DurableConversationGraph(
             build_flexible_graph(
                 NativeFlexibleModel(provider),
@@ -230,15 +235,15 @@ async def open_build_runtime(
                 attempts,
                 conversation_revision=head.revision,
                 publication=binding,
-                task_extractor=None if fixed_tasks else extractor,
+                task_extractor=None if fixed_tasks else task_extractor,
                 task_catalog=None if fixed_tasks else products,
                 checkpointer=saver,
-                clarifier=extractor,
-                unit_clarifier=extractor,
-                task_clarifier=extractor,
-                amender=extractor,
-                task_amender=extractor,
-                user_extractor=extractor,
+                clarifier=requirement_extractor,
+                unit_clarifier=requirement_extractor,
+                task_clarifier=task_extractor,
+                amender=requirement_extractor,
+                task_amender=task_extractor,
+                user_extractor=requirement_extractor,
                 catalog_loader=BackendRequirementCatalog(
                     client, settings.backend_api_url, attempts, mapping
                 ),

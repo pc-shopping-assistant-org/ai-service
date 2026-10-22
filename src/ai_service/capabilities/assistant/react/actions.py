@@ -3,9 +3,12 @@
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import Field, StrictInt, model_validator
+from pydantic import Field, JsonValue, StrictInt, ValidationError, model_validator
 
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import (
+    Draft,
+    RequirementDraft,
+)
 from ai_service.capabilities.assistant.stateful_contracts import Contract, Text
 
 from .contracts import AnswerCandidate, ToolCall
@@ -25,12 +28,26 @@ class CallToolAction(Contract):
 
 class ProposeRequirementsAction(Contract):
     kind: Literal["PROPOSE_REQUIREMENTS"] = "PROPOSE_REQUIREMENTS"
-    draft: Draft
+    draft: RequirementDraft
     # If supplied, this is agent-authored proposal text, never USER provenance.
     source_text: Text | None = Field(default=None, max_length=4000)
 
     @model_validator(mode="after")
     def requirement_only(self) -> "ProposeRequirementsAction":
+        if not self.draft.items:
+            raise ValueError("Requirement proposal cannot replace requested tasks")
+        return self
+
+
+class _LegacyProposeRequirementsAction(Contract):
+    """Validated shape emitted by checkpoints created before RequirementDraft v2."""
+
+    kind: Literal["PROPOSE_REQUIREMENTS"] = "PROPOSE_REQUIREMENTS"
+    draft: Draft
+    source_text: Text | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def requirement_only(self) -> "_LegacyProposeRequirementsAction":
         if not self.draft.items or self.draft.tasks:
             raise ValueError("Requirement proposal cannot replace requested tasks")
         return self
@@ -105,6 +122,34 @@ Action = Annotated[
 class FlexibleDecision(Contract):
     schema_version: StrictInt = Field(default=2, ge=2, le=2)
     action: Action
+
+
+class _StoredDecisionEnvelope(Contract):
+    schema_version: StrictInt = Field(default=2, ge=2, le=2)
+    action: dict[str, JsonValue]
+
+
+def decode_flexible_decision(value: object) -> FlexibleDecision:
+    """Read stored V1 proposals without widening the live model schema."""
+    try:
+        return FlexibleDecision.model_validate(value)
+    except ValidationError:
+        legacy = _StoredDecisionEnvelope.model_validate(value)
+        if legacy.action.get("kind") != "PROPOSE_REQUIREMENTS":
+            return FlexibleDecision.model_validate(value)
+        old_action = _LegacyProposeRequirementsAction.model_validate(legacy.action)
+        return FlexibleDecision.model_validate(
+            {
+                "schema_version": legacy.schema_version,
+                "action": {
+                    "kind": old_action.kind,
+                    "source_text": old_action.source_text,
+                    "draft": RequirementDraft(
+                        items=old_action.draft.items
+                    ).model_dump(mode="json"),
+                },
+            }
+        )
 
 
 class RepairFeedback(Contract):

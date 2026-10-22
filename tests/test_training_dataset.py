@@ -132,6 +132,21 @@ def test_requirement_span_must_bind_exact_current_message(tmp_path):
         validate_dataset(dataset(tmp_path, [record]))
 
 
+def test_requirement_label_rejects_combined_task_and_requirement_schema(tmp_path):
+    record = sample(
+        task="REQUIREMENT_EXTRACTION",
+        message="Build PC",
+        target={
+            "items": [],
+            "tasks": [
+                {"kind": "BUILD", "start": 0, "end": 8, "quote": "Build PC"}
+            ],
+        },
+    )
+    with pytest.raises(ValueError, match=r"target\.tasks"):
+        validate_dataset(dataset(tmp_path, [record]))
+
+
 def test_requirement_amount_cannot_disagree_with_its_source(tmp_path):
     record = sample(
         task="REQUIREMENT_EXTRACTION",

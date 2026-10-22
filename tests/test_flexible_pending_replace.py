@@ -8,7 +8,7 @@ from test_flexible_registration_graph import Extractor
 from test_flexible_task_selection import pending_comparison
 from test_flexible_unit_continuation import pending_amount
 from test_react_graph import Budget
-from test_react_tools import context
+from test_react_tools import Catalog, context
 
 from ai_service.capabilities.assistant.react.contracts import CompletionRequirement
 from ai_service.capabilities.assistant.react.outcomes import TaskOutcome
@@ -137,6 +137,74 @@ async def test_explicit_task_replacement_keeps_canonical_snapshot_and_uses_new_s
     assert published.flexible.task_message_id == request.request_id
     assert published.flexible.task_outcomes[0].task.kind == "ANSWER"
     assert published.requirement_state == accepted.requirement_state
+
+
+@pytest.mark.asyncio
+async def test_requirement_pending_discard_is_application_only_and_preserves_snapshot():
+    state, owner, conversation, pending = pending_amount()
+    ctx = context(state)
+    ctx.account_id, ctx.conversation_id = owner, conversation
+    accepted = base_snapshot(ctx)
+    accepted.flexible = FlexiblePublishedState(
+        conversation_id=conversation,
+        task_message_id=uuid4(),
+        task_message="Build PC",
+        status="WAITING_INPUT",
+        waiting_message="Which unit?",
+        waiting_tasks=[
+            TaskOutcome(
+                task=CompletionRequirement(kind="BUILD", constraints_revision=0),
+                status="UNRESOLVED",
+            )
+        ],
+        pending_resolution=pending,
+    )
+    request = TurnRequestV2(
+        conversation_id=conversation,
+        request_id=uuid4(),
+        expected_revision=1,
+        message="Bỏ yêu cầu RAM đang chờ",
+        pending_action={
+            "target": "REQUIREMENTS",
+            "action": "DISCARD",
+            "pending_message_id": pending.draft.message_id,
+            "constraints_revision": state.revision,
+        },
+    )
+    bound = FlexiblePublicationInput.for_request(accepted, request, owner=owner)
+
+    class NoModel:
+        async def decide(self, *args):
+            raise AssertionError("Discard is an application command")
+
+    service = PCBuildApplicationService()
+    flow = build_flexible_graph(
+        NoModel(),
+        ToolDispatcher(Catalog(), service),
+        ctx,
+        [],
+        Budget(),
+        conversation_revision=1,
+        publication=bound,
+    )
+    values = await flow.ainvoke(request.execution_input())
+    published = revalidate_flexible_publication(
+        values,
+        accepted,
+        request,
+        owner=owner,
+        run_id=ctx.run_id,
+        base_ref=CheckpointRefV1(
+            thread_id=conversation, checkpoint_id="fixture-base"
+        ),
+        service=service,
+    )
+
+    assert published.flexible.status == "DISCARDED"
+    assert published.flexible.pending_resolution is None
+    assert published.requirement_state == state
+    assert published.public_build == accepted.public_build
+    assert values["model_calls"] == 0 and values["tool_calls"] == 0
 
 
 @pytest.mark.asyncio

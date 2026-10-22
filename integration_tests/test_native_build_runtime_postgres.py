@@ -398,6 +398,41 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                         "assistant",
                     ]
                     assert "8,000,000 VND" in messages[-1]["content"]
+                    first_page = await client.get(
+                        path + "/messages", params={"limit": 2}
+                    )
+                    assert [
+                        m["sequence"] for m in first_page.json()["data"]["items"]
+                    ] == [1, 2]
+                    cursor = first_page.json()["data"]["next_cursor"]
+                    assert cursor is not None
+                    next_page = await client.get(
+                        path + "/messages", params={"limit": 2, "cursor": cursor}
+                    )
+                    assert [
+                        m["sequence"] for m in next_page.json()["data"]["items"]
+                    ] == [3, 4]
+                    assert next_page.json()["data"]["next_cursor"] is None
+                    assert (
+                        await client.get(
+                            path + "/messages", params={"cursor": str(uuid4())}
+                        )
+                    ).status_code == 400
+                    assert (
+                        await client.get(path + "/messages", params={"limit": 0})
+                    ).status_code == 422
+                    stale = await client.post(
+                        path + "/runs",
+                        json={
+                            "schema_version": 2,
+                            "conversation_id": str(conversation_id),
+                            "request_id": str(uuid4()),
+                            "expected_revision": 1,
+                            "message": "Stale revision",
+                        },
+                    )
+                    assert stale.status_code == 409
+                    assert stale.json()["message"] == "AI_REVISION_CONFLICT"
                     view = await client.get(path)
                     assert view.json()["data"]["revision"] == 2
                     # Ordinary follow-up retains the prior attachment turn in history.

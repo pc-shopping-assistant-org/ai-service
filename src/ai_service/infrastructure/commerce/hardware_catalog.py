@@ -15,7 +15,7 @@ from ai_service.capabilities.assistant.provenance import CatalogRowV1, canonical
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
 )
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.stateful_contracts import Contract
 
 from .product_catalog import BackendProductCatalog, Summary, Variant
@@ -92,11 +92,11 @@ class BackendRequirementCatalog(BackendProductCatalog):
         self.max_rows, self.max_pages = max_rows, max_pages
 
     async def load(
-        self, draft: Draft, state: CanonicalRequirementState
+        self, draft: RequirementDraft, state: CanonicalRequirementState
     ) -> list[CatalogRowV1]:
         # Scan the configured taxonomy completely, not a keyword-ranked shortlist:
         # ambiguity/pins must not become unique merely because another SKU was cut.
-        Draft.model_validate(draft.model_dump())
+        type(draft).model_validate(draft.model_dump())
         CanonicalRequirementState.model_validate(state.model_dump())
         cursor = None
         seen: set[UUID] = set()

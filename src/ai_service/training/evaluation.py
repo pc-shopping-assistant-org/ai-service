@@ -14,7 +14,7 @@ from pydantic import Field, JsonValue
 from ai_service.capabilities.assistant.conversation_core import Digest
 from ai_service.capabilities.assistant.react.actions import CallToolAction
 from ai_service.capabilities.assistant.react.contracts import ToolName
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.assistant.stateful_contracts import Contract, Text
 from ai_service.infrastructure.providers.react_model import parse_flexible_response
@@ -135,7 +135,7 @@ def evaluate_responses(
                     schema = (
                         TaskDraftBatch
                         if isinstance(sample, TaskExtractionSample)
-                        else Draft
+                        else RequirementDraft
                     )
                     target = schema.model_validate_json(wire.content)
                 row["raw_contract_valid"] = True

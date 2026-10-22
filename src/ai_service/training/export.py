@@ -12,11 +12,13 @@ from pydantic import BaseModel
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.react.actions import CallToolAction
 from ai_service.capabilities.assistant.react.tools import allowed_tools
-from ai_service.capabilities.assistant.requirements.resolver import Draft
+from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.infrastructure.providers.react_model import build_react_request
 from ai_service.infrastructure.providers.requirement_extractor import (
     build_requirement_extraction_request,
+)
+from ai_service.infrastructure.providers.task_extractor import (
     build_task_extraction_request,
 )
 from ai_service.training.dataset import (
@@ -73,7 +75,7 @@ def build_example(sample: TrainingSample, snapshot: DatasetSnapshot) -> dict[str
                 sample.message,
                 snapshot.context.requirements,
             )
-            schema = Draft
+            schema = RequirementDraft
         request = {
             "messages": [
                 {"role": "system", "content": prompt},
