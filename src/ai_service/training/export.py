@@ -6,15 +6,18 @@ import json
 from pathlib import Path
 from typing import Any
 
-from langchain_core.messages import AIMessage, convert_to_openai_messages
+from langchain_core.messages import convert_to_openai_messages
 from pydantic import BaseModel
 
 from ai_service.capabilities.assistant.provenance import canonical_hash
-from ai_service.capabilities.assistant.react.actions import CallToolAction
 from ai_service.capabilities.assistant.react.tools import allowed_tools
 from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
-from ai_service.infrastructure.providers.react_model import build_react_request
+from ai_service.infrastructure.providers.react_model import (
+    REACT_PROTOCOL_VERSION,
+    build_react_request,
+    project_model_response,
+)
 from ai_service.infrastructure.providers.requirement_extractor import (
     build_requirement_extraction_request,
 )
@@ -46,23 +49,13 @@ def build_example(sample: TrainingSample, snapshot: DatasetSnapshot) -> dict[str
             "messages": convert_to_openai_messages(messages),
             "tools": [{"type": "function", "function": tool} for tool in schemas],
         }
-        action = sample.target.action
-        if isinstance(action, CallToolAction):
-            target = convert_to_openai_messages(
-                AIMessage(
-                    content="",
-                    tool_calls=[
-                        {
-                            "id": action.call.call_id,
-                            "name": action.call.name,
-                            "args": action.call.arguments,
-                            "type": "tool_call",
-                        }
-                    ],
-                )
-            )
-        else:
-            target = {"role": "assistant", "content": sample.target.model_dump_json()}
+        target = convert_to_openai_messages(project_model_response(sample.target))
+        available = {schema["name"] for schema in schemas}
+        if any(
+            call["function"]["name"] not in available
+            for call in target.get("tool_calls", [])
+        ):
+            raise ValueError(f"TARGET_ACTION_NOT_AVAILABLE: {sample.sample_id}")
     else:
         schema: type[BaseModel]
         if isinstance(sample, TaskExtractionSample):
@@ -91,6 +84,7 @@ def build_example(sample: TrainingSample, snapshot: DatasetSnapshot) -> dict[str
         }
         target = {"role": "assistant", "content": sample.target.model_dump_json()}
     return {
+        "react_protocol": REACT_PROTOCOL_VERSION,
         "sample_id": sample.sample_id,
         "scenario_id": sample.scenario_id,
         "split": sample.split.value,
@@ -134,6 +128,7 @@ def export_dataset(directory: Path, output: Path) -> dict[str, Any]:
         hashes[name] = hashlib.sha256(content.encode()).hexdigest()
     report = {
         "schema_version": 1,
+        "react_protocol": REACT_PROTOCOL_VERSION,
         "dataset": loaded.manifest.model_dump(mode="json"),
         "samples": len(examples),
         "splits": loaded.report.splits,

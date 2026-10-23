@@ -95,14 +95,13 @@ async def emit_terminal(
     if run["request_payload"].get("schema_version") == 2:
         if snapshot.flexible is None or snapshot.requirement_state is None:
             raise ValueError("V2 completion event requires accepted flexible state")
+        selected = snapshot.flexible.response or snapshot.flexible.answer
         result = TurnResultV2(
             **data,
             flexible=to_public_flexible(snapshot.flexible, snapshot.requirement_state),
             products=public_tool_products(
                 [ToolRecord.model_validate(row) for row in values.get("ledger", [])],
-                snapshot.flexible.answer.evidence_refs
-                if snapshot.flexible.answer
-                else [],
+                selected.evidence_refs if selected else [],
             ),
         )
     else:

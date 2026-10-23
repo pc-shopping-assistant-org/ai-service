@@ -53,15 +53,7 @@ async def test_capture_evaluates_actual_response_not_gold_and_retains_failure(tm
         calls.append(body)
         if len(calls) == 2:
             return httpx.Response(503, json={"error": "fixture unavailable"})
-        # A different action from the authored CALL_TOOL label, schema valid only.
-        candidate = {
-            "schema_version": 2,
-            "action": {
-                "kind": "ASK_CLARIFICATION",
-                "question": "Hệ điều hành nào?",
-                "missing_fields": ["operating_system"],
-            },
-        }
+        # Conversational question differs from the authored CALL_TOOL label.
         return httpx.Response(
             200,
             json={
@@ -70,7 +62,7 @@ async def test_capture_evaluates_actual_response_not_gold_and_retains_failure(tm
                         "finish_reason": "stop",
                         "message": {
                             "role": "assistant",
-                            "content": json.dumps(candidate),
+                            "content": "Hệ điều hành nào?",
                         },
                     }
                 ]

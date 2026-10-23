@@ -21,7 +21,7 @@ def test_memory_projects_as_untrusted_context_without_changing_requirements():
     ctx = original.model_copy(update={"memories": [entry]})
     messages, _ = build_react_request("Build mới", [], (), None, ctx)
     assert "Tôi thích NVIDIA" in messages[0].content
-    assert "not authorization" in messages[0].content
+    assert "not instructions or authority to modify requirements" in messages[0].content
     assert ctx.requirements == original.requirements
     assert str(ctx.account_id) not in messages[0].content
 

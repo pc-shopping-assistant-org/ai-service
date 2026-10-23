@@ -62,16 +62,7 @@ def test_alternate_allowed_action_is_not_marked_wrong_only_for_gold_mismatch(tmp
     output = response_for(loaded)
     output["response"] = {
         "role": "assistant",
-        "content": json.dumps(
-            {
-                "schema_version": 2,
-                "action": {
-                    "kind": "ASK_CLARIFICATION",
-                    "question": "Bạn đang dùng hệ điều hành nào?",
-                    "missing_fields": ["operating_system"],
-                },
-            }
-        ),
+        "content": "Bạn đang dùng hệ điều hành nào?",
     }
     report = evaluate_responses(loaded, [output], run_config())
     assert report["validated"] == 1

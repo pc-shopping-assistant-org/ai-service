@@ -49,7 +49,10 @@ def test_free_choice_receipt_cannot_cross_run_source_or_request(field):
 
 
 @pytest.mark.asyncio
-async def test_unclear_free_reply_preserves_pending_source_and_does_not_call_agent():
+@pytest.mark.parametrize("prior_response", [None, "Câu trả lời chen ngang trước đó."])
+async def test_unclear_free_reply_preserves_pending_source_and_does_not_call_agent(
+    prior_response,
+):
     class NoAgent:
         async def decide(self, *args):
             raise AssertionError("Unclear unit reply must keep waiting")
@@ -71,6 +74,7 @@ async def test_unclear_free_reply_preserves_pending_source_and_does_not_call_age
         waiting_message="Which unit?",
         waiting_tasks=[TaskOutcome(task=tasks[0], status="UNRESOLVED")],
         pending_resolution=pending,
+        response={"text": prior_response} if prior_response else None,
     )
     binding = FlexiblePublicationInput(
         accepted=accepted,
@@ -91,6 +95,7 @@ async def test_unclear_free_reply_preserves_pending_source_and_does_not_call_age
     )
     result = await graph.ainvoke({"message": "Chưa biết"})
     assert result["phase"] == "WAITING_INPUT"
+    assert result["accepted_snapshot"]["flexible"].get("response") is None
     assert result["accepted_snapshot"]["flexible"][
         "pending_resolution"
     ] == pending.model_dump(mode="json")

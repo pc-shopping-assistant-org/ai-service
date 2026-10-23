@@ -22,15 +22,21 @@ from ai_service.capabilities.assistant.react.actions import (
     FlexibleDecision,
     ProposeRequirementsAction,
     RepairFeedback,
+    RespondAction,
     decode_flexible_decision,
 )
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
     CompletionRequirement,
+    ControlRecord,
     ReactLimits,
     ToolContext,
     ToolName,
     ToolRecord,
+)
+from ai_service.capabilities.assistant.react.dialogue import (
+    pending_context,
+    validate_response,
 )
 from ai_service.capabilities.assistant.react.outcomes import (
     InvalidTaskAnswer,
@@ -146,6 +152,8 @@ class FlexibleState(TypedDict, total=False):
     repair_feedback: dict[str, Any] | None
     phase: str
     answer: dict[str, Any]
+    response: dict[str, Any] | None
+    control_history: list[dict[str, Any]]
     clarification: dict[str, Any] | None
     accepted_snapshot: dict[str, Any] | None
     task_draft: dict[str, Any] | None
@@ -191,9 +199,7 @@ def build_flexible_graph(
     if registering and (tasks or publication is None):
         raise ValueError("Dynamic registration requires stored source, not fixed tasks")
     if (
-        not tasks
-        and not registering
-        and not (publication and publication.discard_pending)
+        not tasks and not registering and publication is None
     ) or conversation_revision < 0:
         raise ValueError("Trusted tasks and publication revision are required")
     limits = limits or ReactLimits()
@@ -257,6 +263,10 @@ def build_flexible_graph(
         value.requirements = CanonicalRequirementState.model_validate(
             state.get("working_requirements", trusted.requirements.model_dump())
         )
+        value.control_history = [
+            ControlRecord.model_validate(record)
+            for record in state.get("control_history", [])
+        ]
         # Trusted BUILD task remains BUILD; only its legacy adapter revision follows
         # application-approved working content. No model action can replace tasks.
         value.completion_requirements = [
@@ -269,6 +279,12 @@ def build_flexible_graph(
         ]
         if publication:
             value.task_message = publication.task_message
+            value.pending = (
+                pending_context(publication.accepted.flexible)
+                if not publication.confirmation
+                and value.requirements == trusted.requirements
+                else None
+            )
         if state.get("task_draft"):
             value.requested_tasks = TaskDraftBatch.model_validate(state["task_draft"])
         return ToolContext.model_validate(value.model_dump())
@@ -283,6 +299,33 @@ def build_flexible_graph(
 
     def projection(state: FlexibleState) -> list[ToolRecord]:
         return project_current_tools(records(state), current(state))
+
+    def acknowledge_control(
+        state: FlexibleState, update: dict[str, Any]
+    ) -> dict[str, Any]:
+        decision = (
+            decode_flexible_decision(state["decision"])
+            if state.get("decision")
+            else None
+        )
+        call = decision.control_call if decision else None
+        if call is not None:
+            history = [
+                ControlRecord.model_validate(row)
+                for row in state.get("control_history", [])
+            ]
+            if call.call_id not in {entry.call.call_id for entry in history}:
+                history.append(
+                    ControlRecord(
+                        call=call,
+                        code=update.get("phase", "REPAIR"),
+                        model_step=state.get("model_calls", 0),
+                    )
+                )
+            update["control_history"] = [
+                entry.model_dump(mode="json") for entry in history
+            ]
+        return update
 
     def repair(
         state: FlexibleState,
@@ -302,12 +345,15 @@ def build_flexible_graph(
         )
         return bounded(
             state,
-            {
-                "repairs": count,
-                "repair_feedback": feedback.model_dump(mode="json"),
-                "phase": "REPAIR",
-                "answer": {},
-            },
+            acknowledge_control(
+                state,
+                {
+                    "repairs": count,
+                    "repair_feedback": feedback.model_dump(mode="json"),
+                    "phase": "REPAIR",
+                    "answer": {},
+                },
+            ),
         )
 
     def resolution_update(continued: ResolutionContinuation) -> dict[str, Any]:
@@ -367,6 +413,8 @@ def build_flexible_graph(
             "repair_feedback": None,
             "decision": None,
             "answer": {},
+            "response": None,
+            "control_history": [],
             "clarification": None,
             "phase": "STARTED",
             "catalog_context": {
@@ -485,6 +533,12 @@ def build_flexible_graph(
         return bounded(state, update)
 
     async def prepare_agent(state: FlexibleState) -> dict[str, Any]:
+        if (
+            publication
+            and publication.dialogue_continuation
+            and (current(state).requirements == trusted.requirements)
+        ):
+            return {}
         if any(
             task.kind == "BUILD" for task in registered_tasks(state)
         ) and build_needs_catalog(current(state).requirements):
@@ -572,6 +626,15 @@ def build_flexible_graph(
             request_message_hash=canonical_hash(state["message"]),
             amendment=await amender.amend(state["message"], pending.draft),
         )
+        if not receipt.amendment.replacements and not receipt.amendment.discards:
+            return bounded(
+                state,
+                {
+                    "free_amendment": receipt.model_dump(mode="json"),
+                    "phase": "STARTED",
+                    "model_calls": state.get("model_calls", 0) + 1,
+                },
+            )
         continued = apply_amendment_receipt(
             receipt, ctx, pending, state["message"], conversation_revision
         )
@@ -732,6 +795,11 @@ def build_flexible_graph(
             return repair(state, "INVALID_ACTION")
         action = decode_flexible_decision(state["decision"]).action
         ctx = current(state)
+        decision = decode_flexible_decision(state["decision"])
+        if decision.control_call and decision.control_call.call_id in {
+            entry.call.call_id for entry in records(state)
+        } | {entry.call.call_id for entry in ctx.control_history}:
+            return repair(state, "INVALID_ACTION")
         if isinstance(action, CallToolAction):
             entries = records(state)
             if state.get("tool_calls", 0) >= limits.max_tool_calls:
@@ -749,7 +817,17 @@ def build_flexible_graph(
                 TOOL_SCHEMAS[name].model_validate(action.call.arguments)
             except (ValueError, ValidationError):
                 return repair(state, "BAD_TOOL_ARGUMENTS")
-            entries.append(ToolRecord(call=action.call, origin_run_id=ctx.run_id))
+            if action.call.call_id in {
+                entry.call.call_id for entry in ctx.control_history
+            }:
+                return repair(state, "INVALID_ACTION")
+            entries.append(
+                ToolRecord(
+                    call=action.call,
+                    origin_run_id=ctx.run_id,
+                    model_step=state.get("model_calls", 0),
+                )
+            )
             return bounded(
                 state,
                 {
@@ -761,6 +839,33 @@ def build_flexible_graph(
             )
         if isinstance(action, ProposeRequirementsAction):
             return {"phase": "RESOLVE_PROPOSAL"}
+        if isinstance(action, RespondAction):
+            continuing = bool(
+                publication
+                and publication.dialogue_continuation
+                and ctx.requirements == trusted.requirements
+                and not state.get("user_receipts")
+            )
+            if unresolved_tasks(state) and not continuing:
+                return repair(state, "TASK_INCOMPLETE", unresolved_tasks(state))
+            try:
+                response = validate_response(
+                    action,
+                    ctx,
+                    ctx.completion_requirements,
+                    records(state),
+                    continuing_pending=continuing,
+                )
+            except ValueError:
+                return repair(state, "TASK_INCOMPLETE")
+            return bounded(
+                state,
+                {
+                    "response": response.model_dump(mode="json"),
+                    "repair_feedback": None,
+                    "phase": "READY_TO_PUBLISH",
+                },
+            )
         if isinstance(action, AskClarificationAction):
             pending_fields = unresolved_tasks(state)
             if pending_fields:
@@ -914,7 +1019,7 @@ def build_flexible_graph(
                 repair(state, "INVALID_ACTION")
                 | {"model_calls": state.get("model_calls", 0) + extra_calls},
             )
-        return bounded(state, update)
+        return bounded(state, acknowledge_control(state, update))
 
     builder = StateGraph(FlexibleState)
     builder.add_node("begin_turn", observed_sync("begin_turn", begin))

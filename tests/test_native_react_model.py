@@ -22,7 +22,29 @@ from ai_service.infrastructure.providers.react_model import NativeFlexibleModel
 
 
 def final(candidate: AnswerCandidate) -> str:
-    return FlexibleDecision(action=FinalAnswerAction(answer=candidate)).model_dump_json()
+    return FlexibleDecision(
+        action=FinalAnswerAction(answer=candidate)
+    ).model_dump_json()
+
+
+def native_result(candidate: AnswerCandidate) -> AIMessage:
+    selection = candidate.model_dump(
+        mode="json",
+        exclude={"schema_version", "clarification_fields", "explanation"},
+        exclude_none=True,
+    )
+    if candidate.explanation is not None:
+        selection["explanation"] = candidate.explanation.text
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": "submit",
+                "name": "submit_result",
+                "args": {"results": [{"task_index": 0, **selection}]},
+            }
+        ],
+    )
 
 
 class Model:
@@ -55,9 +77,7 @@ async def test_native_model_receives_frozen_saved_context_without_execution_auth
     trusted = saved_context(stale=True)
     ref = trusted.saved_build.evidence_ref
     provider = Provider(
-        AIMessage(
-            content=final(AnswerCandidate(text="Saved build", evidence_refs=[ref]))
-        )
+        native_result(AnswerCandidate(text="Saved build", evidence_refs=[ref]))
     )
     decision = await NativeFlexibleModel(provider).decide(
         "Giải thích cấu hình cũ", [], (ToolName.SEARCH_CATALOG,), None, trusted
@@ -83,7 +103,9 @@ async def test_native_tool_response_and_state_aware_schemas():
         "GPU review", [], (ToolName.SEARCH_WEB,), None
     )
     assert decision.action.call.name == "search_web"
-    assert [tool["name"] for tool in provider.model.tools] == ["search_web"]
+    tool_names = {tool["name"] for tool in provider.model.tools}
+    assert "search_web" in tool_names
+    assert "search_catalog" not in tool_names
     assert provider.model.options == {"parallel_tool_calls": False}
     assert isinstance(provider.model.messages[0], SystemMessage)
     assert isinstance(provider.model.messages[1], HumanMessage)
@@ -95,16 +117,18 @@ async def test_native_transcript_projects_matched_pairs_and_parses_answer():
     call = ToolCall(
         call_id="catalog", name="search_catalog", arguments={"query": "GPU"}
     )
-    result = await dispatcher.execute(call, context())
+    trusted = context()
+    result = await dispatcher.execute(call, trusted)
     candidate = AnswerCandidate(
         text="Canonical GPU", evidence_refs=result.evidence_refs
     )
-    provider = Provider(AIMessage(content=final(candidate)), name="gemini")
+    provider = Provider(native_result(candidate), name="gemini")
     decision = await NativeFlexibleModel(provider).decide(
         "GPU",
-        [ToolRecord(call=call, result=result)],
+        [ToolRecord(call=call, result=result, origin_run_id=trusted.run_id)],
         (ToolName.SEARCH_CATALOG,),
         None,
+        trusted,
     )
     assert decision.action.answer == candidate
     assert provider.model.options == {}
@@ -115,9 +139,9 @@ async def test_native_transcript_projects_matched_pairs_and_parses_answer():
 
 
 @pytest.mark.asyncio
-async def test_native_malformed_final_is_repairable_not_published():
+async def test_legacy_json_final_is_repairable_not_published():
     decision = await NativeFlexibleModel(
-        Provider(AIMessage(content="Unsupported prose"))
+        Provider(AIMessage(content=final(AnswerCandidate(text="Legacy envelope"))))
     ).decide(
         "GPU",
         [],
@@ -167,16 +191,19 @@ async def test_gemini_signature_survives_canonical_tool_record_serialization():
     adapter = NativeFlexibleModel(provider)
     decision = await adapter.decide("GPU", [], (ToolName.SEARCH_CATALOG,), None)
     assert decision.action.call.provider_signature == "c2lnbmF0dXJl"
+    trusted = context()
     result = await ToolDispatcher(Catalog(), PCBuildApplicationService()).execute(
-        decision.action.call, context()
+        decision.action.call, trusted
     )
     record = ToolRecord.model_validate_json(
-        ToolRecord(call=decision.action.call, result=result).model_dump_json()
+        ToolRecord(
+            call=decision.action.call, result=result, origin_run_id=trusted.run_id
+        ).model_dump_json()
     )
-    provider.model.response = AIMessage(
-        content=final(AnswerCandidate(text="GPU", evidence_refs=result.evidence_refs))
+    provider.model.response = native_result(
+        AnswerCandidate(text="GPU", evidence_refs=result.evidence_refs)
     )
-    await adapter.decide("GPU", [record], (ToolName.SEARCH_CATALOG,), None)
+    await adapter.decide("GPU", [record], (ToolName.SEARCH_CATALOG,), None, trusted)
     assert provider.model.messages[2].additional_kwargs[signature_key] == {
         "search": "c2lnbmF0dXJl"
     }

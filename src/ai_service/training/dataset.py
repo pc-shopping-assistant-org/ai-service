@@ -16,6 +16,7 @@ from ai_service.capabilities.assistant.react.actions import (
     FinalAnswerAction,
     FlexibleDecision,
     ProposeRequirementsAction,
+    RespondAction,
 )
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
@@ -25,6 +26,7 @@ from ai_service.capabilities.assistant.react.contracts import (
     ToolName,
     ToolRecord,
 )
+from ai_service.capabilities.assistant.react.dialogue import validate_response
 from ai_service.capabilities.assistant.react.outcomes import validate_final_answer
 from ai_service.capabilities.assistant.react.tools import (
     allowed_tools,
@@ -208,6 +210,14 @@ def validate_label(sample: TrainingSample, snapshot: DatasetSnapshot) -> None:
                 snapshot.context.completion_requirements
                 or [CompletionRequirement(kind="ANSWER")],
                 PCBuildApplicationService(),
+            )
+        elif isinstance(action, RespondAction):
+            validate_response(
+                action,
+                snapshot.context,
+                snapshot.context.completion_requirements,
+                snapshot.records,
+                continuing_pending=snapshot.context.pending is not None,
             )
 
 

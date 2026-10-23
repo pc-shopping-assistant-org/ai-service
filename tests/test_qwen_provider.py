@@ -182,7 +182,9 @@ async def test_qwen_plugs_into_existing_native_react_adapter():
 
     async def respond(request):
         payload = json.loads(request.content)
-        assert [tool["function"]["name"] for tool in payload["tools"]] == ["search_web"]
+        assert [tool["function"]["name"] for tool in payload["tools"]] == [
+            "search_web", "propose_requirements", "ask_clarification",
+        ]
         return httpx.Response(
             200,
             json={

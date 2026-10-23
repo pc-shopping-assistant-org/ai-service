@@ -166,7 +166,6 @@ async def test_task_registration_does_not_extract_or_merge_requirements():
 @pytest.mark.parametrize(
     "result",
     [
-        {"tasks": []},
         None,
         {
             "tasks": [{"kind": "BUILD", "start": 0, "end": 8, "quote": "Build PC"}],
@@ -179,6 +178,14 @@ async def test_invalid_registration_never_becomes_default_answer(result):
     provider = Provider(result)
     with pytest.raises(ValueError):
         await NativeTaskExtractor(provider, Budget()).extract_tasks("Build PC")
+
+
+@pytest.mark.asyncio
+async def test_conversation_registration_explicitly_contains_no_business_task():
+    provider = Provider({"tasks": []})
+    result = await NativeTaskExtractor(provider, Budget()).extract_tasks("Chào bạn")
+    assert result.tasks == []
+    assert "tasks=[]" in provider.model.messages[0][1]
 
 
 @pytest.mark.asyncio
