@@ -19,6 +19,7 @@ class ActionKind(StrEnum):
     PROPOSE_REQUIREMENTS = "PROPOSE_REQUIREMENTS"
     ASK_CLARIFICATION = "ASK_CLARIFICATION"
     FINAL_ANSWER = "FINAL_ANSWER"
+    RESPOND = "RESPOND"
 
 
 class CallToolAction(Contract):
@@ -57,6 +58,10 @@ class AskClarificationAction(Contract):
     kind: Literal["ASK_CLARIFICATION"] = "ASK_CLARIFICATION"
     question: Text = Field(max_length=2000)
     missing_fields: list[Text] = Field(min_length=1, max_length=20)
+
+
+class RespondAction(AnswerCandidate):
+    kind: Literal["RESPOND"] = "RESPOND"
 
 
 type FinalOutcome = Literal[
@@ -114,7 +119,9 @@ Action = Annotated[
     CallToolAction
     | ProposeRequirementsAction
     | AskClarificationAction
-    | FinalAnswerAction,
+    | FinalAnswerAction
+    | RespondAction,
+    # A response is not an assertion that any registered task is completed.
     Field(discriminator="kind"),
 ]
 
@@ -122,6 +129,9 @@ Action = Annotated[
 class FlexibleDecision(Contract):
     schema_version: StrictInt = Field(default=2, ge=2, le=2)
     action: Action
+    control_call: ToolCall | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class _StoredDecisionEnvelope(Contract):
@@ -144,9 +154,9 @@ def decode_flexible_decision(value: object) -> FlexibleDecision:
                 "action": {
                     "kind": old_action.kind,
                     "source_text": old_action.source_text,
-                    "draft": RequirementDraft(
-                        items=old_action.draft.items
-                    ).model_dump(mode="json"),
+                    "draft": RequirementDraft(items=old_action.draft.items).model_dump(
+                        mode="json"
+                    ),
                 },
             }
         )
@@ -171,4 +181,6 @@ class RepairFeedback(Contract):
         max_length=8,
         exclude_if=lambda value: not value,
     )
-    allowed_next_actions: list[ActionKind] = Field(min_length=1, max_length=4)
+    allowed_next_actions: list[ActionKind] = Field(
+        min_length=1, max_length=len(ActionKind)
+    )

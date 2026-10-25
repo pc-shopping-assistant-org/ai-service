@@ -20,10 +20,15 @@ from ai_service.capabilities.assistant.limits import (
     MIN_COMPARISON_PRODUCTS,
 )
 from ai_service.capabilities.assistant.provenance import CatalogRowV1, canonical_hash
-from ai_service.capabilities.assistant.public_contracts import PublicBuildV1
+from ai_service.capabilities.assistant.public_contracts import (
+    PublicBuildV1,
+    PublicClarificationV1,
+    PublicTaskClarificationV1,
+)
 from ai_service.capabilities.assistant.requirements.build import BuildReceipt
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
+    RequirementPatch,
 )
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.assistant.requirements.verifier import SatisfactionReport
@@ -402,6 +407,9 @@ class ToolRecord(Contract):
     origin_run_id: UUID | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    model_step: NonNegativeInt | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def matched_pair(self) -> "ToolRecord":
@@ -454,6 +462,24 @@ class DialogueTurn(Contract):
     assistant_text: Text
 
 
+class ControlRecord(Contract):
+    """Checkpointed graph-transition acknowledgement, separate from tool outcomes."""
+
+    call: ToolCall
+    code: Text
+    model_step: NonNegativeInt
+
+
+class PendingConversationContext(Contract):
+    """Model-facing pending data; never a confirmation or mutation command."""
+
+    question: Text
+    proposal: RequirementPatch | None = None
+    proposal_sources: list[Text] = Field(default_factory=list, max_length=8)
+    resolution: PublicClarificationV1 | None = None
+    task_selection: PublicTaskClarificationV1 | None = None
+
+
 class ToolContext(Contract):
     account_id: UUID
     conversation_id: UUID
@@ -480,6 +506,14 @@ class ToolContext(Contract):
     )
     completion_requirements: list[CompletionRequirement] = Field(
         default_factory=list, max_length=8
+    )
+    pending: PendingConversationContext | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    control_history: list[ControlRecord] = Field(
+        default_factory=list,
+        max_length=100,
+        exclude_if=lambda value: not value,
     )
 
     @model_validator(mode="after")
@@ -528,6 +562,13 @@ class AnswerCandidate(Contract):
     explanation: ConsultationExplanation | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+
+
+class ConversationResponse(Contract):
+    """Response to this turn, independent of business-task completion."""
+
+    text: Text = Field(max_length=8000)
+    evidence_refs: list[Text] = Field(default_factory=list, max_length=100)
 
 
 class ValidatedAnswer(Contract):

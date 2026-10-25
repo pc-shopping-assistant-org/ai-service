@@ -125,6 +125,8 @@ def evaluate_responses(
                     parsed = parse_flexible_response(
                         message,
                         tuple(ToolName),
+                        context=snapshot.context,
+                        transcript=snapshot.records,
                     )
                     if parsed is None:
                         raise ValueError("NATIVE_PROTOCOL_OR_CONTRACT_INVALID")
@@ -143,6 +145,8 @@ def evaluate_responses(
                 # second evaluator that only compares against the authored answer.
                 validate_label(sample.model_copy(update={"target": target}), snapshot)
                 matches = target == sample.target
+                if isinstance(sample, ReactDecisionSample):
+                    matches = target.action == sample.target.action
                 if isinstance(sample, ReactDecisionSample) and isinstance(
                     target.action, CallToolAction
                 ):

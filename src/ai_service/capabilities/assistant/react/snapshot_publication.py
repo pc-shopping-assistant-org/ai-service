@@ -32,11 +32,22 @@ from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
 )
 
-from .actions import AskClarificationAction
-from .contracts import CompletionRequirement, ToolContext
+from .actions import AskClarificationAction, RespondAction, decode_flexible_decision
+from .contracts import (
+    CompletionRequirement,
+    ConversationResponse,
+    ToolContext,
+    ToolRecord,
+)
+from .dialogue import response_snapshot, validate_response
 from .pending_commands import validate_pending_command
 from .public_views import public_resolution_options
-from .publication import PreparedAnswerPublication, prepare_answer_publication
+from .publication import (
+    PreparedAnswerPublication,
+    bind_publication_context,
+    prepare_answer_publication,
+    snapshot_for_requirements,
+)
 from .published_state import FlexiblePublishedState
 from .resolution_reply import (
     FreeAmendmentV2,
@@ -70,6 +81,23 @@ class FlexiblePublicationInput(Contract):
     unit_reply: UnitClarificationReplyV1 | None = None
     task_reply: TaskClarificationReplyV1 | None = None
     discard_pending: StrictBool = False
+
+    @property
+    def dialogue_continuation(self) -> bool:
+        return bool(
+            self.accepted.flexible
+            and self.accepted.flexible.status == "WAITING_INPUT"
+            and not self.discard_pending
+            and not any(
+                value is not None
+                for value in (
+                    self.confirmation,
+                    self.reference_reply,
+                    self.unit_reply,
+                    self.task_reply,
+                )
+            )
+        )
 
     @classmethod
     def for_request(
@@ -191,6 +219,8 @@ class FlexiblePublicationInput(Contract):
         if values.get("message") != self.request_message:
             raise ValueError("Graph request differs from the stored request")
         pending = self.accepted.flexible
+        if values.get("response") is not None:
+            return self.prepare_response(values, context, tasks, conversation_revision)
         if self.discard_pending:
             if (
                 pending is None
@@ -423,7 +453,8 @@ class FlexiblePublicationInput(Contract):
                 raise ValueError("Unresolved free choice cannot change accepted state")
             waiting = pending.model_copy(
                 update={
-                    "waiting_message": "Chưa xác định được lựa chọn. Vui lòng chọn một tùy chọn đã nêu."
+                    "waiting_message": "Chưa xác định được lựa chọn. Vui lòng chọn một tùy chọn đã nêu.",
+                    "response": None,
                 }
             )
             return AcceptedConversationSnapshot.model_validate(
@@ -553,6 +584,126 @@ class FlexiblePublicationInput(Contract):
             catalog=context.catalog,
         )
 
+    def prepare_response(
+        self,
+        values: Mapping[str, Any],
+        context: ToolContext,
+        tasks: list[CompletionRequirement],
+        conversation_revision: int,
+    ) -> AcceptedConversationSnapshot:
+        """Preserve pending work or replay an authorized requirements-only transition."""
+        pending = self.accepted.flexible
+        receipts = [
+            decode_user_requirement_receipt(row, message=self.request_message)
+            for row in values.get("user_receipts", [])
+        ]
+        continuing = self.dialogue_continuation and not receipts
+        context, tasks = bind_publication_context(
+            self.accepted,
+            context,
+            tasks,
+            accepted_proposal=pending.pending_proposal
+            if pending and self.confirmation
+            else None,
+            confirmation=self.confirmation,
+            conversation_revision=conversation_revision,
+            user_receipts=receipts,
+            user_message=self.request_message,
+        )
+        if (
+            values.get("phase") != "READY_TO_PUBLISH"
+            or self.discard_pending
+            or values.get("answer")
+            or values.get("working_requirements")
+            != context.requirements.model_dump(mode="json")
+            or any(
+                command is not None
+                for command in (
+                    self.reference_reply,
+                    self.unit_reply,
+                    self.task_reply,
+                )
+            )
+            or values.get("pending_proposal")
+            != (
+                pending.pending_proposal.model_dump(mode="json")
+                if continuing and pending and pending.pending_proposal
+                else None
+            )
+            or values.get("pending_draft")
+            != (
+                pending.pending_resolution.model_dump(mode="json")
+                if continuing and pending and pending.pending_resolution
+                else None
+            )
+            or values.get("clarification") is not None
+        ):
+            raise ValueError(
+                "A conversational response requires preserved or authorized business state"
+            )
+        # Empty interpreted replies may precede a side question, but never bypass
+        # an actual selection/amendment that must use its own publication lane.
+        if values.get("free_resolution_reply") is not None:
+            if not pending or not pending.pending_resolution:
+                raise ValueError("No accepted resolution for interpreted reply")
+            choices = derive_resolution_reply(
+                FreeResolutionReplyV2.model_validate(values["free_resolution_reply"]),
+                self.request_message,
+                pending.pending_resolution,
+                context.run_id,
+            )
+            if any(choice is not None for choice in choices):
+                raise ValueError("A selected resolution is not a side question")
+        if values.get("free_amendment") is not None:
+            receipt = FreeAmendmentV2.model_validate(values["free_amendment"])
+            if receipt.amendment.replacements or receipt.amendment.discards:
+                raise ValueError("A requirement amendment is not a side question")
+        if values.get("free_task_reply") is not None:
+            if not pending or not pending.pending_task_resolution:
+                raise ValueError("No accepted task selection for interpreted reply")
+            if (
+                derive_task_reply(
+                    FreeTaskReplyV2.model_validate(values["free_task_reply"]),
+                    self.request_message,
+                    pending.pending_task_resolution,
+                    context.run_id,
+                )
+                is not None
+            ):
+                raise ValueError("A selected task is not a side question")
+        if values.get("free_task_amendment") is not None:
+            task_amendment = FreeTaskAmendmentV2.model_validate(
+                values["free_task_amendment"]
+            )
+            if task_amendment.amendment.edits:
+                raise ValueError("A task amendment is not a side question")
+        action = RespondAction.model_validate(
+            decode_flexible_decision(values.get("decision")).action.model_dump()
+        )
+        response = validate_response(
+            action,
+            context,
+            tasks,
+            [ToolRecord.model_validate(row) for row in values.get("ledger", [])],
+            continuing_pending=continuing,
+        )
+        if response != ConversationResponse.model_validate(values["response"]):
+            raise ValueError("Response differs from revalidated candidate")
+        base = (
+            self.accepted
+            if continuing
+            else snapshot_for_requirements(self.accepted, context).model_copy(
+                update={"flexible": None}
+            )
+        )
+        return response_snapshot(
+            base,
+            response,
+            conversation_id=context.conversation_id,
+            message_id=self.task_message_id,
+            message=self.task_message,
+        )
+
 
 class FlexibleExecutionContext(Contract):
     """Application-written begin-turn channel; model actions cannot update it."""
@@ -567,8 +718,8 @@ class FlexibleExecutionContext(Contract):
         if self.discard_only:
             if self.registered or self.required:
                 raise ValueError("Discard is not a requested-task execution")
-        elif bool(self.required) == self.registered:
-            raise ValueError("Use either fixed accepted tasks or dynamic registration")
+        elif self.required and self.registered:
+            raise ValueError("Dynamic registration cannot also supply fixed tasks")
         return self
 
 

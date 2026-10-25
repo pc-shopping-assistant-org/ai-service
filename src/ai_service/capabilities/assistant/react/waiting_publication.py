@@ -67,7 +67,7 @@ class PreparedWaitingPublication(Contract):
     pending_proposal: PendingRequirementProposal | None = None
     pending_resolution: PendingResolution | None = None
     clarification: AskClarificationAction | None = None
-    task_outcomes: list[TaskOutcome] = Field(min_length=1, max_length=8)
+    task_outcomes: list[TaskOutcome] = Field(max_length=8)
 
     @model_validator(mode="after")
     def waiting_only(self) -> "PreparedWaitingPublication":
@@ -115,7 +115,6 @@ def prepare_waiting_publication(
         or not source_message.strip()
         or len(source_message) > 4000
         or conversation_revision < 0
-        or not tasks
         or values.get("answer")
         or not context.execution_allowed
         or not context.read_catalog_allowed

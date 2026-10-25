@@ -46,7 +46,7 @@ class TaskDraft(TaskEvidence):
 class TaskDraftBatch(Contract):
     """Model proposal only; catalog resolver grants canonical completion targets."""
 
-    tasks: list[TaskDraft] = Field(min_length=1, max_length=8)
+    tasks: list[TaskDraft] = Field(max_length=8)
 
     def validate_source(self, message: str) -> None:
         for task in self.tasks:

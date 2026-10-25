@@ -3,9 +3,19 @@ import json
 import pytest
 from langchain_core.messages import AIMessage
 from test_native_react_model import Provider
+from test_react_tools import Catalog, context
 
 from ai_service.capabilities.assistant.react.actions import ActionKind, RepairFeedback
-from ai_service.capabilities.assistant.react.contracts import ToolName
+from ai_service.capabilities.assistant.react.contracts import (
+    CompletionRequirement,
+    ToolCall,
+    ToolName,
+    ToolRecord,
+)
+from ai_service.capabilities.assistant.react.tools import ToolDispatcher
+from ai_service.capabilities.pc_builder.application.service import (
+    PCBuildApplicationService,
+)
 from ai_service.infrastructure.providers.react_model import (
     GEMINI_SIGNATURES_KEY,
     NativeFlexibleModel,
@@ -13,14 +23,19 @@ from ai_service.infrastructure.providers.react_model import (
 
 
 def clarification():
-    return {
-        "schema_version": 2,
-        "action": {
-            "kind": "ASK_CLARIFICATION",
-            "question": "Ngân sách bao nhiêu?",
-            "missing_fields": ["budget"],
-        },
-    }
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": "clarify",
+                "name": "ask_clarification",
+                "args": {
+                    "question": "Ngân sách bao nhiêu?",
+                    "missing_fields": ["budget"],
+                },
+            }
+        ],
+    )
 
 
 @pytest.mark.asyncio
@@ -28,38 +43,62 @@ def clarification():
 async def test_multi_task_final_is_typed_provider_proposal_not_completion_authority(
     name,
 ):
+    from test_flexible_outcomes import fact_result
+
+    trusted = context()
+    trusted.completion_requirements = [
+        CompletionRequirement(kind="ANSWER"),
+        CompletionRequirement(kind="ANSWER"),
+    ]
+    call = ToolCall(
+        call_id="catalog", name="search_catalog", arguments={"query": "GPU"}
+    )
+    result = await ToolDispatcher(Catalog(), PCBuildApplicationService()).execute(
+        call, trusted
+    )
+    page = fact_result(trusted, "UNKNOWN")
+    records = [
+        ToolRecord(call=call, result=result, origin_run_id=trusted.run_id),
+        ToolRecord(
+            call=ToolCall(
+                call_id="page",
+                name="read_web_page",
+                arguments={"url": page.result.url},
+            ),
+            result=page,
+            origin_run_id=trusted.run_id,
+        ),
+    ]
     payload = {
-        "schema_version": 2,
-        "action": {
-            "kind": "FINAL_ANSWER",
-            "outcome": "MULTI_TASK",
-            "answer": {"text": "Ignored aggregate"},
-            "task_answers": [
-                {
-                    "task_index": 0,
-                    "outcome": "ANSWERED",
-                    "answer": {
-                        "text": "Typed candidate",
-                        "evidence_refs": ["catalog:gpu"],
-                    },
-                },
-                {
-                    "task_index": 1,
-                    "outcome": "INSUFFICIENT_EVIDENCE",
-                    "supporting_tool_call_ids": ["page"],
-                    "answer": {
-                        "text": "Missing fact",
-                        "evidence_refs": ["fact:unknown"],
-                    },
-                },
-            ],
-        },
+        "results": [
+            {
+                "task_index": 0,
+                "text": "Typed candidate",
+                "evidence_refs": result.evidence_refs,
+            },
+            {
+                "task_index": 1,
+                "text": "Missing fact",
+                "supporting_tool_call_ids": ["page"],
+                "evidence_refs": page.evidence_refs,
+            },
+        ]
     }
     decision = await NativeFlexibleModel(
-        Provider(AIMessage(content=json.dumps(payload)), name=name)
-    ).decide("GPU và kích thước", [], (), None)
+        Provider(
+            AIMessage(
+                content="",
+                tool_calls=[{"id": "submit", "name": "submit_result", "args": payload}],
+            ),
+            name=name,
+        )
+    ).decide("GPU và kích thước", records, (), None, trusted)
     assert decision.action.outcome == "MULTI_TASK"
     assert [part.task_index for part in decision.action.task_answers] == [0, 1]
+    assert [part.outcome for part in decision.action.task_answers] == [
+        "ANSWERED",
+        "INSUFFICIENT_EVIDENCE",
+    ]
     assert not hasattr(decision.action.task_answers[0], "status")
 
 
@@ -81,7 +120,8 @@ async def test_native_call_maps_to_one_v2_action_with_provider_signature(name):
     assert decision.action.call.provider_signature == (
         "opaque-signature" if name == "gemini" else None
     )
-    assert [tool["name"] for tool in provider.model.tools] == ["search_web"]
+    tool_names = {tool["name"] for tool in provider.model.tools}
+    assert "search_web" in tool_names and "search_catalog" not in tool_names
     assert provider.model.options == (
         {"parallel_tool_calls": False} if name == "openai" else {}
     )
@@ -89,7 +129,7 @@ async def test_native_call_maps_to_one_v2_action_with_provider_signature(name):
 
 @pytest.mark.asyncio
 async def test_clarification_without_tools_and_structured_repair():
-    provider = Provider(AIMessage(content=json.dumps(clarification())))
+    provider = Provider(clarification())
     feedback = RepairFeedback(
         code="TASK_INCOMPLETE",
         missing_fields=["budget"],
@@ -97,7 +137,7 @@ async def test_clarification_without_tools_and_structured_repair():
     )
     decision = await NativeFlexibleModel(provider).decide("Build PC", [], (), feedback)
     assert decision.action.question == "Ngân sách bao nhiêu?"
-    assert not hasattr(provider.model, "tools")
+    assert [tool["name"] for tool in provider.model.tools] == ["ask_clarification"]
     assert feedback.model_dump_json() in provider.model.messages[0].content
 
 
@@ -105,7 +145,7 @@ async def test_clarification_without_tools_and_structured_repair():
 @pytest.mark.parametrize(
     "content",
     [
-        "not json",
+        "{invalid json",
         '{"text":"old V1 answer"}',
         json.dumps(
             {
@@ -137,7 +177,18 @@ async def test_rejects_entire_ambiguous_or_unavailable_native_response(mode):
         calls.append({"id": "s2", "name": "search_web", "args": {"query": "CPU"}})
     provider = Provider(
         AIMessage(
-            content=json.dumps(clarification()) if mode == "mixed" else "",
+            content=json.dumps(
+                {
+                    "schema_version": 2,
+                    "action": {
+                        "kind": "ASK_CLARIFICATION",
+                        "question": "Budget?",
+                        "missing_fields": ["budget"],
+                    },
+                }
+            )
+            if mode == "mixed"
+            else "",
             tool_calls=calls,
         )
     )
@@ -148,7 +199,7 @@ async def test_rejects_entire_ambiguous_or_unavailable_native_response(mode):
 
 
 @pytest.mark.asyncio
-async def test_final_answer_is_only_an_outcome_proposal():
+async def test_legacy_model_selected_outcome_is_rejected_by_live_protocol():
     provider = Provider(
         AIMessage(
             content=json.dumps(
@@ -164,22 +215,21 @@ async def test_final_answer_is_only_an_outcome_proposal():
         )
     )
     decision = await NativeFlexibleModel(provider).decide("Build PC", [], (), None)
-    assert decision.action.outcome == "SEARCH_INCOMPLETE"
+    assert decision is None
 
 
 @pytest.mark.asyncio
 async def test_requirement_proposal_is_typed_without_mutating_trusted_context():
-    from test_react_tools import context
-
     trusted = context()
     before = trusted.model_dump(mode="json")
     provider = Provider(
         AIMessage(
-            content=json.dumps(
+            content="",
+            tool_calls=[
                 {
-                    "schema_version": 2,
-                    "action": {
-                        "kind": "PROPOSE_REQUIREMENTS",
+                    "id": "propose",
+                    "name": "propose_requirements",
+                    "args": {
                         "source_text": "RAM 32GB",
                         "draft": {
                             "items": [
@@ -198,7 +248,7 @@ async def test_requirement_proposal_is_typed_without_mutating_trusted_context():
                         },
                     },
                 }
-            )
+            ],
         )
     )
     decision = await NativeFlexibleModel(provider).decide(
@@ -211,7 +261,7 @@ async def test_requirement_proposal_is_typed_without_mutating_trusted_context():
 
 @pytest.mark.asyncio
 async def test_repair_restricts_action_and_network_failure_is_not_a_fake_answer():
-    provider = Provider(AIMessage(content=json.dumps(clarification())))
+    provider = Provider(clarification())
     feedback = RepairFeedback(
         code="MISSING_EVIDENCE", allowed_next_actions=[ActionKind.CALL_TOOL]
     )
@@ -228,14 +278,6 @@ async def test_repair_restricts_action_and_network_failure_is_not_a_fake_answer(
 @pytest.mark.asyncio
 async def test_v2_uses_canonical_gemini_tool_pairs_after_serialization():
     from langchain_core.messages import ToolMessage
-    from test_react_tools import Catalog, context
-
-    from ai_service.capabilities.assistant.react.contracts import ToolCall
-    from ai_service.capabilities.assistant.react.tools import ToolDispatcher
-    from ai_service.capabilities.pc_builder.application.service import (
-        PCBuildApplicationService,
-    )
-    from ai_service.infrastructure.graph.react import ToolRecord
 
     call = ToolCall(
         call_id="c1",
@@ -249,7 +291,7 @@ async def test_v2_uses_canonical_gemini_tool_pairs_after_serialization():
     record = ToolRecord.model_validate_json(
         ToolRecord(call=call, result=result).model_dump_json()
     )
-    provider = Provider(AIMessage(content=json.dumps(clarification())), name="gemini")
+    provider = Provider(clarification(), name="gemini")
     await NativeFlexibleModel(provider).decide("GPU", [record], (), None)
     ai, tool = provider.model.messages[-2:]
     assert ai.additional_kwargs[GEMINI_SIGNATURES_KEY] == {"c1": "opaque"}

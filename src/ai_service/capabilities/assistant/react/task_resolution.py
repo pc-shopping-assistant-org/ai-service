@@ -233,7 +233,7 @@ async def resolve_tasks(
     selections: list[TaskProductSelectionV1] | None = None,
     mention_overrides: list[TaskMentionOverride] | None = None,
 ) -> TaskResolution:
-    if not tasks or len(tasks) > 8:
+    if len(tasks) > 8:
         raise ValueError("TASK_DRAFT_REQUIRED")
     tasks = [TaskDraft.model_validate(task.model_dump()) for task in tasks]
     state = CanonicalRequirementState.model_validate(state.model_dump())

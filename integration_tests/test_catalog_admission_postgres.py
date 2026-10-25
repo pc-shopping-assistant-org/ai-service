@@ -17,9 +17,11 @@ from ai_service.main import create_app
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("greeting", [False, True])
 async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
     postgres_dsn,
     monkeypatch,
+    greeting,
 ):
     owner, calls, outbound = uuid4(), [], []
 
@@ -32,7 +34,10 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
 
         async def ainvoke(self, messages):
             if isinstance(messages[0], tuple):
-                assert json.loads(messages[-1][1])["user_message"] == "Build PC"
+                source = json.loads(messages[-1][1])["user_message"]
+                if source == "Chào bạn":
+                    return {"tasks": []}
+                assert source == "Build PC"
                 return {
                     "tasks": [
                         {"kind": "BUILD", "start": 0, "end": 8, "quote": "Build PC"}
@@ -40,6 +45,21 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
                 }
             message = messages[1].content
             calls.append(message)
+            if message == "Chào bạn":
+                return AIMessage(content="Chào bạn! Tôi có thể giúp chọn linh kiện PC.")
+            if message == "32GB có cần thiết không?":
+                context = json.loads(
+                    messages[0].content.split(" Application context (data): ", 1)[1]
+                )
+                assert (
+                    context["pending"]["proposal"]["set_requirements"][0]["value"][
+                        "amount"
+                    ]
+                    == 32
+                )
+                return AIMessage(
+                    content="RAM 32GB vẫn là đề xuất chưa áp dụng; hãy cân nhắc theo nhu cầu đa nhiệm."
+                )
             action = (
                 {
                     "kind": "ASK_CLARIFICATION",
@@ -63,7 +83,18 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
                     },
                 }
             )
-            return AIMessage(content=json.dumps({"action": action}))
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "clarify" if message == "Build PC" else "proposal",
+                        "name": action["kind"].lower(),
+                        "args": {
+                            key: value for key, value in action.items() if key != "kind"
+                        },
+                    }
+                ],
+            )
 
     class Provider:
         name = "openai"
@@ -120,7 +151,7 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
             conversation_id = UUID(created.json()["data"]["conversation_id"])
             path = f"/api/v1/conversations/{conversation_id}"
 
-            async def turn(message, revision, **extra):
+            async def turn(message, revision, expected_status="WAITING_INPUT", **extra):
                 submitted = await client.post(
                     path + "/runs",
                     json={
@@ -145,25 +176,30 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
                             "FAILED_RETRYABLE",
                             "RECOVERING",
                         }:
-                            assert view["status"] == "WAITING_INPUT", view
+                            assert view["status"] == expected_status, view
                             break
                         await asyncio.sleep(0.01)
                 public = (await client.get(path)).json()["data"]
                 assert public["revision"] == revision + 1
-                assert public["flexible"]["status"] == "WAITING_INPUT"
+                assert public["flexible"]["status"] == expected_status
                 return public
 
-            first = await turn("Build PC", 0)
+            revision = int(greeting)
+            if greeting:
+                hello = await turn("Chào bạn", 0, expected_status="COMPLETED")
+                assert hello["flexible"]["task_outcomes"] == []
+                assert "Chào bạn!" in hello["flexible"]["answer"]
+            first = await turn("Build PC", revision)
             assert first["flexible"]["missing_fields"] == [
                 "BUDGET_REQUIRED",
                 "USE_CASE_REQUIRED",
             ]
-            second = await turn("RAM 32", 1)
+            second = await turn("RAM 32", revision + 1)
             pending = second["flexible"]["clarification"]
             assert pending is not None
             third = await turn(
                 "GB",
-                2,
+                revision + 2,
                 unit_reply={
                     "pending_message_id": pending["pending_message_id"],
                     "constraints_revision": 0,
@@ -180,9 +216,22 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
             )
             assert third["flexible"]["proposal"] is not None
             assert third["flexible"]["clarification"] is None
-            assert calls == ["Build PC", "RAM 32"] and outbound == []
+            side = await turn("32GB có cần thiết không?", revision + 3)
+            assert side["flexible"]["proposal"] == third["flexible"]["proposal"]
+            assert (
+                side["flexible"]["task_outcomes"] == third["flexible"]["task_outcomes"]
+            )
+            assert "đề xuất chưa áp dụng" in side["flexible"]["answer"]
+            assert calls == (["Chào bạn"] if greeting else []) + [
+                "Build PC",
+                "RAM 32",
+                "32GB có cần thiết không?",
+            ]
+            assert outbound == []
             history = (await client.get(path + "/messages")).json()["data"]["items"]
-            assert [item["role"] for item in history] == ["user", "assistant"] * 3
+            assert [item["role"] for item in history] == ["user", "assistant"] * (
+                4 + revision
+            )
     finally:
         if conversation_id is not None:
             engine = create_async_engine(

@@ -82,7 +82,9 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
             if react_enabled and not isinstance(messages[0], tuple):
                 if version == "v2":
                     instruction = messages[0].content
-                    context_json = json.loads(instruction.rsplit("\n", 1)[-1])
+                    context_json = json.loads(
+                        instruction.split(" Application context (data): ", 1)[1]
+                    )
                     conversation_contexts.append(context_json.get("history", []))
                 read_only = messages[1].content == "Find GPU"
                 results = [
@@ -118,24 +120,25 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                     )
                 if version == "v2":
                     return AIMessage(
-                        content=json.dumps(
+                        content="",
+                        tool_calls=[
                             {
-                                "action": {
-                                    "kind": "FINAL_ANSWER",
-                                    "answer": {
-                                        "text": "Catalog result",
-                                        "evidence_refs": result["evidence_refs"],
-                                        "build_ref": None,
-                                        "explanation": {
-                                            "text": "Đối chiếu thông số và nhu cầu trước khi quyết định chọn linh kiện.",
+                                "id": "submit",
+                                "name": "submit_result",
+                                "args": {
+                                    "results": [
+                                        {
+                                            "text": "Catalog result",
                                             "evidence_refs": result["evidence_refs"],
+                                            "build_ref": None,
+                                            "explanation": "Đối chiếu thông số và nhu cầu trước khi quyết định chọn linh kiện."
+                                            if selected
+                                            else None,
                                         }
-                                        if selected
-                                        else None,
-                                    },
-                                }
+                                    ],
+                                },
                             }
-                        )
+                        ],
                     )
                 return AIMessage(
                     content=json.dumps(

@@ -76,8 +76,9 @@ async def test_missing_or_ambiguous_product_blocks_whole_task_set(found):
 
 @pytest.mark.asyncio
 async def test_empty_task_draft_never_defaults_to_build():
-    with pytest.raises(ValueError, match="TASK_DRAFT_REQUIRED"):
-        await resolve_tasks([], "Hello", CanonicalRequirementState(), Catalog({}))
+    result = await resolve_tasks([], "Hello", CanonicalRequirementState(), Catalog({}))
+    assert result.requirements == []
+    assert result.pending == []
 
 
 @pytest.mark.asyncio
