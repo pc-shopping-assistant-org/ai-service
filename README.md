@@ -82,6 +82,9 @@ and manual dispatch. It installs locked dependencies, runs Ruff/mypy/core pytest
 then applies Alembic and native saver bootstrap to a disposable PostgreSQL18 database
 before running `integration_tests`. No live model/auth/catalog credentials are needed.
 
+New CI runs cancel older runs of the same workflow on the same branch or PR,
+including release branches.
+
 Only pushes/manual dispatches on `release/vX.Y.Z` (or `release/vX.Y.Z-rc.N`)
 build/publish an image tagged `X.Y.Z` (or `X.Y.Z-rc.N`) and `sha-<full commit>`.
 For example, `release/v1.0.0` publishes `ai-service:1.0.0`. Other branches/tags, PRs and merge queues
