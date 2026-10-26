@@ -127,14 +127,3 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: mode=max
           sbom: true
-
-  propose:
-    name: Propose AI image for production
-    needs: image
-    if: github.event_name == 'push'
-    uses: pc-shopping-assistant-org/infra/.github/workflows/propose-image.yml@release/production
-    with:
-      component: ai
-      release_branch: ${{ github.ref_name }}
-    secrets:
-      INFRA_RELEASE_PR_TOKEN: ${{ secrets.INFRA_RELEASE_PR_TOKEN }}

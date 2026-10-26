@@ -85,9 +85,8 @@ before running `integration_tests`. No live model/auth/catalog credentials are n
 Only pushes/manual dispatches on `release/vX.Y.Z` (or `release/vX.Y.Z-rc.N`)
 build/publish an image tagged `X.Y.Z` (or `X.Y.Z-rc.N`) and `sha-<full commit>`.
 For example, `release/v1.0.0` publishes `ai-service:1.0.0`. Other branches/tags, PRs and merge queues
-verify only. After a release push publishes the image, CI proposes its tag in
-`infra/release/images.lock` (requires `INFRA_RELEASE_PR_TOKEN`). Merging that PR
-into infra `release/production` starts SSH deployment. Infra stops the old
+verify only. Select the published AI tag in the server's `infra/.release.env`,
+then run the infra release workflow to deploy. Infra stops the old
 executor and runs migrations before starting AI. Server env comes from
 `infra/.env.docker`, never from an env
 file baked into the image. Configure SSH only in infra; see `../infra/README.md`.
