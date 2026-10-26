@@ -11,6 +11,10 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from ai_service.capabilities.assistant.source_quotes import (
+    QuotedRequirementDraft,
+    QuotedTaskBatch,
+)
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.persistence.schema import conversations
 from ai_service.main import create_app
@@ -75,6 +79,7 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
             return self
 
         def with_structured_output(self, schema, **kwargs):
+            self.schema = schema
             return self
 
         async def ainvoke(self, messages):
@@ -149,14 +154,39 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                         }
                     )
                 )
-            if (
-                react_enabled
-                and json.loads(messages[-1][1])["user_message"] == "Find GPU"
-            ):
+            source = json.loads(messages[-1][1])["user_message"]
+            if react_enabled and self.schema is QuotedTaskBatch:
                 return {
-                    **({"items": []} if version == "v1" else {}),
                     "tasks": [
-                        {"kind": "ANSWER", "start": 0, "end": 8, "quote": "Find GPU"}
+                        {
+                            "kind": "ANSWER" if source == "Find GPU" else "BUILD",
+                            "quote": source,
+                        }
+                    ],
+                }
+            if self.schema is QuotedRequirementDraft:
+                if source == "Find GPU":
+                    return {"items": []}
+                return {
+                    "items": [
+                        {
+                            "subject": "SETUP",
+                            "predicate": "budget",
+                            "operator": "LTE",
+                            "value": {
+                                "kind": "QUANTITY",
+                                "amount": 30_000_000,
+                                "unit": "VND",
+                            },
+                            "quote": source,
+                        },
+                        {
+                            "target": "GOAL",
+                            "subject": "WORKLOAD",
+                            "predicate": "use_case",
+                            "value": {"kind": "TEXT", "text": "GAMING_1080P"},
+                            "quote": source,
+                        },
                     ],
                 }
             return {
