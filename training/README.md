@@ -20,7 +20,8 @@ chỉ in command, cần --execute để chạy. Không có automatic approval/pr
 
 Code tests không thay thế native tokenizer, GPU/vLLM smoke hoặc semantic review.
 
-ReAct export hiện dùng `text-native-controls-v1`: plain text hoặc native control/tool
+ReAct export hiện dùng `text-native-controls-v2`: plain text hoặc native control/tool
 call, không JSON FlexibleDecision. Manifest ghi protocol; artifacts/adapter cũ cần
-regenerate/retrain, không tự overwrite. Pilot react-13/14/15 còn DRAFT cần review
+regenerate/retrain, không tự overwrite. Task/requirement targets và proposal control
+trả quote; runtime tính source offsets. Pilot react-13/14/15 còn DRAFT cần review
 context/nhãn clarification; exporter chặn action không có trong serving tools.

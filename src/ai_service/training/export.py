@@ -11,8 +11,12 @@ from pydantic import BaseModel
 
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.react.tools import allowed_tools
-from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
-from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
+from ai_service.capabilities.assistant.source_quotes import (
+    QuotedRequirementDraft,
+    QuotedTaskBatch,
+    project_requirement_draft,
+    project_task_batch,
+)
 from ai_service.infrastructure.providers.react_model import (
     REACT_PROTOCOL_VERSION,
     build_react_request,
@@ -49,7 +53,9 @@ def build_example(sample: TrainingSample, snapshot: DatasetSnapshot) -> dict[str
             "messages": convert_to_openai_messages(messages),
             "tools": [{"type": "function", "function": tool} for tool in schemas],
         }
-        target = convert_to_openai_messages(project_model_response(sample.target))
+        target = convert_to_openai_messages(
+            project_model_response(sample.target, sample.message)
+        )
         available = {schema["name"] for schema in schemas}
         if any(
             call["function"]["name"] not in available
@@ -58,17 +64,20 @@ def build_example(sample: TrainingSample, snapshot: DatasetSnapshot) -> dict[str
             raise ValueError(f"TARGET_ACTION_NOT_AVAILABLE: {sample.sample_id}")
     else:
         schema: type[BaseModel]
+        label: BaseModel
         if isinstance(sample, TaskExtractionSample):
             prompt, payload = build_task_extraction_request(
                 sample.message, snapshot.context
             )
-            schema = TaskDraftBatch
+            schema = QuotedTaskBatch
+            label = project_task_batch(sample.target, sample.message)
         else:
             prompt, payload = build_requirement_extraction_request(
                 sample.message,
                 snapshot.context.requirements,
             )
-            schema = RequirementDraft
+            schema = QuotedRequirementDraft
+            label = project_requirement_draft(sample.target, sample.message)
         request = {
             "messages": [
                 {"role": "system", "content": prompt},
@@ -82,7 +91,7 @@ def build_example(sample: TrainingSample, snapshot: DatasetSnapshot) -> dict[str
                 },
             },
         }
-        target = {"role": "assistant", "content": sample.target.model_dump_json()}
+        target = {"role": "assistant", "content": label.model_dump_json()}
     return {
         "react_protocol": REACT_PROTOCOL_VERSION,
         "sample_id": sample.sample_id,

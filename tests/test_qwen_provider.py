@@ -5,8 +5,10 @@ import pytest
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
-from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
-from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
+from ai_service.capabilities.assistant.source_quotes import (
+    QuotedRequirementDraft,
+    QuotedTaskBatch,
+)
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.providers.factory import build_model_provider
 from ai_service.infrastructure.providers.qwen import QwenChatClient, QwenModelProvider
@@ -35,15 +37,15 @@ def test_structured_schema_is_added_once_without_mutating_canonical_input():
         "response_format": {
             "type": "json_schema",
             "json_schema": {
-                "name": "RequirementDraft",
-                "schema": RequirementDraft.model_json_schema(),
+                "name": "QuotedRequirementDraft",
+                "schema": QuotedRequirementDraft.model_json_schema(),
             },
         },
     }
     before = json.dumps(request)
     prepared = prepare_qwen_request(request)
     assert "response_format" not in prepared
-    assert "RequirementDraft" in prepared["messages"][0]["content"]
+    assert "QuotedRequirementDraft" in prepared["messages"][0]["content"]
     assert json.dumps(request) == before
 
 
@@ -78,9 +80,9 @@ async def test_native_tools_and_structured_heads_route_without_network():
                 "role": "assistant",
                 "content": (
                     '{"schema_version":2,"items":[]}'
-                    if "RequirementDraft" in prompt
-                    else '{"tasks":[{"kind":"ANSWER","start":0,"end":1,"quote":"x"}]}'
-                    if "TaskDraftBatch" in prompt
+                    if "QuotedRequirementDraft" in prompt
+                    else '{"tasks":[{"kind":"ANSWER","quote":"x"}]}'
+                    if "QuotedTaskBatch" in prompt
                     else '{"selected":true}'
                 ),
             }
@@ -110,12 +112,12 @@ async def test_native_tools_and_structured_heads_route_without_network():
         assert requests[-1]["parallel_tool_calls"] is False
         assert requests[-1]["chat_template_kwargs"] == {"enable_thinking": False}
         requirement = await model.with_structured_output(
-            RequirementDraft, method="json_schema"
+            QuotedRequirementDraft, method="json_schema"
         ).ainvoke([("human", "RAM")])
-        assert requirement == RequirementDraft(items=[])
+        assert requirement == QuotedRequirementDraft(items=[])
         requirement_request = requests[-1]
         task_batch = await model.with_structured_output(
-            TaskDraftBatch, method="json_schema"
+            QuotedTaskBatch, method="json_schema"
         ).ainvoke([("human", "task")])
         assert task_batch.tasks[0].kind == "ANSWER"
         expected_runtime_request = prepare_qwen_request(
@@ -124,8 +126,8 @@ async def test_native_tools_and_structured_heads_route_without_network():
                 "response_format": {
                     "type": "json_schema",
                     "json_schema": {
-                        "name": "RequirementDraft",
-                        "schema": RequirementDraft.model_json_schema(),
+                        "name": "QuotedRequirementDraft",
+                        "schema": QuotedRequirementDraft.model_json_schema(),
                     },
                 },
             }

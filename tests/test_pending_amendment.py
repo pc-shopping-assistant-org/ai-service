@@ -129,7 +129,21 @@ def test_invalid_amendment_bundle_is_atomic_and_does_not_change_target():
 async def test_native_amendment_reserves_model_before_dispatch():
     _, pending = pending_quantity()
     budget = Budget()
-    provider = Provider(replace_ram().model_dump(mode="json"))
+    provider = Provider(
+        {
+            "replacements": [
+                {
+                    "item_index": 2,
+                    "item": {
+                        **replace_ram()
+                        .replacements[0]
+                        .item.model_dump(exclude={"start", "end"}),
+                        "quote": "64GB",
+                    },
+                }
+            ],
+        }
+    )
     amendment = await NativeRequirementExtractor(provider, budget).amend(
         "64GB", pending
     )

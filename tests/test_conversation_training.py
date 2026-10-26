@@ -28,9 +28,20 @@ PILOT = Path(__file__).parents[1] / "training" / "pilot-v1"
 
 def parse_export(example, snapshot):
     message = convert_to_messages([example["target"]])[0]
+    source = next(
+        (
+            part["content"]
+            for part in example["request"]["messages"]
+            if part["role"] == "user"
+        ),
+        "",
+    )
+    if source.startswith("{"):
+        source = json.loads(source).get("user_message", source)
     return parse_flexible_response(
         message,
         allowed_tools(snapshot.context, snapshot.records),
+        message=source,
         context=snapshot.context,
         transcript=snapshot.records,
     )
@@ -111,11 +122,17 @@ def test_control_targets_export_native_calls_matching_serving_schema(tmp_path, k
     assert len(target["tool_calls"]) == 1
     function = target["tool_calls"][0]["function"]
     assert function["name"] == kind.lower()
-    assert json.loads(function["arguments"]) == {
-        key: value
-        for key, value in record.target.action.model_dump(mode="json").items()
-        if key != "kind"
-    }
+    arguments = json.loads(function["arguments"])
+    if kind == "PROPOSE_REQUIREMENTS":
+        assert arguments["draft"]["items"][0]["quote"] == "RAM 32GB"
+        assert "start" not in arguments["draft"]["items"][0]
+        assert "end" not in arguments["draft"]["items"][0]
+    else:
+        assert arguments == {
+            key: value
+            for key, value in record.target.action.model_dump(mode="json").items()
+            if key != "kind"
+        }
     _, serving_schemas = build_react_request(
         record.message,
         snapshot.records,

@@ -42,10 +42,11 @@ from ai_service.capabilities.assistant.react.submissions import (
     ResultSelection,
     SubmitResults,
 )
+from ai_service.capabilities.assistant.source_quotes import project_requirement_draft
 from ai_service.infrastructure.providers.failures import invoke_provider
 
 GEMINI_SIGNATURES_KEY = "__gemini_function_call_thought_signatures__"
-REACT_PROTOCOL_VERSION = "text-native-controls-v1"
+REACT_PROTOCOL_VERSION = "text-native-controls-v2"
 
 REACT_SYSTEM_PROMPT = (
     "You are the gearPC assistant. Respond naturally in the user's language. "
@@ -60,6 +61,8 @@ REACT_SYSTEM_PROMPT = (
     "reply; never output a JSON action envelope. propose_requirements changes only "
     "working state after application admission. Your own tradeoffs require consent; "
     "never invent user authorization, confirm a proposal or discard pending work. "
+    "For proposed requirements return exact evidence quotes, not character offsets; "
+    "include surrounding text if a quote repeats. "
     "Catalog tools establish current prices/stock/identity. Saved build prices are "
     "historical. Research tools search manufacturers then scoped independent sources; "
     "search snippets are not evidence. Read pages before citing them, preserve exact "
@@ -90,7 +93,7 @@ def _call_message(call: ToolCall, *, provider_name: str) -> AIMessage:
     )
 
 
-def project_model_response(decision: FlexibleDecision) -> AIMessage:
+def project_model_response(decision: FlexibleDecision, message: str) -> AIMessage:
     """Project reviewed internal labels to the same text/native serving protocol."""
     action = decision.action
     if isinstance(action, CallToolAction):
@@ -98,6 +101,9 @@ def project_model_response(decision: FlexibleDecision) -> AIMessage:
     if isinstance(action, ProposeRequirementsAction):
         name = ControlName.PROPOSE_REQUIREMENTS
         arguments = action.model_dump(mode="json", exclude={"kind"})
+        arguments["draft"] = project_requirement_draft(
+            action.draft, action.source_text or message
+        ).model_dump(mode="json")
     elif isinstance(action, AskClarificationAction):
         name = ControlName.ASK_CLARIFICATION
         arguments = action.model_dump(mode="json", exclude={"kind"})
@@ -282,6 +288,7 @@ def parse_flexible_response(
     allowed: tuple[ToolName, ...],
     repair: RepairFeedback | None = None,
     *,
+    message: str = "",
     provider_name: str = "openai",
     context: ToolContext | None = None,
     transcript: list[ToolRecord] | None = None,
@@ -297,7 +304,7 @@ def parse_flexible_response(
         if response.tool_calls:
             call = _response_calls(response, provider_name)[0]
             if call.name in allowed_controls(records, context, repair):
-                decision = normalize_control(call, records)
+                decision = normalize_control(call, records, message)
             elif call.name in allowed:
                 decision = FlexibleDecision(action=CallToolAction(call=call))
             else:
@@ -345,6 +352,7 @@ class NativeFlexibleModel:
             response,
             allowed,
             repair,
+            message=message,
             provider_name=self.provider.name,
             context=context,
             transcript=transcript,

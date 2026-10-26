@@ -10,14 +10,16 @@ from langchain_core.messages import (
 )
 from pydantic import BaseModel
 
-from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
-from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
+from ai_service.capabilities.assistant.source_quotes import (
+    QuotedRequirementDraft,
+    QuotedTaskBatch,
+)
 from ai_service.config.enums import AIProvider
 from ai_service.config.qwen import QWEN_MODEL_ID, QWEN_REQUEST_TIMEOUT_SECONDS
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.providers.qwen_protocol import prepare_qwen_request
 
-ADAPTER_STRUCTURED_SCHEMAS = frozenset({RequirementDraft, TaskDraftBatch})
+ADAPTER_STRUCTURED_SCHEMAS = frozenset({QuotedRequirementDraft, QuotedTaskBatch})
 
 
 class QwenChatClient:

@@ -96,7 +96,7 @@ async def test_export_structured_prompt_schema_matches_runtime():
         record = next(item for item in loaded.samples if item.task == task)
         snapshot = loaded.snapshots[record.snapshot_id]
         example = build_example(record, snapshot)
-        provider = DraftProvider(record.target.model_dump(mode="json"))
+        provider = DraftProvider(json.loads(example["target"]["content"]))
         if task == "TASK_EXTRACTION":
             extractor = NativeTaskExtractor(
                 provider, Budget(), context=snapshot.context
@@ -113,6 +113,5 @@ async def test_export_structured_prompt_schema_matches_runtime():
             example["request"]["response_format"]["json_schema"]["schema"]
             == provider.model.schema.model_json_schema()
         )
-        assert json.loads(example["target"]["content"]) == record.target.model_dump(
-            mode="json"
-        )
+        assert "start" not in example["target"]["content"]
+        assert "end" not in example["target"]["content"]

@@ -1,8 +1,12 @@
 """Native control contracts; application transitions are not business tool results."""
 
 from enum import StrEnum
+from typing import Literal
 
-from ai_service.capabilities.assistant.stateful_contracts import Contract
+from pydantic import Field, model_validator
+
+from ai_service.capabilities.assistant.source_quotes import QuotedRequirementDraft
+from ai_service.capabilities.assistant.stateful_contracts import Contract, Text
 
 from .actions import (
     ActionKind,
@@ -22,8 +26,20 @@ class ControlName(StrEnum):
     SUBMIT_RESULT = "submit_result"
 
 
+class QuotedProposeRequirementsAction(Contract):
+    kind: Literal["PROPOSE_REQUIREMENTS"] = "PROPOSE_REQUIREMENTS"
+    draft: QuotedRequirementDraft
+    source_text: Text | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def requirement_only(self) -> "QuotedProposeRequirementsAction":
+        if not self.draft.items:
+            raise ValueError("Requirement proposal cannot replace requested tasks")
+        return self
+
+
 CONTROL_SCHEMAS: dict[ControlName, type[Contract]] = {
-    ControlName.PROPOSE_REQUIREMENTS: ProposeRequirementsAction,
+    ControlName.PROPOSE_REQUIREMENTS: QuotedProposeRequirementsAction,
     ControlName.ASK_CLARIFICATION: AskClarificationAction,
     ControlName.SUBMIT_RESULT: SubmitResults,
 }
@@ -60,10 +76,16 @@ def allowed_controls(
     return tuple(controls)
 
 
-def normalize_control(call: ToolCall, records: list[ToolRecord]) -> FlexibleDecision:
+def normalize_control(
+    call: ToolCall, records: list[ToolRecord], message: str
+) -> FlexibleDecision:
     name = ControlName(call.name)
     if name == ControlName.PROPOSE_REQUIREMENTS:
-        action = ProposeRequirementsAction.model_validate(call.arguments)
+        quoted = QuotedProposeRequirementsAction.model_validate(call.arguments)
+        action = ProposeRequirementsAction(
+            draft=quoted.draft.bind(quoted.source_text or message),
+            source_text=quoted.source_text,
+        )
         return FlexibleDecision(action=action, control_call=call)
     if name == ControlName.ASK_CLARIFICATION:
         question = AskClarificationAction.model_validate(call.arguments)

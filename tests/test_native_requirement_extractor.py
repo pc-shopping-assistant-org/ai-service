@@ -7,6 +7,7 @@ from ai_service.capabilities.assistant.requirements.contracts import (
 from ai_service.capabilities.assistant.requirements.resolver import (
     RequirementDraft,
 )
+from ai_service.capabilities.assistant.source_quotes import QuotedRequirementDraft
 from ai_service.infrastructure.providers.requirement_extractor import (
     NativeRequirementExtractor,
     build_requirement_extraction_request,
@@ -60,8 +61,7 @@ async def test_native_extraction_uses_requirement_only_contract_and_durable_boun
                     "predicate": "budget",
                     "operator": "LTE",
                     "value": {"kind": "QUANTITY", "amount": 25_000_000, "unit": "VND"},
-                    "start": 0,
-                    "end": len(message),
+                    "quote": message,
                 }
             ]
         }
@@ -72,7 +72,7 @@ async def test_native_extraction_uses_requirement_only_contract_and_durable_boun
     )
     assert result.schema_version == 2
     assert result.items[0].value.amount == 25_000_000
-    assert provider.model.schema is RequirementDraft
+    assert provider.model.schema is QuotedRequirementDraft
     assert budget.reservations[0][0] == "MODEL"
     assert message in provider.model.messages[-1][1]
 
@@ -96,8 +96,7 @@ async def test_invalid_native_output_is_not_silently_converted_to_empty_patch():
                     "subject": "GPU",
                     "predicate": "identity",
                     "value": {"kind": "REFERENCE", "variant_id": "invented"},
-                    "start": 0,
-                    "end": 4,
+                    "quote": "RTX",
                 }
             ]
         }

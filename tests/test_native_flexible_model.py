@@ -236,8 +236,7 @@ async def test_requirement_proposal_is_typed_without_mutating_trusted_context():
                                 {
                                     "subject": "RAM",
                                     "predicate": "capacity",
-                                    "start": 0,
-                                    "end": 8,
+                                    "quote": "RAM 32GB",
                                     "value": {
                                         "kind": "QUANTITY",
                                         "amount": 32,

@@ -10,6 +10,10 @@ from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
 )
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
+from ai_service.capabilities.assistant.source_quotes import (
+    QuotedTaskBatch,
+    project_task_batch,
+)
 from ai_service.infrastructure.providers.task_extractor import NativeTaskExtractor
 
 
@@ -27,11 +31,11 @@ async def test_task_registration_receives_only_safe_published_context():
         )
     ]
     message = "Tăng RAM"
-    provider = Provider(
-        {"tasks": [{"kind": "BUILD", "start": 0, "end": len(message), "quote": message}]}
-    )
+    provider = Provider({"tasks": [{"kind": "BUILD", "quote": message}]})
 
-    await NativeTaskExtractor(provider, Budget(), context=trusted).extract_tasks(message)
+    await NativeTaskExtractor(provider, Budget(), context=trusted).extract_tasks(
+        message
+    )
 
     payload = json.loads(provider.model.messages[-1][1])
     assert payload["published_history"][0]["user_text"] == "Build PC gaming"
@@ -62,24 +66,20 @@ async def test_registration_classifies_sdk_timeout_after_one_reserved_attempt():
 @pytest.mark.asyncio
 async def test_task_extractor_returns_task_only_contract_and_validates_source():
     message = "Build PC 25 triệu"
-    provider = Provider(
-        {"tasks": [{"kind": "BUILD", "start": 0, "end": 8, "quote": "Build PC"}]}
-    )
+    provider = Provider({"tasks": [{"kind": "BUILD", "quote": "Build PC"}]})
 
     batch = await NativeTaskExtractor(provider, Budget()).extract_tasks(message)
 
     assert [task.kind for task in batch.tasks] == ["BUILD"]
     assert not hasattr(batch, "items")
-    assert provider.model.schema is TaskDraftBatch
+    assert provider.model.schema is QuotedTaskBatch
 
 
 @pytest.mark.asyncio
 async def test_task_extractor_rejects_unbound_source_evidence():
-    provider = Provider(
-        {"tasks": [{"kind": "BUILD", "start": 0, "end": 8, "quote": "Build PC"}]}
-    )
+    provider = Provider({"tasks": [{"kind": "BUILD", "quote": "Build PC"}]})
 
-    with pytest.raises(ValueError, match="Task evidence"):
+    with pytest.raises(ValueError, match="Source quote not found"):
         await NativeTaskExtractor(provider, Budget()).extract_tasks("Tìm card đồ họa")
 
 
@@ -91,12 +91,10 @@ async def test_comparison_task_preserves_product_mentions_without_generated_ids(
             "tasks": [
                 {
                     "kind": "COMPARE",
-                    "start": 0,
-                    "end": len(message),
                     "quote": message,
                     "subjects": [
-                        {"start": 3, "end": 11, "quote": "RTX 4060"},
-                        {"start": 15, "end": 23, "quote": "RTX 4070"},
+                        {"quote": "RTX 4060"},
+                        {"quote": "RTX 4070"},
                     ],
                 }
             ]
@@ -115,14 +113,14 @@ async def test_comparison_task_preserves_product_mentions_without_generated_ids(
 @pytest.mark.parametrize(
     "subjects",
     [
-        [{"start": 3, "end": 11, "quote": "RTX 4060"}],
+        [{"quote": "RTX 4060"}],
         [
-            {"start": 3, "end": 11, "quote": "RTX 4060"},
-            {"start": 15, "end": 23, "quote": "RTX 4090"},
+            {"quote": "RTX 4060"},
+            {"quote": "RTX 4090"},
         ],
         [
-            {"start": 3, "end": 11, "quote": "RTX 4060", "product_id": "invented"},
-            {"start": 15, "end": 23, "quote": "RTX 4070"},
+            {"quote": "RTX 4060", "product_id": "invented"},
+            {"quote": "RTX 4070"},
         ],
     ],
 )
@@ -133,8 +131,6 @@ async def test_comparison_task_rejects_missing_forged_or_id_bearing_subjects(sub
             "tasks": [
                 {
                     "kind": "COMPARE",
-                    "start": 0,
-                    "end": len(message),
                     "quote": message,
                     "subjects": subjects,
                 }
@@ -149,9 +145,7 @@ async def test_comparison_task_rejects_missing_forged_or_id_bearing_subjects(sub
 @pytest.mark.asyncio
 async def test_task_registration_does_not_extract_or_merge_requirements():
     message = "Build PC 25 triệu"
-    provider = Provider(
-        {"tasks": [{"kind": "BUILD", "start": 0, "end": 8, "quote": "Build PC"}]}
-    )
+    provider = Provider({"tasks": [{"kind": "BUILD", "quote": "Build PC"}]})
     budget, state = Budget(), CanonicalRequirementState()
     batch = await NativeTaskExtractor(provider, budget).extract_tasks(message)
     resolved = await resolve_tasks(batch.tasks, message, state, NoCatalog())
@@ -168,10 +162,10 @@ async def test_task_registration_does_not_extract_or_merge_requirements():
     [
         None,
         {
-            "tasks": [{"kind": "BUILD", "start": 0, "end": 8, "quote": "Build PC"}],
+            "tasks": [{"kind": "BUILD", "quote": "Build PC"}],
             "items": [],
         },
-        {"tasks": [{"kind": "BUILD", "start": 0, "end": 8, "quote": "Invented"}]},
+        {"tasks": [{"kind": "BUILD", "quote": "Invented"}]},
     ],
 )
 async def test_invalid_registration_never_becomes_default_answer(result):
@@ -192,9 +186,7 @@ async def test_conversation_registration_explicitly_contains_no_business_task():
 async def test_task_registration_budget_rejection_prevents_model_dispatch():
     provider = Provider({"tasks": []})
     with pytest.raises(ValueError, match="CALL_BUDGET_EXHAUSTED"):
-        await NativeTaskExtractor(provider, Budget(denied=True)).extract_tasks(
-            "GPU?"
-        )
+        await NativeTaskExtractor(provider, Budget(denied=True)).extract_tasks("GPU?")
     assert provider.model.messages == []
 
 
@@ -204,10 +196,12 @@ async def test_registration_compares_canonical_products_or_keeps_unresolved(ambi
     from test_task_resolution import Catalog, compare_task, product
 
     task = compare_task()
-    provider = Provider({"tasks": [task.model_dump(mode="json")]})
-    batch = await NativeTaskExtractor(provider, Budget()).extract_tasks(
-        task.quote
+    provider = Provider(
+        project_task_batch(TaskDraftBatch(tasks=[task]), task.quote).model_dump(
+            mode="json"
+        )
     )
+    batch = await NativeTaskExtractor(provider, Budget()).extract_tasks(task.quote)
     first, second = product("ASUS RTX 4060"), product("MSI RTX 4070")
     result = await resolve_tasks(
         batch.tasks,

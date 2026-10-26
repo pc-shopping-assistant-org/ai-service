@@ -157,10 +157,21 @@ async def test_task_amendment_adapter_is_budgeted_and_cannot_supply_catalog_ids(
         tasks=[compare_task()],
         resolution=resolution,
     )
-    provider, budget = Provider(edit().model_dump(mode="json")), ChoiceBudget()
-    result = await NativeTaskExtractor(provider, budget).amend_task(
-        "RTX 4080", pending
+    provider, budget = (
+        Provider(
+            {
+                "edits": [
+                    {
+                        "task_index": 0,
+                        "subject_index": 0,
+                        "evidence": {"quote": "RTX 4080"},
+                    }
+                ],
+            }
+        ),
+        ChoiceBudget(),
     )
+    result = await NativeTaskExtractor(provider, budget).amend_task("RTX 4080", pending)
     assert result.edits[0].evidence.quote == "RTX 4080"
     assert budget.reservations[0][0] == "MODEL"
     denied = Provider({"edits": []})
