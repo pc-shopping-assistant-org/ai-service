@@ -88,7 +88,7 @@ including release branches.
 Only pushes/manual dispatches on `release/vX.Y.Z` (or `release/vX.Y.Z-rc.N`)
 build/publish an image tagged `X.Y.Z` (or `X.Y.Z-rc.N`) and `sha-<full commit>`.
 For example, `release/v1.0.0` publishes `ai-service:1.0.0`. Other branches/tags, PRs and merge queues
-verify only. Select the published AI tag in the server's `infra/.release.env`,
+verify only. Select the published AI tag in infra's tracked `release.toml`,
 then run the infra release workflow to deploy. Infra stops the old
 executor and runs migrations before starting AI. Server env comes from
 `infra/.env.docker`, never from an env
