@@ -57,16 +57,27 @@ async def test_hardware_type_is_loaded_from_each_snapshot_without_category_env()
         catalog = BackendRequirementCatalog(
             client, "https://catalog.test", Budget(), HardwareCatalogMapping()
         )
-        rows = await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
+        rows = await catalog.load(
+            RequirementDraft(items=[]), CanonicalRequirementState()
+        )
         assert rows[0].component.category == "RAM"
         hardware_type = "GPU"
-        rows = await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
+        rows = await catalog.load(
+            RequirementDraft(items=[]), CanonicalRequirementState()
+        )
         assert rows[0].component.category == "GPU"
         hardware_type = None
-        assert await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState()) == []
-        hardware_type = "UNSUPPORTED"
-        with pytest.raises(BackendUnavailableError):
+        assert (
             await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
+            == []
+        )
+        hardware_type = "PC_GAMING"
+        # Master-data categories unknown to the optimizer are valid catalog
+        # rows (for example prebuilt PCs) and are skipped from part candidates.
+        assert (
+            await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
+            == []
+        )
 
 
 @pytest.mark.asyncio
@@ -140,7 +151,9 @@ async def test_variant_capacity_price_stock_and_visibility_are_canonical():
                 },
             ),
         )
-        rows = await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
+        rows = await catalog.load(
+            RequirementDraft(items=[]), CanonicalRequirementState()
+        )
         assert [row.variant_id for row in rows] == [first, second]
         assert [row.component.capacity_gb for row in rows] == [32, 64]
         assert [row.component.price for row in rows] == [2_000_000, 3_000_000]
@@ -201,7 +214,9 @@ async def test_accessory_taxonomy_maps_canonical_price_without_fake_core_categor
             Budget(),
             HardwareCatalogMapping(),
         )
-        result = await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())
+        result = await catalog.load(
+            RequirementDraft(items=[]), CanonicalRequirementState()
+        )
     assert len(result) == 1
     assert isinstance(result[0].component, AccessorySpec)
     assert result[0].component.id == variant
@@ -253,7 +268,12 @@ async def test_candidate_scan_uses_all_pages_and_rejects_truncation():
             HardwareCatalogMapping(),
         )
         assert (
-            len(await catalog.load(RequirementDraft(items=[]), CanonicalRequirementState())) == 2
+            len(
+                await catalog.load(
+                    RequirementDraft(items=[]), CanonicalRequirementState()
+                )
+            )
+            == 2
         )
         bounded = BackendRequirementCatalog(
             client,
@@ -333,9 +353,7 @@ async def test_backend_snapshot_flows_into_real_optimizer_and_satisfaction(
         )
         requirements = state()
         rows = await catalog.load(RequirementDraft(items=[]), requirements)
-        receipt = optimize_requirements(
-            requirements, rows, PCBuildApplicationService()
-        )
+        receipt = optimize_requirements(requirements, rows, PCBuildApplicationService())
     assert receipt.outcome == "BUILT" and receipt.build is not None
     satisfaction = verify_receipt(requirements, receipt, rows)
     assert satisfaction is not None
