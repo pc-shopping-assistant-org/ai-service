@@ -102,11 +102,11 @@ async def test_native_tool_response_and_state_aware_schemas():
     decision = await NativeFlexibleModel(provider).decide(
         "GPU review", [], (ToolName.SEARCH_WEB,), None
     )
-    assert decision.action.call.name == "search_web"
+    assert decision.action.calls[0].name == "search_web"
     tool_names = {tool["name"] for tool in provider.model.tools}
     assert "search_web" in tool_names
     assert "search_catalog" not in tool_names
-    assert provider.model.options == {"parallel_tool_calls": False}
+    assert provider.model.options == {"parallel_tool_calls": True}
     assert isinstance(provider.model.messages[0], SystemMessage)
     assert isinstance(provider.model.messages[1], HumanMessage)
 
@@ -152,7 +152,7 @@ async def test_legacy_json_final_is_repairable_not_published():
 
 
 @pytest.mark.asyncio
-async def test_native_multi_call_preserved_for_whole_response_rejection():
+async def test_native_multi_call_is_preserved_as_a_batch():
     provider = Provider(
         AIMessage(
             content="",
@@ -172,7 +172,7 @@ async def test_native_multi_call_preserved_for_whole_response_rejection():
         (ToolName.SEARCH_WEB, ToolName.READ_WEB_PAGE),
         None,
     )
-    assert decision is None
+    assert [call.call_id for call in decision.action.calls] == ["one", "two"]
 
 
 @pytest.mark.asyncio
@@ -190,14 +190,14 @@ async def test_gemini_signature_survives_canonical_tool_record_serialization():
     )
     adapter = NativeFlexibleModel(provider)
     decision = await adapter.decide("GPU", [], (ToolName.SEARCH_CATALOG,), None)
-    assert decision.action.call.provider_signature == "c2lnbmF0dXJl"
+    assert decision.action.calls[0].provider_signature == "c2lnbmF0dXJl"
     trusted = context()
     result = await ToolDispatcher(Catalog(), PCBuildApplicationService()).execute(
-        decision.action.call, trusted
+        decision.action.calls[0], trusted
     )
     record = ToolRecord.model_validate_json(
         ToolRecord(
-            call=decision.action.call, result=result, origin_run_id=trusted.run_id
+            call=decision.action.calls[0], result=result, origin_run_id=trusted.run_id
         ).model_dump_json()
     )
     provider.model.response = native_result(

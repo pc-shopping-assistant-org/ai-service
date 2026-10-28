@@ -187,7 +187,7 @@ async def open_build_runtime(
             ]
         if original_context:
             tasks = original_context.required
-            fixed_tasks = not original_context.registered
+            fixed_tasks = not (original_context.registered or original_context.tool_driven)
         tool_context = (
             original_context.context
             if original_context

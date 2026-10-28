@@ -7,18 +7,87 @@ from pydantic import Field, StrictInt
 from ai_service.application.ports.web_search import WebFactStatus
 from ai_service.capabilities.assistant.stateful_contracts import Contract, Text
 
-from .actions import FinalAnswerAction, FinalOutcome, TaskFinalCandidate
+from .actions import (
+    AskClarificationAction,
+    FinalAnswerAction,
+    FinalOutcome,
+    TaskFinalCandidate,
+    decode_flexible_decision,
+)
 from .contracts import (
     AnswerCandidate,
     BuildResult,
+    ComparisonResult,
+    CompletionRequirement,
     ConsultationExplanation,
     ProductReview,
+    ToolContext,
     ToolRecord,
     WebExcerpt,
     result_web_pages,
 )
 
 MAX_TASK_RESULTS = 8
+
+
+def evidence_requirements(
+    value: object, records: list[ToolRecord], context: ToolContext
+) -> list[CompletionRequirement]:
+    """Derive completion checks from canonical operations, never a task LLM call.
+
+    Fixed UI/pending tasks take precedence at the caller. Internal searches do not
+    become separate user tasks; only submitted outcomes select completion checks.
+    """
+    if not value:
+        return []
+    action = decode_flexible_decision(value).action
+    if isinstance(action, AskClarificationAction):
+        return [
+            CompletionRequirement(
+                kind="BUILD", constraints_revision=context.requirements.revision
+            )
+        ]
+    if not isinstance(action, FinalAnswerAction):
+        return []
+    parts: list[TaskFinalCandidate | FinalAnswerAction] = (
+        list(action.task_answers) if action.task_answers else [action]
+    )
+    tasks = []
+    for part in parts:
+        refs = set(part.answer.evidence_refs)
+        selected = [
+            row.result.result
+            for row in records
+            if row.result
+            and (
+                row.call.call_id in part.supporting_tool_call_ids
+                or refs.intersection(row.result.evidence_refs)
+                or (
+                    isinstance(row.result.result, BuildResult)
+                    and row.result.result.build_ref == part.answer.build_ref
+                )
+            )
+        ]
+        if any(isinstance(result, BuildResult) for result in selected):
+            task = CompletionRequirement(
+                kind="BUILD", constraints_revision=context.requirements.revision
+            )
+        elif comparison := next(
+            (result for result in selected if isinstance(result, ComparisonResult)),
+            None,
+        ):
+            task = CompletionRequirement(
+                kind="COMPARE", product_ids=[p.product_id for p in comparison.products]
+            )
+        elif context.saved_build and context.saved_build.evidence_ref in refs:
+            task = CompletionRequirement(
+                kind="EXPLAIN_SAVED_BUILD",
+                saved_build_ref=context.saved_build.evidence_ref,
+            )
+        else:
+            task = CompletionRequirement(kind="ANSWER")
+        tasks.append(task)
+    return tasks
 
 
 class ResultSelection(Contract):

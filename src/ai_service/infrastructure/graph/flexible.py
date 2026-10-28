@@ -18,11 +18,13 @@ from ai_service.capabilities.assistant.react.actions import (
     ActionKind,
     AskClarificationAction,
     CallToolAction,
+    CallToolsAction,
     FinalAnswerAction,
     FlexibleDecision,
     ProposeRequirementsAction,
     RepairFeedback,
     RespondAction,
+    action_calls,
     decode_flexible_decision,
 )
 from ai_service.capabilities.assistant.react.contracts import (
@@ -31,8 +33,10 @@ from ai_service.capabilities.assistant.react.contracts import (
     ControlRecord,
     ReactLimits,
     ToolContext,
+    ToolError,
     ToolName,
     ToolRecord,
+    ToolResult,
 )
 from ai_service.capabilities.assistant.react.dialogue import (
     pending_context,
@@ -63,6 +67,7 @@ from ai_service.capabilities.assistant.react.snapshot_publication import (
     FlexibleExecutionContext,
     FlexiblePublicationInput,
 )
+from ai_service.capabilities.assistant.react.submissions import evidence_requirements
 from ai_service.capabilities.assistant.react.task_amendment import TaskAmender
 from ai_service.capabilities.assistant.react.task_resolution import (
     TaskCatalog,
@@ -118,7 +123,8 @@ from ai_service.capabilities.assistant.stateful_contracts import (
     ClarificationReplyV1,
     UnitClarificationReplyV1,
 )
-from ai_service.infrastructure.observability import observed_async, observed_sync, step
+from ai_service.infrastructure.graph.tool_batches import execute_tool_batch
+from ai_service.infrastructure.observability import observed_async, observed_sync
 
 FLEXIBLE_GRAPH_VERSION = "native-flexible-react-v2-managed"
 
@@ -225,10 +231,20 @@ def build_flexible_graph(
 
     def registered_tasks(state: FlexibleState) -> list[CompletionRequirement]:
         if registering:
-            return (
-                TaskResolution.model_validate(state["task_resolution"]).requirements
-                if state.get("task_resolution")
-                else []
+            if (state.get("task_draft") or {}).get("tasks"):
+                return (
+                    TaskResolution.model_validate(state["task_resolution"]).requirements
+                    if state.get("task_resolution")
+                    else []
+                )
+            working = base_context(state)
+            working.requirements = CanonicalRequirementState.model_validate(
+                state.get("working_requirements", trusted.requirements.model_dump())
+            )
+            return evidence_requirements(
+                state.get("decision"),
+                [ToolRecord.model_validate(row) for row in state.get("ledger", [])],
+                working,
             )
         return tasks
 
@@ -461,7 +477,8 @@ def build_flexible_graph(
             update["publication_context"] = FlexibleExecutionContext(
                 context=trusted,
                 required=tasks,
-                registered=registering,
+                registered=False,
+                tool_driven=registering,
                 discard_only=publication.discard_pending,
             ).model_dump(mode="json")
         if publication and publication.discard_pending:
@@ -546,7 +563,9 @@ def build_flexible_graph(
             update["publication_context"] = FlexibleExecutionContext(
                 context=ctx,
                 required=tasks,
-                registered=registering,
+                registered=bool((state.get("task_draft") or {}).get("tasks")),
+                tool_driven=registering
+                and not bool((state.get("task_draft") or {}).get("tasks")),
                 discard_only=publication.discard_pending,
             ).model_dump(mode="json")
         return bounded(state, update)
@@ -723,6 +742,9 @@ def build_flexible_graph(
             mention_overrides=previous.mention_overrides if previous else None,
         )
         update: dict[str, Any] = {"task_resolution": result.model_dump(mode="json")}
+        update["publication_context"] = FlexibleExecutionContext(
+            context=base_context(state), required=[], registered=True
+        ).model_dump(mode="json")
         decision = (
             decode_flexible_decision(state["decision"])
             if state.get("decision")
@@ -843,41 +865,67 @@ def build_flexible_graph(
             entry.call.call_id for entry in records(state)
         } | {entry.call.call_id for entry in ctx.control_history}:
             return repair(state, "INVALID_ACTION")
-        if isinstance(action, CallToolAction):
-            if ctx.task_registration_open:
-                return repair(state, "TASK_INCOMPLETE", ["REGISTER_TASKS_REQUIRED"])
+        if isinstance(action, (CallToolAction, CallToolsAction)):
+            calls = action_calls(action)
             entries = records(state)
-            if state.get("tool_calls", 0) >= limits.max_tool_calls:
+            if len(calls) > limits.max_tool_calls_per_batch:
+                return repair(state, "BAD_TOOL_ARGUMENTS", ["max_tool_calls_per_batch"])
+            if state.get("tool_calls", 0) + len(calls) > limits.max_tool_calls:
                 raise ValueError("REACT_TOOL_LIMIT")
-            if action.call.call_id in {
+            if (
+                not ctx.catalog_ready
+                and catalog_loader is not None
+                and any(call.name == ToolName.BUILD_PC for call in calls)
+            ):
+                return {"phase": "LOAD_TOOL_CATALOG"}
+            used = {
                 entry.call.call_id
                 for entry in entries
                 if entry.origin_run_id == ctx.run_id
-            }:
+            } | {entry.call.call_id for entry in ctx.control_history}
+            if len({call.call_id for call in calls}) != len(calls) or any(
+                call.call_id in used for call in calls
+            ):
                 return repair(state, "INVALID_ACTION")
-            try:
-                name = ToolName(action.call.name)
-                if name not in allowed_tools(ctx, projection(state)):
-                    return repair(state, "TOOL_NOT_ALLOWED")
-                TOOL_SCHEMAS[name].model_validate(action.call.arguments)
-            except (ValueError, ValidationError):
-                return repair(state, "BAD_TOOL_ARGUMENTS")
-            if action.call.call_id in {
-                entry.call.call_id for entry in ctx.control_history
-            }:
-                return repair(state, "INVALID_ACTION")
-            entries.append(
-                ToolRecord(
-                    call=action.call,
-                    origin_run_id=ctx.run_id,
-                    model_step=state.get("model_calls", 0),
+            for call in calls:
+                error = None
+                try:
+                    name = ToolName(call.name)
+                except ValueError:
+                    error = ToolError.UNKNOWN_TOOL
+                else:
+                    if name not in allowed_tools(ctx, projection(state)):
+                        error = ToolError.PREREQUISITE_MISSING
+                    else:
+                        try:
+                            TOOL_SCHEMAS[name].model_validate(call.arguments)
+                        except ValidationError:
+                            error = ToolError.BAD_ARGUMENTS
+                rejected = (
+                    ToolResult(
+                        tool_call_id=call.call_id,
+                        tool=call.name,
+                        input_hash=call_hash(call, ctx),
+                        constraints_revision=ctx.requirements.revision,
+                        status="REJECTED",
+                        error=error,
+                    )
+                    if error
+                    else None
                 )
-            )
+                entries.append(
+                    ToolRecord(
+                        call=call,
+                        result=rejected,
+                        origin_run_id=ctx.run_id,
+                        model_step=state.get("model_calls", 0),
+                    )
+                )
             return bounded(
                 state,
                 {
                     "ledger": [entry.model_dump(mode="json") for entry in entries],
-                    "tool_calls": state.get("tool_calls", 0) + 1,
+                    "tool_calls": state.get("tool_calls", 0) + len(calls),
                     "repair_feedback": None,
                     "phase": "TOOL_PENDING",
                 },
@@ -978,21 +1026,9 @@ def build_flexible_graph(
 
     async def execute(state: FlexibleState) -> dict[str, Any]:
         ctx, entries = current(state), records(state)
-        entry = entries[-1]
-        if entry.result is None:
-            # Budget every tool invocation; individual adapter retries must remain
-            # independently reserved. Native recovery reuses committed outcomes.
-            with step(f"tool.{entry.call.name}") as observation:
-                entry.result = await attempts.invoke(
-                    AttemptKind.TOOL_IO,
-                    f"flexible:tool:{entry.call.call_id}",
-                    call_hash(entry.call, ctx),
-                    lambda: dispatcher.execute(entry.call, ctx, records=entries[:-1]),
-                )
-                observation.span.set_attribute("ai.tool.result_type", entry.result.tool)
-                observation.result_status = entry.result.status
-        if len(entry.result.model_dump_json().encode()) > limits.max_tool_bytes:
-            raise ValueError("REACT_TOOL_RESULT_TOO_LARGE")
+        await execute_tool_batch(
+            entries, ctx, state.get("model_calls", 0), dispatcher, attempts, limits
+        )
         return bounded(
             state,
             {
@@ -1077,6 +1113,10 @@ def build_flexible_graph(
         observed_async("load_proposal_catalog", load_proposal_catalog),
     )
     builder.add_node("prepare_agent", observed_async("prepare_agent", prepare_agent))
+    builder.add_node(
+        "load_tool_catalog", observed_async("load_tool_catalog", load_catalog)
+    )
+    builder.add_edge("load_tool_catalog", "validate_action")
     builder.add_edge("load_proposal_catalog", "resolve_proposal")
     builder.add_conditional_edges(
         "prepare_agent",
@@ -1186,6 +1226,7 @@ def build_flexible_graph(
         {
             "REPAIR": "agent",
             "TOOL_PENDING": "execute_tool",
+            "LOAD_TOOL_CATALOG": "load_tool_catalog",
             "RESOLVE_PROPOSAL": "load_proposal_catalog",
             "WAITING_INPUT": terminal,
             "READY_TO_PUBLISH": terminal,

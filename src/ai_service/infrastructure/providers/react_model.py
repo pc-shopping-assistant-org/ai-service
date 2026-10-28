@@ -15,18 +15,23 @@ from pydantic import ValidationError
 
 from ai_service.application.ports.model_provider import ModelProvider
 from ai_service.capabilities.assistant.react.actions import (
+    ActionKind,
     AskClarificationAction,
     CallToolAction,
+    CallToolsAction,
     FinalAnswerAction,
     FlexibleDecision,
     ProposeRequirementsAction,
     RepairFeedback,
     RespondAction,
+    action_calls,
 )
 from ai_service.capabilities.assistant.react.contracts import (
+    MAX_NATIVE_TOOL_CALLS,
     TOOL_SCHEMAS,
     AnswerCandidate,
     ControlRecord,
+    ReactLimits,
     ToolCall,
     ToolContext,
     ToolName,
@@ -44,14 +49,13 @@ from ai_service.capabilities.assistant.react.submissions import (
     SubmitResults,
 )
 from ai_service.capabilities.assistant.source_quotes import (
-    QuotedTaskBatch,
     project_requirement_draft,
-    project_task_batch,
 )
 from ai_service.infrastructure.providers.failures import invoke_provider
+from ai_service.infrastructure.providers.tool_projection import observation_json
 
 GEMINI_SIGNATURES_KEY = "__gemini_function_call_thought_signatures__"
-REACT_PROTOCOL_VERSION = "agent-task-admission-v3"
+REACT_PROTOCOL_VERSION = "native-tool-batches-v4"
 
 REACT_SYSTEM_PROMPT = (
     "You are the gearPC assistant. Respond naturally in the user's language. "
@@ -62,12 +66,10 @@ REACT_SYSTEM_PROMPT = (
     "For requested catalog, comparison or build results, use the appropriate tools "
     "and submit_result with selected evidence. Do not substitute generic advice "
     "for a requested build. Ask for missing required input. "
-    "When register_tasks is available, declare newly requested business outcomes "
-    "with exact quotes alongside your first native action in the SAME response. "
-    "For example, register BUILD together with propose_requirements, or COMPARE "
-    "together with search_catalog. The application admits the task before the action. "
-    "Do not register greetings, general knowledge, or side questions about pending work. "
-    "Call one action per response, optionally accompanied by register_tasks. Plain text is a conversational "
+    "Use native tool_calls arrays for independent operations, for example search_catalog "
+    "for two products in the SAME response. Observe all results before choosing dependent "
+    "calls. State-changing controls must be a separate response: merge requirements "
+    "before requesting a build. Plain text is a conversational "
     "reply; never output a JSON action envelope. propose_requirements changes only "
     "working state after application admission. Your own tradeoffs require consent; "
     "never invent user authorization, confirm a proposal or discard pending work. "
@@ -105,32 +107,16 @@ def _call_message(call: ToolCall, *, provider_name: str) -> AIMessage:
 
 def project_model_response(decision: FlexibleDecision, message: str) -> AIMessage:
     """Project reviewed internal labels to the same text/native serving protocol."""
-    if decision.registration is not None:
-        response = project_model_response(
-            decision.model_copy(
-                update={"registration": None, "registration_call": None}
-            ),
-            message,
-        )
-        if not response.tool_calls:
-            raise ValueError("Task declaration requires a native action")
-        registration = decision.registration_call or ToolCall(
-            call_id="registration",
-            name=ControlName.REGISTER_TASKS,
-            arguments=project_task_batch(decision.registration, message).model_dump(
-                mode="json"
-            ),
-        )
+    action = decision.action
+    if isinstance(action, (CallToolAction, CallToolsAction)):
         return AIMessage(
-            content=response.content,
+            content="",
             tool_calls=[
-                *_call_message(registration, provider_name="openai").tool_calls,
-                *response.tool_calls,
+                entry
+                for call in action_calls(action)
+                for entry in _call_message(call, provider_name="openai").tool_calls
             ],
         )
-    action = decision.action
-    if isinstance(action, CallToolAction):
-        return _call_message(action.call, provider_name="openai")
     if isinstance(action, ProposeRequirementsAction):
         name = ControlName.PROPOSE_REQUIREMENTS
         arguments = action.model_dump(mode="json", exclude={"kind"})
@@ -195,8 +181,10 @@ def build_react_request(
     context: ToolContext | None,
     *,
     provider_name: str = "openai",
+    limits: ReactLimits | None = None,
 ) -> tuple[list[BaseMessage], list[dict[str, Any]]]:
     """Shared serving/training projection; no internal decision union in the prompt."""
+    limits = limits or ReactLimits()
     records = [ToolRecord.model_validate(item.model_dump()) for item in transcript]
     if any(item.result is None for item in records):
         raise ValueError("Unresolved tool transcript")
@@ -262,7 +250,7 @@ def build_react_request(
                 if record.model_step is not None
                 else index - len(records),
                 record.call,
-                record.result.model_dump_json(),
+                observation_json(record.result, limits.max_tool_context_bytes),
             )
         )
     pairs.extend(
@@ -274,9 +262,7 @@ def build_react_request(
     for _, entries in groupby(
         sorted(pairs, key=lambda pair: pair[0]), key=lambda pair: pair[0]
     ):
-        batch = sorted(
-            entries, key=lambda pair: pair[1].name != ControlName.REGISTER_TASKS
-        )
+        batch = list(entries)
         response = AIMessage(content="", tool_calls=[], additional_kwargs={})
         for _, call, _ in batch:
             projected = _call_message(call, provider_name=provider_name)
@@ -290,6 +276,33 @@ def build_react_request(
             ToolMessage(content=content, tool_call_id=call.call_id, name=call.name)
             for _, call, content in batch
         )
+
+    # Window whole call/result groups; never leave unmatched native ToolMessages.
+    def request_bytes() -> int:
+        return len(
+            json.dumps(
+                {
+                    "messages": [item.model_dump(mode="json") for item in messages],
+                    "tools": schemas,
+                },
+                ensure_ascii=False,
+            ).encode()
+        )
+
+    while request_bytes() > limits.max_model_input_bytes and len(messages) > 2:
+        next_batch = next(
+            (
+                index
+                for index in range(3, len(messages))
+                if isinstance(messages[index], AIMessage)
+            ),
+            None,
+        )
+        if next_batch is None:
+            break
+        del messages[2:next_batch]
+    if request_bytes() > limits.max_model_input_bytes:
+        raise ValueError("REACT_MODEL_INPUT_TOO_LARGE")
     return messages, schemas
 
 
@@ -339,7 +352,7 @@ def parse_flexible_response(
     transcript: list[ToolRecord] | None = None,
 ) -> FlexibleDecision | None:
     """Reject malformed native protocol; plain text never asserts task completion."""
-    if response.invalid_tool_calls or len(response.tool_calls) > 2:
+    if response.invalid_tool_calls or len(response.tool_calls) > MAX_NATIVE_TOOL_CALLS:
         return None
     records = transcript or []
     try:
@@ -347,40 +360,29 @@ def parse_flexible_response(
         if text.startswith(("{", "[")):
             return None  # No legacy JSON-envelope fallback in the live protocol.
         calls = _response_calls(response, provider_name)
-        registration = next(
-            (call for call in calls if call.name == ControlName.REGISTER_TASKS), None
-        )
-        draft = None
-        if registration:
-            if (
-                not context
-                or not context.task_registration_open
-                or len(calls) != 2
-                or len({call.call_id for call in calls}) != 2
-            ):
-                return None
-            draft = QuotedTaskBatch.model_validate(registration.arguments).bind(message)
-            if not draft.tasks:
-                return None
-            calls = [call for call in calls if call is not registration]
-        if len(calls) > 1:
-            return None
         if calls:
-            call = calls[0]
-            if call.name in allowed_controls(records, context, repair):
-                decision = normalize_control(call, records, message)
-            elif call.name in allowed:
-                TOOL_SCHEMAS[ToolName(call.name)].model_validate(call.arguments)
-                decision = FlexibleDecision(action=CallToolAction(call=call))
+            if len(calls) == 1 and calls[0].name in allowed_controls(
+                records, context, repair
+            ):
+                decision = normalize_control(calls[0], records, message)
+            elif not any(call.name in CONTROL_SCHEMAS for call in calls):
+                decision = FlexibleDecision(action=CallToolsAction(calls=calls))
             else:
                 return None
         else:
             decision = FlexibleDecision(action=RespondAction(text=text))
-        if repair and decision.action.kind not in repair.allowed_next_actions:
-            return None
-        return decision.model_copy(
-            update={"registration": draft, "registration_call": registration}
+        kind = (
+            ActionKind.CALL_TOOL
+            if isinstance(decision.action, CallToolsAction)
+            else decision.action.kind
         )
+        if (
+            repair
+            and kind not in repair.allowed_next_actions
+            and decision.action.kind not in repair.allowed_next_actions
+        ):
+            return None
+        return decision
     except (ValidationError, ValueError, KeyError, TypeError):
         return None
 
@@ -388,8 +390,9 @@ def parse_flexible_response(
 class NativeFlexibleModel:
     """One native invocation; LangGraph owns retries, budgets and publication."""
 
-    def __init__(self, provider: ModelProvider):
+    def __init__(self, provider: ModelProvider, limits: ReactLimits | None = None):
         self.provider = provider
+        self.limits = limits or ReactLimits()
         self._model: ToolCallingModel | None = None
 
     async def decide(
@@ -407,11 +410,12 @@ class NativeFlexibleModel:
             repair,
             context,
             provider_name=self.provider.name,
+            limits=self.limits,
         )
         if self._model is None:
             self._model = cast(ToolCallingModel, self.provider.create_model())
         options = (
-            {"parallel_tool_calls": bool(context and context.task_registration_open)}
+            {"parallel_tool_calls": True}
             if self.provider.name in {"openai", "qwen"}
             else {}
         )

@@ -58,10 +58,17 @@ from ai_service.capabilities.web_search.source_policy import (
     SourceTier,
 )
 
+MAX_NATIVE_TOOL_CALLS = 16
+
 
 class ReactLimits(Contract):
     max_model_calls: StrictInt = Field(default=12, ge=1, le=100)
     max_tool_calls: StrictInt = Field(default=8, ge=1, le=50)
+    max_tool_calls_per_batch: StrictInt = Field(
+        default=4, ge=1, le=MAX_NATIVE_TOOL_CALLS
+    )
+    max_model_input_bytes: StrictInt = Field(default=128_000, ge=1024)
+    max_tool_context_bytes: StrictInt = Field(default=12_000, ge=512)
     max_repairs: StrictInt = Field(default=2, ge=0, le=10)
     max_state_bytes: StrictInt = Field(default=512_000, ge=1)
     max_tool_bytes: StrictInt = Field(default=128_000, ge=1)

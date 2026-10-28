@@ -116,14 +116,14 @@ async def test_native_call_maps_to_one_v2_action_with_provider_signature(name):
     decision = await NativeFlexibleModel(provider).decide(
         "GPU", [], (ToolName.SEARCH_WEB,), None
     )
-    assert decision.action.kind == "CALL_TOOL"
-    assert decision.action.call.provider_signature == (
+    assert decision.action.kind == "CALL_TOOLS"
+    assert decision.action.calls[0].provider_signature == (
         "opaque-signature" if name == "gemini" else None
     )
     tool_names = {tool["name"] for tool in provider.model.tools}
     assert "search_web" in tool_names and "search_catalog" not in tool_names
     assert provider.model.options == (
-        {"parallel_tool_calls": False} if name == "openai" else {}
+        {"parallel_tool_calls": True} if name == "openai" else {}
     )
 
 
@@ -171,7 +171,9 @@ async def test_invalid_or_json_tool_action_needs_repair(content):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["multiple", "mixed", "unavailable"])
-async def test_rejects_entire_ambiguous_or_unavailable_native_response(mode):
+async def test_batch_calls_reach_application_policy_but_invalid_protocol_needs_repair(
+    mode,
+):
     calls = [{"id": "s1", "name": "search_web", "args": {"query": "GPU"}}]
     if mode == "multiple":
         calls.append({"id": "s2", "name": "search_web", "args": {"query": "CPU"}})
@@ -195,7 +197,12 @@ async def test_rejects_entire_ambiguous_or_unavailable_native_response(mode):
     decision = await NativeFlexibleModel(provider).decide(
         "GPU", [], () if mode == "unavailable" else (ToolName.SEARCH_WEB,), None
     )
-    assert decision is None
+    if mode == "mixed":
+        assert decision is None
+    else:
+        assert [call.call_id for call in decision.action.calls] == [
+            call["id"] for call in calls
+        ]
 
 
 @pytest.mark.asyncio

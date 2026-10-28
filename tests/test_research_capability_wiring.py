@@ -256,7 +256,7 @@ async def test_native_provider_exposes_driver_schema(provider_name):
     decision = await NativeFlexibleModel(provider).decide(
         "Tra BIOS", [], (ToolName.RESEARCH_DRIVER,), None
     )
-    assert decision.action.call.name == ToolName.RESEARCH_DRIVER
+    assert decision.action.calls[0].name == ToolName.RESEARCH_DRIVER
     schema = provider.model.tools[0]["parameters"]
     assert schema["additionalProperties"] is False
     assert schema["$defs"]["SoftwareType"]["enum"] == [

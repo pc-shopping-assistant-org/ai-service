@@ -13,10 +13,12 @@ from ai_service.capabilities.assistant.conversation_core import Digest
 from ai_service.capabilities.assistant.limits import MAX_TURN_MESSAGE_CHARS
 from ai_service.capabilities.assistant.react.actions import (
     CallToolAction,
+    CallToolsAction,
     FinalAnswerAction,
     FlexibleDecision,
     ProposeRequirementsAction,
     RespondAction,
+    action_calls,
 )
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
@@ -191,21 +193,19 @@ def validate_label(sample: TrainingSample, snapshot: DatasetSnapshot) -> None:
         validate_requirement_draft(sample.target, sample.message, snapshot.context)
     else:
         if sample.target.registration is not None:
-            if not snapshot.context.task_registration_open:
-                raise ValueError("TARGET_REGISTRATION_NOT_ALLOWED")
-            sample.target.registration.validate_source(sample.message)
-            if not sample.target.registration.tasks or isinstance(
-                sample.target.action, RespondAction
-            ):
-                raise ValueError("Task declaration requires a business action")
+            raise ValueError("TARGET_LEGACY_TASK_REGISTRATION")
         action = sample.target.action
-        if isinstance(action, CallToolAction):
-            name = ToolName(action.call.name)
-            if name not in allowed_tools(snapshot.context, snapshot.records):
-                raise ValueError("TARGET_TOOL_NOT_ALLOWED")
-            arguments = TOOL_SCHEMAS[name].model_validate(action.call.arguments)
-            if isinstance(arguments, BuildPCArgs) and arguments.objective is not None:
-                raise ValueError("UNSUPPORTED_BUILD_OBJECTIVE")
+        if isinstance(action, (CallToolAction, CallToolsAction)):
+            for call in action_calls(action):
+                name = ToolName(call.name)
+                if name not in allowed_tools(snapshot.context, snapshot.records):
+                    raise ValueError("TARGET_TOOL_NOT_ALLOWED")
+                arguments = TOOL_SCHEMAS[name].model_validate(call.arguments)
+                if (
+                    isinstance(arguments, BuildPCArgs)
+                    and arguments.objective is not None
+                ):
+                    raise ValueError("UNSUPPORTED_BUILD_OBJECTIVE")
         elif isinstance(action, ProposeRequirementsAction):
             validate_requirement_draft(
                 action.draft, action.source_text or sample.message, snapshot.context

@@ -9,6 +9,7 @@ from test_react_tools import context
 from test_training_dataset import dataset, sample
 from test_training_evaluation import run_config
 
+from ai_service.capabilities.assistant.react.actions import CallToolAction, action_calls
 from ai_service.capabilities.assistant.react.contracts import CompletionRequirement
 from ai_service.capabilities.assistant.react.tools import allowed_tools
 from ai_service.infrastructure.providers.react_model import (
@@ -193,11 +194,15 @@ def test_all_pilot_react_labels_roundtrip_without_rewriting_reviewed_data():
         parsed = parse_export(example, snapshot)
         assert parsed is not None, record.sample_id
         validate_label(record.model_copy(update={"target": parsed}), snapshot)
-        assert parsed.action == record.target.action, record.sample_id
+        if isinstance(record.target.action, CallToolAction):
+            assert action_calls(parsed.action) == [record.target.action.call], (
+                record.sample_id
+            )
+        else:
+            assert parsed.action == record.target.action, record.sample_id
         assert record.model_dump(mode="json") == original_label
         assert snapshot.model_dump(mode="json") == original_snapshot
         checked += 1
     assert checked > 0
-    # These old labels ask for typed pending without any registered business task.
-    # Never silently convert reviewed intent or train a call absent from serving.
-    assert needs_review == {"react-13", "react-14", "react-15"}
+    # Clarifications are native controls; application validation still checks fields.
+    assert needs_review == set()
