@@ -4,6 +4,7 @@ from copy import deepcopy
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from test_flexible_graph_postgres import Budget, Catalog, Model
 
@@ -93,7 +94,7 @@ async def execute_turn(dsn, ctx, base_ref, accepted, request, model, *, extracto
     )
     async with AsyncPostgresSaver.from_conn_string(dsn) as saver:
         graph = build_flexible_graph(
-            model,
+            WithTaskProposals(model, extractor) if extractor else model,
             ToolDispatcher(products, PCBuildApplicationService()),
             ctx,
             tasks,
@@ -102,7 +103,6 @@ async def execute_turn(dsn, ctx, base_ref, accepted, request, model, *, extracto
             publication=FlexiblePublicationInput.for_request(
                 accepted, request, owner=ctx.account_id
             ),
-            task_extractor=extractor,
             task_catalog=products if extractor else None,
             checkpointer=saver,
         )

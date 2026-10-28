@@ -4,6 +4,7 @@ from copy import deepcopy
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from langgraph.checkpoint.memory import InMemorySaver
 from test_flexible_publication import base_snapshot
 from test_flexible_reference_continuation import pending_reference
@@ -86,7 +87,7 @@ async def test_missing_build_goals_clarify_without_hardware_dependency(registere
             )
 
     graph = build_flexible_graph(
-        Ask(),
+        WithTaskProposals(Ask(), Tasks()) if registered else Ask(),
         ToolDispatcher(products, PCBuildApplicationService()),
         ctx,
         []
@@ -95,7 +96,6 @@ async def test_missing_build_goals_clarify_without_hardware_dependency(registere
         Budget(),
         conversation_revision=0,
         publication=source,
-        task_extractor=Tasks() if registered else None,
         task_catalog=products if registered else None,
         catalog_loader=OfflineHardware(),
     )

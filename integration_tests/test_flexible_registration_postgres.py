@@ -3,6 +3,7 @@
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from test_flexible_graph_postgres import Budget, Catalog, Model
 
@@ -95,14 +96,13 @@ async def test_registered_tasks_survive_reopen_without_extraction_or_lookup_repe
 
     def compile_flow(model, saver):
         return build_flexible_graph(
-            model,
+            WithTaskProposals(model, extractor),
             ToolDispatcher(products, PCBuildApplicationService()),
             ctx,
             [],
             Budget(),
             conversation_revision=0,
             publication=binding,
-            task_extractor=extractor,
             task_catalog=products,
             checkpointer=saver,
         )

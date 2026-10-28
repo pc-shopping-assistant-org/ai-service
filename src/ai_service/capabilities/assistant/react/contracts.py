@@ -504,6 +504,9 @@ class ToolContext(Contract):
     requested_tasks: TaskDraftBatch | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    task_registration_open: bool = Field(
+        default=False, exclude_if=lambda value: not value
+    )
     completion_requirements: list[CompletionRequirement] = Field(
         default_factory=list, max_length=8
     )

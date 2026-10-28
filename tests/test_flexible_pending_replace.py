@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from test_flexible_contracts import pending_proposal
 from test_flexible_graph import ReadModel
 from test_flexible_publication import base_snapshot
@@ -111,14 +112,13 @@ async def test_explicit_task_replacement_keeps_canonical_snapshot_and_uses_new_s
         [{"kind": "ANSWER", "start": 0, "end": 8, "quote": "Find GPU"}]
     )
     flow = build_flexible_graph(
-        ReadModel(),
+        WithTaskProposals(ReadModel(), extractor),
         ToolDispatcher(products, service),
         ctx,
         [],
         Budget(),
         conversation_revision=1,
         publication=bound,
-        task_extractor=extractor,
         task_catalog=products,
     )
     values = await flow.ainvoke(request.execution_input())

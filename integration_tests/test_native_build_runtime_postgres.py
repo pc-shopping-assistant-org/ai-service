@@ -76,6 +76,7 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
 
     class Model:
         def bind_tools(self, tools, **kwargs):
+            self.tools = {tool["name"] for tool in tools}
             return self
 
         def with_structured_output(self, schema, **kwargs):
@@ -100,7 +101,27 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                 if not results:
                     return AIMessage(
                         content="",
-                        tool_calls=[
+                        tool_calls=(
+                            [
+                                {
+                                    "id": "register",
+                                    "name": "register_tasks",
+                                    "args": {
+                                        "tasks": [
+                                            {
+                                                "kind": "ANSWER"
+                                                if read_only
+                                                else "BUILD",
+                                                "quote": messages[1].content,
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                            if "register_tasks" in self.tools
+                            else []
+                        )
+                        + [
                             {
                                 "id": "search" if read_only else "build",
                                 "name": "get_product_details"
@@ -381,7 +402,7 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                     assert messages[-1]["content"].startswith("INFEASIBLE")
                 assert (
                     len(calls)
-                    == (2 if selected else 4 if retry else 3 if react_enabled else 1)
+                    == (2 if selected else 3 if retry else 2 if react_enabled else 1)
                     and closed == []
                 )
                 if react_enabled:
@@ -469,7 +490,7 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                     view = await client.get(path)
                     assert view.json()["data"]["revision"] == 2
                     # Ordinary follow-up retains the prior attachment turn in history.
-                    assert len(calls) == (5 if selected else 7 if retry else 6)
+                    assert len(calls) == (4 if selected else 5 if retry else 4)
                     if version == "v2":
                         last_context = conversation_contexts[-1]
                         assert len(last_context) == 1

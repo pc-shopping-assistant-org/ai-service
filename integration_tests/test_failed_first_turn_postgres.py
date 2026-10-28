@@ -4,13 +4,13 @@ import asyncio
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import create_async_engine
 from test_flexible_graph_postgres import Catalog, Model
 
-from ai_service.application.call_attempts import AttemptBoundary, AttemptKind
-from ai_service.capabilities.assistant.provenance import canonical_hash
+from ai_service.application.call_attempts import AttemptBoundary
 from ai_service.capabilities.assistant.react.contracts import ToolContext
 from ai_service.capabilities.assistant.react.snapshot_publication import (
     FlexiblePublicationInput,
@@ -125,23 +125,15 @@ async def test_failed_first_v2_run_releases_then_next_run_uses_root_after_reopen
 
                     class Extractor:
                         async def extract_tasks(self, message):
-                            async def extract():
-                                return TaskDraftBatch(
-                                    tasks=[
-                                        {
-                                            "kind": "ANSWER",
-                                            "start": 0,
-                                            "end": len(message),
-                                            "quote": message,
-                                        }
-                                    ]
-                                )
-
-                            return await attempts.invoke(
-                                AttemptKind.MODEL,
-                                "tasks:register:v2",
-                                canonical_hash(message),
-                                extract,
+                            return TaskDraftBatch(
+                                tasks=[
+                                    {
+                                        "kind": "ANSWER",
+                                        "start": 0,
+                                        "end": len(message),
+                                        "quote": message,
+                                    }
+                                ]
                             )
 
                     context = ToolContext(
@@ -153,7 +145,7 @@ async def test_failed_first_v2_run_releases_then_next_run_uses_root_after_reopen
                         execution_allowed=True,
                     )
                     graph = build_flexible_graph(
-                        model,
+                        WithTaskProposals(model, Extractor()),
                         ToolDispatcher(products, service),
                         context,
                         [],
@@ -162,7 +154,6 @@ async def test_failed_first_v2_run_releases_then_next_run_uses_root_after_reopen
                         publication=FlexiblePublicationInput.for_request(
                             accepted, request
                         ),
-                        task_extractor=Extractor(),
                         task_catalog=products,
                         checkpointer=saver,
                     )

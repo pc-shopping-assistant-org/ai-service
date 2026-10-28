@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from langgraph.checkpoint.memory import InMemorySaver
 from test_flexible_graph import ReadModel
 from test_flexible_publication import base_snapshot
@@ -39,13 +40,12 @@ class Products(Catalog):
 
 def compile_flow(model, ctx, extractor, products, saver=None):
     return build_flexible_graph(
-        model,
+        WithTaskProposals(model, extractor),
         ToolDispatcher(products, PCBuildApplicationService()),
         ctx,
         [],
         Budget(),
         conversation_revision=0,
-        task_extractor=extractor,
         task_catalog=products,
         publication=FlexiblePublicationInput(
             accepted=base_snapshot(ctx),
@@ -105,13 +105,12 @@ async def test_pending_subjects_cannot_be_completed_by_generic_answer():
             )
 
     graph = build_flexible_graph(
-        IncorrectThenAsk(),
+        WithTaskProposals(IncorrectThenAsk(), Extractor([task])),
         ToolDispatcher(products, PCBuildApplicationService()),
         ctx,
         [],
         Budget(),
         conversation_revision=0,
-        task_extractor=Extractor([task]),
         task_catalog=products,
         publication=FlexiblePublicationInput(
             accepted=base_snapshot(ctx),
@@ -154,14 +153,13 @@ async def test_unresolved_compare_can_read_then_ask_without_becoming_answer():
             )
 
     graph = build_flexible_graph(
-        ReaderThenAsk(),
+        WithTaskProposals(ReaderThenAsk(), Extractor([task])),
         ToolDispatcher(products, PCBuildApplicationService()),
         ctx,
         [],
         Budget(),
         conversation_revision=0,
         publication=binding,
-        task_extractor=Extractor([task]),
         task_catalog=products,
     )
     terminal = await graph.ainvoke({"message": task.quote})

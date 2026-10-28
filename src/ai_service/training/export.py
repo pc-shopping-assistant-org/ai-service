@@ -52,6 +52,7 @@ def build_example(sample: TrainingSample, snapshot: DatasetSnapshot) -> dict[str
         request = {
             "messages": convert_to_openai_messages(messages),
             "tools": [{"type": "function", "function": tool} for tool in schemas],
+            "parallel_tool_calls": snapshot.context.task_registration_open,
         }
         target = convert_to_openai_messages(
             project_model_response(sample.target, sample.message)

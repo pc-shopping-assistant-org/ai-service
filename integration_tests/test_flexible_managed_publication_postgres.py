@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -139,14 +140,13 @@ async def test_v2_managed_run_publishes_snapshot_message_and_head_once(
                 products = Products()
                 product_instances.append(products)
                 graph = build_flexible_graph(
-                    RecoverableModel(propose=waiting),
+                    WithTaskProposals(RecoverableModel(propose=waiting), Extractor()),
                     ToolDispatcher(products, service),
                     ctx,
                     [],
                     AttemptBoundary(coordinator.ledger, claim) if recover else Budget(),
                     conversation_revision=head.revision,
                     publication=FlexiblePublicationInput.for_request(accepted, request),
-                    task_extractor=Extractor(),
                     task_catalog=products,
                     checkpointer=saver,
                 )

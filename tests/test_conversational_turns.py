@@ -146,7 +146,6 @@ async def test_empty_task_turn_publishes_response_and_is_revalidated():
         Budget(),
         conversation_revision=0,
         publication=FlexiblePublicationInput.for_request(accepted, request),
-        task_extractor=Extractor(),
         task_catalog=products,
     )
     terminal = await flow.ainvoke({"message": request.message})
@@ -304,7 +303,6 @@ async def test_requirements_can_be_collected_without_fabricating_a_build_task(
         Budget(),
         conversation_revision=0,
         publication=FlexiblePublicationInput.for_request(base, request),
-        task_extractor=Extractor(),
         task_catalog=products,
         user_extractor=Extractor(),
     )

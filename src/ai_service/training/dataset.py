@@ -190,6 +190,14 @@ def validate_label(sample: TrainingSample, snapshot: DatasetSnapshot) -> None:
     elif isinstance(sample, RequirementExtractionSample):
         validate_requirement_draft(sample.target, sample.message, snapshot.context)
     else:
+        if sample.target.registration is not None:
+            if not snapshot.context.task_registration_open:
+                raise ValueError("TARGET_REGISTRATION_NOT_ALLOWED")
+            sample.target.registration.validate_source(sample.message)
+            if not sample.target.registration.tasks or isinstance(
+                sample.target.action, RespondAction
+            ):
+                raise ValueError("Task declaration requires a business action")
         action = sample.target.action
         if isinstance(action, CallToolAction):
             name = ToolName(action.call.name)

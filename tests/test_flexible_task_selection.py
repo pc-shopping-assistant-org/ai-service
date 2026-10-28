@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from test_flexible_publication import base_snapshot
 from test_flexible_registration_graph import Extractor
 from test_react_graph import Budget
@@ -98,14 +99,13 @@ class Compare:
 
 def compile_flow(model, products, ctx, binding, extractor, revision):
     return build_flexible_graph(
-        model,
+        WithTaskProposals(model, extractor),
         ToolDispatcher(products, PCBuildApplicationService()),
         ctx,
         [],
         Budget(),
         conversation_revision=revision,
         publication=binding,
-        task_extractor=extractor,
         task_catalog=products,
     )
 

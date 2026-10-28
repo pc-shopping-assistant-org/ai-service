@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from test_flexible_graph import ReadModel
 from test_flexible_publication import base_snapshot
 from test_flexible_registration_graph import Extractor, Products
@@ -37,16 +38,16 @@ async def test_publication_is_rederived_from_authorized_base_not_producer_snapsh
     accepted = base_snapshot(ctx)
     products = Products()
     graph = build_flexible_graph(
-        ReadModel(),
+        WithTaskProposals(
+            ReadModel(),
+            Extractor([{"kind": "ANSWER", "start": 0, "end": 4, "quote": "GPU?"}]),
+        ),
         ToolDispatcher(products, service),
         ctx,
         [],
         Budget(),
         conversation_revision=0,
         publication=FlexiblePublicationInput.for_request(accepted, request),
-        task_extractor=Extractor(
-            [{"kind": "ANSWER", "start": 0, "end": 4, "quote": "GPU?"}]
-        ),
         task_catalog=products,
     )
     terminal = await graph.ainvoke(request.execution_input())

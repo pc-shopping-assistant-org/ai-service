@@ -3,6 +3,7 @@
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from test_flexible_graph_postgres import Budget, Catalog
 
@@ -161,14 +162,13 @@ async def test_task_selection_reopen_preserves_source_and_selected_identity(
 
     def compile_graph(model, binding, current, revision, saver):
         return build_flexible_graph(
-            model,
+            WithTaskProposals(model, extractor),
             ToolDispatcher(products, PCBuildApplicationService()),
             current,
             [],
             Budget(),
             conversation_revision=revision,
             publication=binding,
-            task_extractor=extractor,
             task_catalog=products,
             checkpointer=saver,
         )

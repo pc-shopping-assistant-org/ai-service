@@ -160,6 +160,10 @@ def evaluate_responses(
                         target.action.call.name == gold.call.name
                         and target.action.call.arguments == gold.call.arguments
                     )
+                if isinstance(sample, ReactDecisionSample):
+                    matches = (
+                        matches and target.registration == sample.target.registration
+                    )
                 row.update(
                     status=CaseStatus.PASS.value,
                     error=None,

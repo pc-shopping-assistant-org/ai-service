@@ -27,6 +27,7 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
 
     class Model:
         def bind_tools(self, tools, **kwargs):
+            self.tools = {tool["name"] for tool in tools}
             return self
 
         def with_structured_output(self, schema, **kwargs):
@@ -38,11 +39,7 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
                 if source == "Chào bạn":
                     return {"tasks": []}
                 assert source == "Build PC"
-                return {
-                    "tasks": [
-                        {"kind": "BUILD", "quote": "Build PC"}
-                    ]
-                }
+                return {"tasks": [{"kind": "BUILD", "quote": "Build PC"}]}
             message = messages[1].content
             calls.append(message)
             if message == "Chào bạn":
@@ -84,7 +81,18 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
             )
             return AIMessage(
                 content="",
-                tool_calls=[
+                tool_calls=(
+                    [
+                        {
+                            "id": "register",
+                            "name": "register_tasks",
+                            "args": {"tasks": [{"kind": "BUILD", "quote": "Build PC"}]},
+                        }
+                    ]
+                    if message == "Build PC" and "register_tasks" in self.tools
+                    else []
+                )
+                + [
                     {
                         "id": "clarify" if message == "Build PC" else "proposal",
                         "name": action["kind"].lower(),

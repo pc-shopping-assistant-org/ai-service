@@ -1,6 +1,6 @@
 """Internal V2 loop; publication and execution ownership remain application-owned.
 
-Selected by the opt-in V2 runtime. Inputs are trusted accepted/checkpoint state,
+Used by the managed V2 runtime. Inputs are trusted accepted/checkpoint state,
 never raw request dictionaries.
 """
 
@@ -109,7 +109,6 @@ from ai_service.capabilities.assistant.requirements.quantity_clarification impor
 from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import (
     TaskDraftBatch,
-    TaskExtractor,
 )
 from ai_service.capabilities.assistant.requirements.user_admission import (
     UserRequirementReceipt,
@@ -177,7 +176,6 @@ def build_flexible_graph(
     limits: ReactLimits | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
     publication: FlexiblePublicationInput | None = None,
-    task_extractor: TaskExtractor | None = None,
     task_catalog: TaskCatalog | None = None,
     clarifier: ClarificationExtractor | None = None,
     unit_clarifier: UnitClarificationExtractor | None = None,
@@ -189,13 +187,23 @@ def build_flexible_graph(
 ) -> CompiledStateGraph:
     trusted = ToolContext.model_validate(context.model_dump())
     tasks = [CompletionRequirement.model_validate(t.model_dump()) for t in required]
-    registering = task_extractor is not None
+    registering = task_catalog is not None
+    if (
+        publication
+        and publication.accepted.flexible
+        and publication.accepted.flexible.status == "WAITING_INPUT"
+        and publication.accepted.flexible.pending_task_resolution is None
+        and not publication.discard_pending
+    ):
+        tasks = [
+            row.task.model_copy(deep=True)
+            for row in publication.accepted.flexible.task_outcomes
+        ]
+        registering = False
     if user_extractor is not None and publication is None:
         raise ValueError("Explicit-user admission requires a stored request binding")
     if publication and publication.task_reply and not registering:
         raise ValueError("Task selection requires canonical task re-resolution")
-    if (task_extractor is None) != (task_catalog is None):
-        raise ValueError("Task registration requires extractor and canonical catalog")
     if registering and (tasks or publication is None):
         raise ValueError("Dynamic registration requires stored source, not fixed tasks")
     if (
@@ -287,6 +295,15 @@ def build_flexible_graph(
             )
         if state.get("task_draft"):
             value.requested_tasks = TaskDraftBatch.model_validate(state["task_draft"])
+        value.task_registration_open = (
+            registering
+            and not (state.get("task_draft") or {}).get("tasks")
+            and not (
+                publication
+                and publication.accepted.flexible
+                and publication.accepted.flexible.pending_task_resolution
+            )
+        )
         return ToolContext.model_validate(value.model_dump())
 
     def records(state: FlexibleState) -> list[ToolRecord]:
@@ -404,8 +421,10 @@ def build_flexible_graph(
             raise ValueError("REACT_MESSAGE_INVALID")
         update: dict[str, Any] = {
             **bound_input,
-            "task_draft": None,
-            "task_resolution": None,
+            "task_draft": {"tasks": []} if registering else None,
+            "task_resolution": TaskResolution().model_dump(mode="json")
+            if registering
+            else None,
             "working_requirements": ctx.requirements.model_dump(mode="json"),
             "model_calls": 0,
             "tool_calls": 0,
@@ -648,16 +667,18 @@ def build_flexible_graph(
         )
 
     async def register(state: FlexibleState) -> dict[str, Any]:
-        assert task_extractor is not None and publication is not None
+        assert publication is not None
         pending = publication.accepted.flexible
         if pending and pending.pending_task_resolution:
             draft = TaskDraftBatch(tasks=pending.pending_task_resolution.tasks)
         else:
-            draft = TaskDraftBatch.model_validate(
-                (
-                    await task_extractor.extract_tasks(publication.task_message)
-                ).model_dump()
-            )
+            decision = decode_flexible_decision(state.get("decision"))
+            if (
+                not current(state).task_registration_open
+                or decision.registration is None
+            ):
+                raise ValueError("Task registration is not available")
+            draft = decision.registration
         draft.validate_source(publication.task_message)
         return bounded(state, {"task_draft": draft.model_dump(mode="json")})
 
@@ -701,7 +722,27 @@ def build_flexible_graph(
             selections=selections,
             mention_overrides=previous.mention_overrides if previous else None,
         )
-        return bounded(state, {"task_resolution": result.model_dump(mode="json")})
+        update: dict[str, Any] = {"task_resolution": result.model_dump(mode="json")}
+        decision = (
+            decode_flexible_decision(state["decision"])
+            if state.get("decision")
+            else None
+        )
+        if decision and decision.registration is not None:
+            history = list(current(state).control_history)
+            if decision.registration_call:
+                history.append(
+                    ControlRecord(
+                        call=decision.registration_call,
+                        code="TASKS_REGISTERED",
+                        model_step=state.get("model_calls", 0),
+                    )
+                )
+            update.update(
+                control_history=[entry.model_dump(mode="json") for entry in history],
+                phase="DECIDED",
+            )
+        return bounded(state, update)
 
     async def interpret_task_reply(state: FlexibleState) -> dict[str, Any]:
         assert publication is not None and task_clarifier is not None
@@ -786,7 +827,9 @@ def build_flexible_graph(
                 ).model_dump(mode="json")
                 if decision
                 else None,
-                "phase": "DECIDED",
+                "phase": "REGISTER_REQUEST"
+                if decision and decision.registration is not None
+                else "DECIDED",
             },
         )
 
@@ -801,6 +844,8 @@ def build_flexible_graph(
         } | {entry.call.call_id for entry in ctx.control_history}:
             return repair(state, "INVALID_ACTION")
         if isinstance(action, CallToolAction):
+            if ctx.task_registration_open:
+                return repair(state, "TASK_INCOMPLETE", ["REGISTER_TASKS_REQUIRED"])
             entries = records(state)
             if state.get("tool_calls", 0) >= limits.max_tool_calls:
                 raise ValueError("REACT_TOOL_LIMIT")
@@ -1033,7 +1078,11 @@ def build_flexible_graph(
     )
     builder.add_node("prepare_agent", observed_async("prepare_agent", prepare_agent))
     builder.add_edge("load_proposal_catalog", "resolve_proposal")
-    builder.add_edge("prepare_agent", "agent")
+    builder.add_conditional_edges(
+        "prepare_agent",
+        lambda s: "admitted" if s.get("phase") == "DECIDED" else "ready",
+        {"admitted": "validate_action", "ready": "agent"},
+    )
     builder.add_node(
         "interpret_reply", observed_async("interpret_reply", interpret_reply)
     )
@@ -1060,8 +1109,8 @@ def build_flexible_graph(
     builder.add_edge(START, "begin_turn")
     start_agent = "prepare_agent"
     if registering:
-        start_agent = "register_request"
-        builder.add_node(start_agent, observed_async(start_agent, register))
+        registration_node = "register_request"
+        builder.add_node(registration_node, observed_async(registration_node, register))
         builder.add_node(
             "resolve_registered_tasks",
             observed_async("resolve_registered_tasks", resolve_registered),
@@ -1071,7 +1120,11 @@ def build_flexible_graph(
                 "interpret_task_reply",
                 observed_async("interpret_task_reply", interpret_task_reply),
             )
-            builder.add_edge(start_agent, "interpret_task_reply")
+            builder.add_conditional_edges(
+                registration_node,
+                lambda s: "new" if s.get("decision") else "pending",
+                {"new": "resolve_registered_tasks", "pending": "interpret_task_reply"},
+            )
             if task_amender:
                 builder.add_node(
                     "amend_task", observed_async("amend_task", amend_task_reply)
@@ -1087,8 +1140,14 @@ def build_flexible_graph(
             else:
                 builder.add_edge("interpret_task_reply", "resolve_registered_tasks")
         else:
-            builder.add_edge(start_agent, "resolve_registered_tasks")
+            builder.add_edge(registration_node, "resolve_registered_tasks")
         builder.add_edge("resolve_registered_tasks", "prepare_agent")
+        if (
+            publication
+            and publication.accepted.flexible
+            and publication.accepted.flexible.pending_task_resolution
+        ):
+            start_agent = registration_node
     builder.add_conditional_edges(
         "begin_turn",
         lambda s: s["phase"],
@@ -1113,7 +1172,14 @@ def build_flexible_graph(
         lambda s: s["phase"],
         {"WAITING_INPUT": terminal, "STARTED": start_agent},
     )
-    builder.add_edge("agent", "validate_action")
+    builder.add_conditional_edges(
+        "agent",
+        lambda s: s["phase"],
+        {
+            "DECIDED": "validate_action",
+            **({"REGISTER_REQUEST": "register_request"} if registering else {}),
+        },
+    )
     builder.add_conditional_edges(
         "validate_action",
         lambda s: s["phase"],
