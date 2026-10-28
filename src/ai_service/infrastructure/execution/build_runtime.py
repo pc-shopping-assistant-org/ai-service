@@ -217,7 +217,7 @@ async def open_build_runtime(
             )
         )
         requirement_extractor = NativeRequirementExtractor(provider, attempts)
-        task_extractor = NativeTaskExtractor(
+        task_interpreter = NativeTaskExtractor(
             provider, attempts, context=tool_context
         )
         return DurableConversationGraph(
@@ -235,14 +235,13 @@ async def open_build_runtime(
                 attempts,
                 conversation_revision=head.revision,
                 publication=binding,
-                task_extractor=None if fixed_tasks else task_extractor,
                 task_catalog=None if fixed_tasks else products,
                 checkpointer=saver,
                 clarifier=requirement_extractor,
                 unit_clarifier=requirement_extractor,
-                task_clarifier=task_extractor,
+                task_clarifier=task_interpreter,
                 amender=requirement_extractor,
-                task_amender=task_extractor,
+                task_amender=task_interpreter,
                 user_extractor=requirement_extractor,
                 catalog_loader=BackendRequirementCatalog(
                     client, settings.backend_api_url, attempts, mapping

@@ -4,6 +4,7 @@ import asyncio
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -245,7 +246,7 @@ async def test_managed_task_choice_publishes_comparison_not_choice_message(
                 request, head = await coordinator.load(claim)
                 accepted = await reader.read(head.accepted_checkpoint_ref)
                 graph = build_flexible_graph(
-                    Model(),
+                    WithTaskProposals(Model(), extractor),
                     ToolDispatcher(products, service),
                     ToolContext(
                         account_id=owner,
@@ -261,10 +262,6 @@ async def test_managed_task_choice_publishes_comparison_not_choice_message(
                     publication=FlexiblePublicationInput.for_request(
                         accepted, request, owner=owner
                     ),
-                    task_extractor=None
-                    if request.pending_action
-                    and request.pending_action.action == "DISCARD"
-                    else extractor,
                     task_catalog=None
                     if request.pending_action
                     and request.pending_action.action == "DISCARD"

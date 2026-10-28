@@ -72,7 +72,6 @@ async def test_task_amendment_only_changes_explicit_subject(scenario):
         Budget(),
         conversation_revision=1,
         publication=FlexiblePublicationInput.for_request(accepted, request),
-        task_extractor=extractor,
         task_catalog=products,
         task_clarifier=Choices(),
         task_amender=Amender(),

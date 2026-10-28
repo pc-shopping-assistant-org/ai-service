@@ -4,6 +4,7 @@ import json
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from test_flexible_graph_postgres import Budget, Catalog, Model
 
@@ -71,14 +72,13 @@ async def test_hundred_native_turns_bound_working_state_and_preserve_old_evidenc
                     message=f"GPU turn {turn}",
                 )
                 graph = build_flexible_graph(
-                    Model(),
+                    WithTaskProposals(Model(), Extractor()),
                     ToolDispatcher(catalog, service),
                     ctx,
                     [],
                     Budget(),
                     conversation_revision=turn,
                     publication=FlexiblePublicationInput.for_request(accepted, request),
-                    task_extractor=Extractor(),
                     task_catalog=catalog,
                     checkpointer=saver,
                 )

@@ -74,7 +74,6 @@ async def test_free_task_selection_keeps_original_source_and_offered_identities(
         Budget(),
         conversation_revision=1,
         publication=FlexiblePublicationInput.for_request(accepted, request),
-        task_extractor=extractor,
         task_catalog=products,
         task_clarifier=choices,
     )

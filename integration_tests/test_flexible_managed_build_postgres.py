@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -563,11 +564,14 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                 )
                 products = Products()
                 graph = build_flexible_graph(
-                    Model(
-                        missing_unit,
-                        missing_reference,
-                        multi,
-                        selection == "FULL_SETUP",
+                    WithTaskProposals(
+                        Model(
+                            missing_unit,
+                            missing_reference,
+                            multi,
+                            selection == "FULL_SETUP",
+                        ),
+                        extractor,
                     ),
                     ToolDispatcher(
                         products, service, reader=web_reader if multi else None
@@ -577,7 +581,6 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                     AttemptBoundary(coordinator.ledger, claim) if multi else Budget(),
                     conversation_revision=head.revision,
                     publication=FlexiblePublicationInput.for_request(accepted, request),
-                    task_extractor=None if required else extractor,
                     task_catalog=None if required else products,
                     checkpointer=saver,
                     clarifier=choices if free_choice else None,

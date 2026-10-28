@@ -4,6 +4,7 @@ import asyncio
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -151,23 +152,10 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
             self.attempts = attempts
 
         async def extract_tasks(self, message):
-            async def generate():
-                return TaskDraftBatch(
-                    tasks=[
-                        {
-                            "kind": "BUILD",
-                            "start": 0,
-                            "end": len(message),
-                            "quote": message,
-                        }
-                    ]
-                )
-
-            return await self.attempts.invoke(
-                AttemptKind.MODEL,
-                "tasks:register:v2",
-                canonical_hash(message),
-                generate,
+            return TaskDraftBatch(
+                tasks=[
+                    {"kind": "BUILD", "start": 0, "end": len(message), "quote": message}
+                ]
             )
 
         async def extract(self, message, state):
@@ -324,14 +312,13 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                 )
                 products = Products()
                 flow = build_flexible_graph(
-                    model,
+                    WithTaskProposals(model, extractor),
                     ToolDispatcher(products, service),
                     context,
                     [],
                     attempts,
                     conversation_revision=head.revision,
                     publication=FlexiblePublicationInput.for_request(accepted, request),
-                    task_extractor=extractor,
                     task_catalog=products,
                     user_extractor=extractor,
                     checkpointer=saver,

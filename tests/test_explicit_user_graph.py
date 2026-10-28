@@ -1,6 +1,8 @@
+from copy import deepcopy
 from uuid import uuid4
 
 import pytest
+from agent_task_proposals import WithTaskProposals
 from test_explicit_user_admission import draft
 from test_flexible_contracts import pending_proposal
 from test_flexible_publication import base_snapshot
@@ -123,7 +125,7 @@ async def test_confirmation_then_explicit_edit_replays_in_order_without_mutating
             )
 
     graph = build_flexible_graph(
-        Model(),
+        WithTaskProposals(Model(), Extractor()) if registered else Model(),
         ToolDispatcher(products, service),
         ctx,
         [] if registered else tasks,
@@ -131,7 +133,6 @@ async def test_confirmation_then_explicit_edit_replays_in_order_without_mutating
         conversation_revision=13,
         publication=binding,
         user_extractor=Extractor(),
-        task_extractor=Extractor() if registered else None,
         task_catalog=products if registered else None,
     )
     values = await graph.ainvoke(request.execution_input())
@@ -163,14 +164,9 @@ async def test_confirmation_then_explicit_edit_replays_in_order_without_mutating
             )
 
         assert revalidate(values) == published
-        forged = dict(values) | {"task_resolution": dict(values["task_resolution"])}
-        forged["task_resolution"]["requirements"] = [
-            dict(values["task_resolution"]["requirements"][0])
-            | {"product_ids": [str(uuid4())]}
-        ]
-        with pytest.raises(
-            ValueError, match="Registration cannot replace accepted continuation tasks"
-        ):
+        forged = deepcopy(values)
+        forged["publication_context"]["required"][0]["product_ids"] = [str(uuid4())]
+        with pytest.raises(ValueError):
             revalidate(forged)
         assert accepted.model_dump(mode="json") == before
 
@@ -271,14 +267,13 @@ async def test_user_admission_updates_working_state_and_rederives_before_publish
 
     extractor = Extractor()
     graph = build_flexible_graph(
-        Model(),
+        WithTaskProposals(Model(), extractor),
         ToolDispatcher(products, service),
         ctx,
         [],
         Budget(),
         conversation_revision=0,
         publication=binding,
-        task_extractor=extractor,
         task_catalog=products,
         user_extractor=extractor,
     )

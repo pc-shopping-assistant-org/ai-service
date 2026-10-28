@@ -48,7 +48,7 @@ class QwenChatClient:
             **(decoding or {}),
             "model": model,
             "chat_template_kwargs": {"enable_thinking": False},
-            "parallel_tool_calls": False,
+            "parallel_tool_calls": request.get("parallel_tool_calls", False),
         }
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         response = await self.http.post(self.url, json=payload, headers=headers)
@@ -77,12 +77,20 @@ class QwenChatModel:
         *,
         tools: list[dict[str, Any]] | None = None,
         schema: type[BaseModel] | None = None,
+        parallel_tool_calls: bool = False,
     ):
         self.client, self.model_name, self.max_tokens = client, model_name, max_tokens
         self.tools, self.schema = tools, schema
+        self.parallel_tool_calls = parallel_tool_calls
 
     def bind_tools(self, tools: list[dict[str, Any]], **kwargs: Any) -> "QwenChatModel":
-        return QwenChatModel(self.client, self.model_name, self.max_tokens, tools=tools)
+        return QwenChatModel(
+            self.client,
+            self.model_name,
+            self.max_tokens,
+            tools=tools,
+            parallel_tool_calls=kwargs.get("parallel_tool_calls", False),
+        )
 
     def with_structured_output(
         self, schema: type[BaseModel], **kwargs: Any
@@ -90,9 +98,7 @@ class QwenChatModel:
         # Only trained heads use the adapter. Auxiliary choice/amendment heads
         # keep the original base weights until they have their own quality gate.
         model = (
-            self.model_name
-            if schema in ADAPTER_STRUCTURED_SCHEMAS
-            else QWEN_MODEL_ID
+            self.model_name if schema in ADAPTER_STRUCTURED_SCHEMAS else QWEN_MODEL_ID
         )
         return QwenChatModel(self.client, model, self.max_tokens, schema=schema)
 
@@ -101,6 +107,7 @@ class QwenChatModel:
             "messages": convert_to_openai_messages(convert_to_messages(input))
         }
         if self.tools:
+            request["parallel_tool_calls"] = self.parallel_tool_calls
             request["tools"] = [
                 tool
                 if tool.get("type") == "function"

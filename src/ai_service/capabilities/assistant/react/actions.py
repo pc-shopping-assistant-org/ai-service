@@ -9,6 +9,7 @@ from ai_service.capabilities.assistant.requirements.resolver import (
     Draft,
     RequirementDraft,
 )
+from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.assistant.stateful_contracts import Contract, Text
 
 from .contracts import AnswerCandidate, ToolCall
@@ -130,6 +131,12 @@ class FlexibleDecision(Contract):
     schema_version: StrictInt = Field(default=2, ge=2, le=2)
     action: Action
     control_call: ToolCall | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    registration: TaskDraftBatch | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    registration_call: ToolCall | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
 
