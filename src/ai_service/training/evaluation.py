@@ -14,8 +14,10 @@ from pydantic import Field, JsonValue
 from ai_service.capabilities.assistant.conversation_core import Digest
 from ai_service.capabilities.assistant.react.actions import CallToolAction
 from ai_service.capabilities.assistant.react.contracts import ToolName
-from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
-from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
+from ai_service.capabilities.assistant.source_quotes import (
+    QuotedRequirementDraft,
+    QuotedTaskBatch,
+)
 from ai_service.capabilities.assistant.stateful_contracts import Contract, Text
 from ai_service.infrastructure.providers.react_model import parse_flexible_response
 from ai_service.training.dataset import (
@@ -125,6 +127,7 @@ def evaluate_responses(
                     parsed = parse_flexible_response(
                         message,
                         tuple(ToolName),
+                        message=sample.message,
                         context=snapshot.context,
                         transcript=snapshot.records,
                     )
@@ -135,11 +138,13 @@ def evaluate_responses(
                     if wire.tool_calls:
                         raise ValueError("STRUCTURED_RESPONSE_CANNOT_CALL_TOOLS")
                     schema = (
-                        TaskDraftBatch
+                        QuotedTaskBatch
                         if isinstance(sample, TaskExtractionSample)
-                        else RequirementDraft
+                        else QuotedRequirementDraft
                     )
-                    target = schema.model_validate_json(wire.content)
+                    target = schema.model_validate_json(wire.content).bind(
+                        sample.message
+                    )
                 row["raw_contract_valid"] = True
                 # Reuse canonical source/policy/grounding/completion checks, not a
                 # second evaluator that only compares against the authored answer.

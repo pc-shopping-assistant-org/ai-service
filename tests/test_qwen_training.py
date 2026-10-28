@@ -85,9 +85,10 @@ def test_requirement_training_prompt_uses_exact_runtime_qwen_projection():
     tokenize_example(example, tokenizer, max_length=8192)
 
     assert tokenizer.messages_seen[0] == expected["messages"]
-    schema = sample.target.__class__.model_json_schema()
-    assert json.dumps(schema, ensure_ascii=False, sort_keys=True) in (
-        expected["messages"][0]["content"]
+    schema = example["request"]["response_format"]["json_schema"]["schema"]
+    assert (
+        json.dumps(schema, ensure_ascii=False, sort_keys=True)
+        in (expected["messages"][0]["content"])
     )
 
 

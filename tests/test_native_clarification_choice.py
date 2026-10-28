@@ -41,8 +41,6 @@ async def test_native_choice_is_typed_budgeted_and_source_bound():
                 {
                     "item_index": 2,
                     "variant_id": str(identifier),
-                    "start": 0,
-                    "end": len(message),
                     "quote": message,
                 }
             ]

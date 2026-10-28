@@ -89,8 +89,7 @@ async def test_native_control_call_normalizes_to_internal_action(
                     {
                         "subject": "RAM",
                         "predicate": "capacity",
-                        "start": 0,
-                        "end": 8,
+                        "quote": "RAM 32GB",
                         "value": {"kind": "QUANTITY", "amount": 32, "unit": "GB"},
                     }
                 ]

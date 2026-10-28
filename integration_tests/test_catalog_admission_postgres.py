@@ -40,7 +40,7 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
                 assert source == "Build PC"
                 return {
                     "tasks": [
-                        {"kind": "BUILD", "start": 0, "end": 8, "quote": "Build PC"}
+                        {"kind": "BUILD", "quote": "Build PC"}
                     ]
                 }
             message = messages[1].content
@@ -75,8 +75,7 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
                             {
                                 "subject": "RAM",
                                 "predicate": "capacity",
-                                "start": 0,
-                                "end": 6,
+                                "quote": "RAM 32",
                                 "value": {"kind": "UNRESOLVED_QUANTITY", "amount": 32},
                             }
                         ]

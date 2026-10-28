@@ -15,6 +15,7 @@ from ai_service.capabilities.assistant.react.snapshot_publication import (
     FlexiblePublicationInput,
 )
 from ai_service.capabilities.assistant.react.tools import ToolDispatcher
+from ai_service.capabilities.assistant.source_quotes import project_requirement_draft
 from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
 )
@@ -50,7 +51,9 @@ async def test_native_control_acknowledgement_precedes_later_tool_pairs(resume):
                         "id": "proposal",
                         "name": "propose_requirements",
                         "args": {
-                            "draft": draft().model_dump(mode="json"),
+                            "draft": project_requirement_draft(
+                                draft(), "RAM 32GB"
+                            ).model_dump(mode="json"),
                         },
                     }
                 ],

@@ -47,7 +47,9 @@ class HardwareCatalogMapping(Contract):
 
 class HardwareSummary(Summary):
     category_id: UUID = Field(alias="categoryId")
-    hardware_type: ComponentCategory | AccessoryType | None = Field(alias="hardwareType")
+    # The backend owns this taxonomy as master data. The optimizer consumes
+    # only the component/accessory subset and must tolerate new catalog codes.
+    hardware_type: str | None = Field(alias="hardwareType")
 
 
 class Option(BaseModel):
@@ -115,10 +117,7 @@ class BackendRequirementCatalog(BackendProductCatalog):
                     if detail.id in seen:
                         raise ValueError("Duplicate catalog page identity")
                     seen.add(detail.id)
-                    if (
-                        detail.status != "ACTIVE"
-                        or detail.hardware_type is None
-                    ):
+                    if detail.status != "ACTIVE" or detail.hardware_type is None:
                         continue
                     rows.extend(self._map(detail))
                     if len(rows) > self.max_rows:
@@ -143,6 +142,22 @@ class BackendRequirementCatalog(BackendProductCatalog):
             ) from exc
 
     def _map(self, detail: HardwareDetail) -> list[CatalogRowV1]:
+        category_code = detail.hardware_type
+        if category_code is None:
+            return []
+        category: ComponentCategory | AccessoryType
+        try:
+            category = ComponentCategory(category_code)
+        except ValueError:
+            try:
+                category = AccessoryType(category_code)
+            except ValueError:
+                # Catalog categories such as PC_GAMING and OTHER are not
+                # optimizer slots; their options do not need part mappings.
+                return []
+        spec_type = (
+            ComponentSpec if isinstance(category, ComponentCategory) else AccessorySpec
+        )
         fields: dict[str, JsonValue] = {
             field: detail.specifications[key]
             for field in SPEC_FIELDS
@@ -180,16 +195,11 @@ class BackendRequirementCatalog(BackendProductCatalog):
                 if "storage_media" in specs
                 else {}
             )
-            category = detail.hardware_type
-            component = (
-                ComponentSpec
-                if isinstance(category, ComponentCategory)
-                else AccessorySpec
-            ).model_validate(
+            component = spec_type.model_validate(
                 {
                     **(
                         specs
-                        if isinstance(category, ComponentCategory)
+                        if spec_type is ComponentSpec
                         else {"brand": detail.brand_name}
                     ),
                     "id": variant.id,
@@ -197,7 +207,7 @@ class BackendRequirementCatalog(BackendProductCatalog):
                     "category": category,
                     "price": variant.price,
                     "extra_specs": extra
-                    if isinstance(category, ComponentCategory)
+                    if spec_type is ComponentSpec
                     else detail.specifications,
                 },
                 strict=True,
