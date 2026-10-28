@@ -63,3 +63,34 @@ def test_qwen_timeout_uses_existing_recovery_policy():
     assert (
         provider_failure(httpx.ReadTimeout("fixture")) == RetryFailure.UPSTREAM_TIMEOUT
     )
+
+
+@pytest.mark.parametrize(
+    "code,expected",
+    [
+        (429, RetryFailure.UPSTREAM_RATE_LIMIT),
+        (503, RetryFailure.UPSTREAM_SERVER_ERROR),
+        (504, RetryFailure.UPSTREAM_TIMEOUT),
+        (400, None),
+        (401, None),
+    ],
+)
+def test_langchain_gemini_wrappers_preserve_status_classification(code, expected):
+    from langchain_google_genai.chat_models import (
+        GoogleAPIError,
+        GoogleAuthenticationError,
+        GoogleInvalidRequestError,
+        GoogleRateLimitError,
+    )
+
+    payload = {"error": {"message": "fixture"}}
+    if code >= 500:
+        wrapped = GoogleAPIError(code, payload)
+    else:
+        wrapped = {
+            400: GoogleInvalidRequestError,
+            401: GoogleAuthenticationError,
+            429: GoogleRateLimitError,
+        }[code]("fixture")
+        wrapped.__cause__ = APIError(code, payload)
+    assert provider_failure(wrapped) == expected
