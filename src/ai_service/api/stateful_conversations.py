@@ -21,9 +21,13 @@ from ai_service.capabilities.assistant.public_contracts import (
     ConversationCreateV1,
     MessageViewV1,
     PageV1,
+    RunErrorV1,
     RunViewV1,
 )
-from ai_service.capabilities.assistant.react.public_views import ConversationViewV2
+from ai_service.capabilities.assistant.react.public_views import (
+    ConversationViewV2,
+    RunCompletedV2,
+)
 from ai_service.capabilities.assistant.react.turn_contracts import (
     TurnRequestV2,
 )
@@ -257,6 +261,41 @@ async def cancel_run(
     except RunAdmissionError as exc:
         raise admission_error(exc) from None
     return ApiResponse(data=run, message=ResponseMessage.AI_RUN_CANCEL_REQUESTED)
+
+
+@router.get(
+    "/{conversation_id}/runs/{run_id}/result",
+    response_model=ApiResponse[RunCompletedV2 | RunErrorV1],
+    responses={
+        202: {"model": ApiResponse[None]},
+        404: {"model": ErrorResponse},
+        410: {"model": ErrorResponse},
+    },
+)
+async def get_run_result(
+    conversation_id: UUID,
+    run_id: UUID,
+    owner: Annotated[UUID, Depends(account_id)],
+    runtime: Annotated[StatefulResources, Depends(resources)],
+) -> ApiResponse[RunCompletedV2 | RunErrorV1] | JSONResponse:
+    if runtime.events is None:
+        raise StatefulApiError(503, ResponseMessage.HTTP_ERROR)
+    try:
+        result = await runtime.events.result(owner, conversation_id, run_id)
+    except RunAdmissionError as exc:
+        raise admission_error(exc) from None
+    except EventHistoryUnavailable:
+        raise StatefulApiError(410, ResponseMessage.AI_STREAM_INTERRUPTED) from None
+    if result is None:
+        return JSONResponse(
+            status_code=202,
+            content=ApiResponse[None](
+                message=ResponseMessage.AI_RUN_RETRIEVED
+            ).model_dump(mode="json"),
+        )
+    return ApiResponse[RunCompletedV2 | RunErrorV1].model_validate(
+        result.envelope.model_dump()
+    )
 
 
 @router.get(

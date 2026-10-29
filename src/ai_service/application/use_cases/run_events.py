@@ -40,6 +40,23 @@ class StatefulRunEventService:
         self.reader, self.runs = reader, runs
         self.poll_seconds, self.heartbeat_seconds = poll_seconds, heartbeat_seconds
 
+    async def result(
+        self, owner: UUID, conversation_id: UUID, run_id: UUID
+    ) -> StoredRunEvent | None:
+        """Read the immutable delivery outcome, never the latest conversation head."""
+        run = await self.runs.get(owner, conversation_id, run_id)
+        if run.status not in _terminal:
+            return None
+        rows = await self.reader.read(owner, conversation_id, run_id)
+        for row in reversed(rows):
+            assert row.envelope.data is not None
+            if row.envelope.data.event in (
+                ChatStreamEventType.COMPLETED,
+                ChatStreamEventType.ERROR,
+            ):
+                return row
+        raise EventHistoryUnavailable()
+
     async def open(
         self,
         owner: UUID,
