@@ -12,11 +12,12 @@ from ai_service.capabilities.assistant.requirements.resolver import (
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.assistant.stateful_contracts import Contract, Text
 
-from .contracts import AnswerCandidate, ToolCall
+from .contracts import MAX_NATIVE_TOOL_CALLS, AnswerCandidate, ToolCall
 
 
 class ActionKind(StrEnum):
     CALL_TOOL = "CALL_TOOL"
+    CALL_TOOLS = "CALL_TOOLS"
     PROPOSE_REQUIREMENTS = "PROPOSE_REQUIREMENTS"
     ASK_CLARIFICATION = "ASK_CLARIFICATION"
     FINAL_ANSWER = "FINAL_ANSWER"
@@ -26,6 +27,22 @@ class ActionKind(StrEnum):
 class CallToolAction(Contract):
     kind: Literal["CALL_TOOL"] = "CALL_TOOL"
     call: ToolCall
+
+
+class CallToolsAction(Contract):
+    kind: Literal["CALL_TOOLS"] = "CALL_TOOLS"
+    calls: list[ToolCall] = Field(min_length=1, max_length=MAX_NATIVE_TOOL_CALLS)
+
+    @model_validator(mode="after")
+    def unique_ids(self) -> "CallToolsAction":
+        if len({call.call_id for call in self.calls}) != len(self.calls):
+            raise ValueError("Native tool call IDs must be unique")
+        return self
+
+
+def action_calls(action: CallToolAction | CallToolsAction) -> list[ToolCall]:
+    """Single-call actions remain readable from previously stored checkpoints."""
+    return action.calls if isinstance(action, CallToolsAction) else [action.call]
 
 
 class ProposeRequirementsAction(Contract):
@@ -118,6 +135,7 @@ class FinalAnswerAction(FinalAnswerPayload):
 
 Action = Annotated[
     CallToolAction
+    | CallToolsAction
     | ProposeRequirementsAction
     | AskClarificationAction
     | FinalAnswerAction

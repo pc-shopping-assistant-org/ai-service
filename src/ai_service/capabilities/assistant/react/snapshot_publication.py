@@ -60,6 +60,7 @@ from .resolution_reply import (
     derive_resolution_reply,
     derive_task_reply,
 )
+from .submissions import evidence_requirements
 from .task_resolution import (
     PendingTaskDraft,
     TaskResolution,
@@ -711,10 +712,13 @@ class FlexibleExecutionContext(Contract):
     context: ToolContext
     required: list[CompletionRequirement] = Field(max_length=8)
     registered: StrictBool
+    tool_driven: StrictBool = False
     discard_only: StrictBool = Field(default=False, exclude_if=lambda value: not value)
 
     @model_validator(mode="after")
     def task_mode(self) -> "FlexibleExecutionContext":
+        if self.tool_driven and (self.required or self.registered):
+            raise ValueError("Tool-driven completion cannot replace fixed tasks")
         if self.discard_only:
             if self.registered or self.required:
                 raise ValueError("Discard is not a requested-task execution")
@@ -851,6 +855,19 @@ def revalidate_flexible_publication(
             ]
         ):
             raise ValueError("Registration cannot replace accepted continuation tasks")
+    elif execution.tool_driven:
+        working = ctx.model_copy(
+            update={
+                "requirements": type(ctx.requirements).model_validate(
+                    values.get("working_requirements")
+                )
+            }
+        )
+        tasks = evidence_requirements(
+            values.get("decision"),
+            [ToolRecord.model_validate(row) for row in values.get("ledger", [])],
+            working,
+        )
     elif not request.selected_product_ids and (
         binding.accepted.flexible is None
         or binding.accepted.flexible.status != "WAITING_INPUT"

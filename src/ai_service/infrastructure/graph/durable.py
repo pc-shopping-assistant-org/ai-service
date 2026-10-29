@@ -6,10 +6,12 @@ permission to publish it. Never reconstruct execution by copying snapshot values
 """
 
 from collections.abc import Awaitable, Callable
+from copy import copy
 from typing import Any
 from uuid import UUID
 
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import StateSnapshot
 
@@ -24,6 +26,8 @@ from ai_service.capabilities.assistant.stateful_contracts import (
     ConversationHeadV1,
     ExecutionStopEvidenceV1,
 )
+
+from .recovery_saver import RecoverySaver
 
 
 class DurableConversationGraph:
@@ -205,9 +209,20 @@ class DurableConversationGraph:
             app_generation=execution.generation,
         )
         config = self.config(source)
+        config["configurable"].pop("checkpoint_id")
         config["metadata"] = context
+        recovery_graph = copy(self.graph)
+        if not isinstance(self.graph.checkpointer, BaseCheckpointSaver):
+            raise TypeError("Recovery requires a native checkpointer")
+        recovery_graph.checkpointer = RecoverySaver(self.graph.checkpointer, source)
         return await self._stream(
-            head.conversation_id, None, config, context, checkpoint_sink, source=source
+            head.conversation_id,
+            None,
+            config,
+            context,
+            checkpoint_sink,
+            source=source,
+            graph=recovery_graph,
         )
 
     async def _stream(
@@ -219,9 +234,10 @@ class DurableConversationGraph:
         checkpoint_sink: Callable[[CheckpointRefV1], Awaitable[None]] | None,
         *,
         source: CheckpointRefV1 | None = None,
+        graph: CompiledStateGraph | None = None,
     ) -> CheckpointRefV1:
         own_ref: CheckpointRefV1 | None = None
-        async for event in self.graph.astream(
+        async for event in (graph or self.graph).astream(
             inputs, config, stream_mode="checkpoints", durability="sync"
         ):
             native = event["config"]["configurable"]

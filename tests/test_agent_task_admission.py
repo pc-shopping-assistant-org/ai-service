@@ -1,4 +1,4 @@
-"""Common turns enter ReAct directly; task admission shares its first action."""
+"""Common turns enter ReAct directly without task registration/extraction."""
 
 import json
 from uuid import uuid4
@@ -23,23 +23,13 @@ from ai_service.infrastructure.graph.flexible import build_flexible_graph
 from ai_service.infrastructure.providers.react_model import NativeFlexibleModel
 
 
-def registration():
-    return {
-        "id": "register",
-        "name": "register_tasks",
-        "args": {"tasks": [{"kind": "ANSWER", "quote": "GPU?"}]},
-    }
-
-
 @pytest.mark.asyncio
-async def test_native_registration_and_action_share_one_response():
+async def test_native_action_has_no_registration_schema():
     trusted = context()
-    trusted.task_registration_open = True
     provider = Provider(
         AIMessage(
             content="",
             tool_calls=[
-                registration(),
                 {"id": "search", "name": "search_catalog", "args": {"query": "GPU"}},
             ],
         )
@@ -47,8 +37,9 @@ async def test_native_registration_and_action_share_one_response():
     decision = await NativeFlexibleModel(provider).decide(
         "GPU?", [], (ToolName.SEARCH_CATALOG,), None, trusted
     )
-    assert decision.registration.tasks[0].quote == "GPU?"
-    assert decision.action.call.name == "search_catalog"
+    assert decision.registration is None
+    assert "register_tasks" not in {tool["name"] for tool in provider.model.tools}
+    assert decision.action.calls[0].name == "search_catalog"
     assert provider.model.options["parallel_tool_calls"] is True
 
 
@@ -82,7 +73,7 @@ async def test_greeting_requires_one_model_call_and_no_registration():
 
 
 @pytest.mark.asyncio
-async def test_catalog_request_admits_task_and_executes_without_another_model_step():
+async def test_catalog_request_executes_without_a_task_model_step():
     provider = Provider(None)
     calls = []
 
@@ -92,7 +83,6 @@ async def test_catalog_request_admits_task_and_executes_without_another_model_st
             return AIMessage(
                 content="",
                 tool_calls=[
-                    registration(),
                     {
                         "id": "search",
                         "name": "search_catalog",
@@ -102,11 +92,10 @@ async def test_catalog_request_admits_task_and_executes_without_another_model_st
             )
         native = [m for m in messages if isinstance(m, AIMessage) and m.tool_calls]
         assert [c["name"] for c in native[0].tool_calls] == [
-            "register_tasks",
             "search_catalog",
         ]
         replies = [m for m in messages if isinstance(m, ToolMessage)]
-        assert {m.tool_call_id for m in replies} == {"register", "search"}
+        assert {m.tool_call_id for m in replies} == {"search"}
         result = json.loads(
             next(m.content for m in replies if m.name == "search_catalog")
         )

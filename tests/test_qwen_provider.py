@@ -220,5 +220,5 @@ async def test_qwen_plugs_into_existing_native_react_adapter():
         decision = await NativeFlexibleModel(provider).decide(
             "GPU", [], (ToolName.SEARCH_WEB,), None
         )
-        assert decision.action.kind == "CALL_TOOL"
-        assert decision.action.call.arguments == {"query": "GPU"}
+        assert decision.action.kind == "CALL_TOOLS"
+        assert decision.action.calls[0].arguments == {"query": "GPU"}

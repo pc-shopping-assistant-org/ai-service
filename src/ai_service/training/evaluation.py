@@ -12,7 +12,11 @@ from langchain_core.messages import AIMessage, convert_to_messages
 from pydantic import Field, JsonValue
 
 from ai_service.capabilities.assistant.conversation_core import Digest
-from ai_service.capabilities.assistant.react.actions import CallToolAction
+from ai_service.capabilities.assistant.react.actions import (
+    CallToolAction,
+    CallToolsAction,
+    action_calls,
+)
 from ai_service.capabilities.assistant.react.contracts import ToolName
 from ai_service.capabilities.assistant.source_quotes import (
     QuotedRequirementDraft,
@@ -153,16 +157,15 @@ def evaluate_responses(
                 if isinstance(sample, ReactDecisionSample):
                     matches = target.action == sample.target.action
                 if isinstance(sample, ReactDecisionSample) and isinstance(
-                    target.action, CallToolAction
+                    target.action, (CallToolAction, CallToolsAction)
                 ):
                     gold = sample.target.action
-                    matches = isinstance(gold, CallToolAction) and (
-                        target.action.call.name == gold.call.name
-                        and target.action.call.arguments == gold.call.arguments
-                    )
-                if isinstance(sample, ReactDecisionSample):
-                    matches = (
-                        matches and target.registration == sample.target.registration
+                    matches = isinstance(gold, (CallToolAction, CallToolsAction)) and (
+                        [
+                            (call.name, call.arguments)
+                            for call in action_calls(target.action)
+                        ]
+                        == [(call.name, call.arguments) for call in action_calls(gold)]
                     )
                 row.update(
                     status=CaseStatus.PASS.value,

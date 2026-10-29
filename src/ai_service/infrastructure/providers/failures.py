@@ -29,15 +29,16 @@ def provider_failure(error: Exception) -> RetryFailure | None:
                 return RetryFailure.UPSTREAM_RATE_LIMIT
             if 500 <= error.status_code < 600:
                 return RetryFailure.UPSTREAM_SERVER_ERROR
-    elif module.startswith("google.genai.errors"):
+    elif module.startswith(("google.genai.errors", "langchain_google_genai")):
         from google.genai.errors import APIError
 
-        if isinstance(error, APIError):
-            if error.code == 429:
+        upstream = error if isinstance(error, APIError) else error.__cause__
+        if isinstance(upstream, APIError):
+            if upstream.code == 429:
                 return RetryFailure.UPSTREAM_RATE_LIMIT
-            if error.code == 504:
+            if upstream.code == 504:
                 return RetryFailure.UPSTREAM_TIMEOUT
-            if 500 <= error.code < 600:
+            if 500 <= upstream.code < 600:
                 return RetryFailure.UPSTREAM_SERVER_ERROR
     return None
 

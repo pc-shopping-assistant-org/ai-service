@@ -118,23 +118,26 @@ async def test_export_structured_prompt_schema_matches_runtime():
 
 
 @pytest.mark.asyncio
-async def test_task_declaration_export_matches_native_agent_protocol(tmp_path):
+async def test_tool_batch_export_matches_native_agent_protocol(tmp_path):
     from langchain_core.messages import convert_to_messages
     from test_react_tools import context
 
-    from ai_service.capabilities.assistant.source_quotes import QuotedTaskBatch
     from ai_service.training.dataset import validate_label
 
     row = sample()
-    row["target"]["registration"] = (
-        QuotedTaskBatch.model_validate(
-            {"tasks": [{"kind": "ANSWER", "quote": row["message"]}]}
-        )
-        .bind(row["message"])
-        .model_dump(mode="json")
-    )
+    call = row["target"]["action"]["call"]
+    row["target"]["action"] = {
+        "kind": "CALL_TOOLS",
+        "calls": [
+            call,
+            {
+                **call,
+                "call_id": "driver-2",
+                "arguments": {**call["arguments"], "component_name": "ASUS TUF B650"},
+            },
+        ],
+    }
     trusted = context()
-    trusted.task_registration_open = True
     source = dataset(
         tmp_path,
         [row],
@@ -145,13 +148,12 @@ async def test_task_declaration_export_matches_native_agent_protocol(tmp_path):
     example = build_example(record, snapshot)
     assert example["request"]["parallel_tool_calls"] is True
     assert [call["function"]["name"] for call in example["target"]["tool_calls"]] == [
-        "register_tasks",
+        "research_driver",
         "research_driver",
     ]
     response = convert_to_messages([example["target"]])[0]
     decision = await NativeFlexibleModel(Provider(response)).decide(
         record.message, [], allowed_tools(snapshot.context), None, snapshot.context
     )
-    assert decision.registration == record.target.registration
     assert decision.action == record.target.action
     validate_label(record.model_copy(update={"target": decision}), snapshot)
