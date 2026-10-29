@@ -84,16 +84,15 @@ async def test_native_control_call_normalizes_to_internal_action(
     else:
         arguments = {
             "source_text": "RAM 32GB",
-            "draft": {
-                "items": [
-                    {
-                        "subject": "RAM",
-                        "predicate": "capacity",
-                        "quote": "RAM 32GB",
-                        "value": {"kind": "QUANTITY", "amount": 32, "unit": "GB"},
-                    }
-                ]
-            },
+            "items": [
+                {
+                    "subject": "RAM",
+                    "predicate": "capacity",
+                    "quote": "RAM 32GB",
+                    "value": 32,
+                    "unit": "GB",
+                }
+            ],
         }
     before = trusted.model_dump(mode="json")
     provider = Provider(
@@ -141,7 +140,7 @@ async def test_submit_result_selects_canonical_evidence_without_model_outcome():
                             {
                                 "task_index": 0,
                                 "text": "Sản phẩm hiện có trong catalog.",
-                                "evidence_refs": result.evidence_refs,
+                                "refs": result.evidence_refs,
                             }
                         ]
                     },
@@ -201,7 +200,7 @@ async def test_grounded_side_answer_does_not_complete_the_pending_build():
                             {
                                 "task_index": None,
                                 "text": "Giá tra từ catalog.",
-                                "evidence_refs": result.evidence_refs,
+                                "refs": result.evidence_refs,
                             }
                         ]
                     },

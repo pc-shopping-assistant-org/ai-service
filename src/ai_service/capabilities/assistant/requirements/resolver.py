@@ -242,6 +242,12 @@ def resolve_draft(
         }[item.target]
         if item.target_id is not None and item.target_id not in existing_ids:
             raise ValueError("Extraction cannot invent an existing target identity")
+        if item.target_id is not None and item.target != "RESOURCE":
+            existing = (
+                state.requirements if item.target == "REQUIREMENT" else state.goals
+            )[item.target_id]
+            if (item.subject, item.predicate) != (existing.subject, existing.predicate):
+                raise ValueError("Requirement target does not match subject/predicate")
         if item.operation == "CLEAR":
             if item.value is not None or item.target_id is None:
                 raise ValueError("CLEAR requires existing target and no value")

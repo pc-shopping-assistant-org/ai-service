@@ -125,9 +125,11 @@ def test_control_targets_export_native_calls_matching_serving_schema(tmp_path, k
     assert function["name"] == kind.lower()
     arguments = json.loads(function["arguments"])
     if kind == "PROPOSE_REQUIREMENTS":
-        assert arguments["draft"]["items"][0]["quote"] == "RAM 32GB"
-        assert "start" not in arguments["draft"]["items"][0]
-        assert "end" not in arguments["draft"]["items"][0]
+        assert arguments["items"][0]["quote"] == "RAM 32GB"
+        assert arguments["items"][0]["value"] == 32
+        assert arguments["items"][0]["unit"] == "GB"
+        assert "start" not in arguments["items"][0]
+        assert "end" not in arguments["items"][0]
     else:
         assert arguments == {
             key: value
@@ -204,5 +206,5 @@ def test_all_pilot_react_labels_roundtrip_without_rewriting_reviewed_data():
         assert snapshot.model_dump(mode="json") == original_snapshot
         checked += 1
     assert checked > 0
-    # Clarifications are native controls; application validation still checks fields.
-    assert needs_review == set()
+    # Old typed-clarification labels without pending/business context need review.
+    assert needs_review == {"react-13", "react-14", "react-15"}

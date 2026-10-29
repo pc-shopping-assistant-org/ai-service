@@ -320,7 +320,6 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                     conversation_revision=head.revision,
                     publication=FlexiblePublicationInput.for_request(accepted, request),
                     task_catalog=products,
-                    user_extractor=extractor,
                     checkpointer=saver,
                 )
                 return DurableConversationGraph(
@@ -551,7 +550,8 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                 )
                 assert accepted.public_build.total_spending_vnd <= 25_000_000
             assert (
-                service.calls == sum(extractor.calls for extractor in extractors) == 1
+                service.calls == 1
+                and sum(extractor.calls for extractor in extractors) == 0
             )
             terminal = await saver.aget_tuple(
                 DurableConversationGraph.config(

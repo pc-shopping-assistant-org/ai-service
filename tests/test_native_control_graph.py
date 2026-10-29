@@ -11,6 +11,7 @@ from test_react_graph import Budget
 from test_react_tools import Catalog, context
 
 from ai_service.capabilities.assistant.react.contracts import CompletionRequirement
+from ai_service.capabilities.assistant.react.model_contracts import RequirementInput
 from ai_service.capabilities.assistant.react.snapshot_publication import (
     FlexiblePublicationInput,
 )
@@ -51,9 +52,14 @@ async def test_native_control_acknowledgement_precedes_later_tool_pairs(resume):
                         "id": "proposal",
                         "name": "propose_requirements",
                         "args": {
-                            "draft": project_requirement_draft(
-                                draft(), "RAM 32GB"
-                            ).model_dump(mode="json"),
+                            "items": [
+                                RequirementInput.from_quoted(item).model_dump(
+                                    mode="json", exclude_defaults=True
+                                )
+                                for item in project_requirement_draft(
+                                    draft(), "RAM 32GB"
+                                ).items
+                            ],
                         },
                     }
                 ],
@@ -94,7 +100,7 @@ async def test_native_control_acknowledgement_precedes_later_tool_pairs(resume):
                         "results": [
                             {
                                 "text": "Lựa chọn",
-                                "evidence_refs": refs,
+                                "refs": refs,
                             }
                         ]
                     },
@@ -110,7 +116,6 @@ async def test_native_control_acknowledgement_precedes_later_tool_pairs(resume):
         [CompletionRequirement(kind="ANSWER")],
         Budget(),
         conversation_revision=0,
-        user_extractor=Extractor(),
         checkpointer=InMemorySaver(),
         publication=FlexiblePublicationInput(
             accepted=base_snapshot(trusted),
@@ -130,7 +135,7 @@ async def test_native_control_acknowledgement_precedes_later_tool_pairs(resume):
         terminal = await flow.ainvoke(
             {"message": "RAM 32GB"}, config, durability="sync"
         )
-    assert calls == (4 if resume else 3) and products.calls == 1 and extracted == 1
+    assert calls == (4 if resume else 3) and products.calls == 1 and extracted == 0
     assert len(terminal["control_history"]) == 1
     assert [entry["call"]["name"] for entry in terminal["ledger"]] == ["search_catalog"]
     assert terminal["accepted_snapshot"]["flexible"]["answer"]["status"] == "COMPLETED"

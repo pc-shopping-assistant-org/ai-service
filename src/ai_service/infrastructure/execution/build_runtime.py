@@ -242,7 +242,6 @@ async def open_build_runtime(
                 task_clarifier=task_interpreter,
                 amender=requirement_extractor,
                 task_amender=task_interpreter,
-                user_extractor=requirement_extractor,
                 catalog_loader=BackendRequirementCatalog(
                     client, settings.backend_api_url, attempts, mapping
                 ),

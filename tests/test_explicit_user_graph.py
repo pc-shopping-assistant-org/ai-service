@@ -132,7 +132,6 @@ async def test_confirmation_then_explicit_edit_replays_in_order_without_mutating
         Budget(),
         conversation_revision=13,
         publication=binding,
-        user_extractor=Extractor(),
         task_catalog=products if registered else None,
     )
     values = await graph.ainvoke(request.execution_input())
@@ -173,7 +172,7 @@ async def test_confirmation_then_explicit_edit_replays_in_order_without_mutating
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "mode", ["MATCH", "READ_FIRST", "WAITING", "MISMATCH", "AGENT_TEXT"]
+    "mode", ["MATCH", "READ_FIRST", "WAITING", "AGENT_TEXT"]
 )
 async def test_user_admission_updates_working_state_and_rederives_before_publish(mode):
     ctx, products, service = context(), Catalog(), PCBuildApplicationService()
@@ -275,7 +274,6 @@ async def test_user_admission_updates_working_state_and_rederives_before_publish
         conversation_revision=0,
         publication=binding,
         task_catalog=products,
-        user_extractor=extractor,
     )
     values = await graph.ainvoke(request.execution_input())
     result = revalidate_flexible_publication(
@@ -300,7 +298,7 @@ async def test_user_admission_updates_working_state_and_rederives_before_publish
                 and result.flexible.clarification is not None
             )
         assert len(result.requirement_state.requirements) == 1
-        assert len(values["user_receipts"]) == 1 and extractor.calls == 1
+        assert len(values["user_receipts"]) == 1 and extractor.calls == 0
         if mode == "READ_FIRST":
             assert len(values["ledger"]) == 2 and products.calls == 2
             assert (

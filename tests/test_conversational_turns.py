@@ -304,7 +304,6 @@ async def test_requirements_can_be_collected_without_fabricating_a_build_task(
         conversation_revision=0,
         publication=FlexiblePublicationInput.for_request(base, request),
         task_catalog=products,
-        user_extractor=Extractor(),
     )
     terminal = await flow.ainvoke({"message": message})
     published = AcceptedConversationSnapshot.model_validate(

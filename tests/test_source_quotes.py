@@ -5,8 +5,8 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from ai_service.capabilities.assistant.react.control_actions import (
-    QuotedProposeRequirementsAction,
+from ai_service.capabilities.assistant.react.model_contracts import (
+    RequirementProposalInput,
 )
 from ai_service.capabilities.assistant.source_quotes import (
     QuotedChoice,
@@ -143,7 +143,7 @@ def test_task_choice_and_edit_bind_exact_quotes():
         QuotedUnitChoice,
         QuotedTaskChoice,
         QuotedTaskAmendment,
-        QuotedProposeRequirementsAction,
+        RequirementProposalInput,
     ],
 )
 def test_model_facing_schemas_never_request_offsets(schema):

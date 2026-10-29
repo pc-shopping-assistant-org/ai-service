@@ -90,7 +90,6 @@ from ai_service.capabilities.assistant.requirements.amendment import PendingAmen
 from ai_service.capabilities.assistant.requirements.build import (
     ClarificationExtractor,
     RequirementCatalog,
-    RequirementExtractor,
 )
 from ai_service.capabilities.assistant.requirements.catalog_policy import (
     build_clarification_reasons,
@@ -188,7 +187,6 @@ def build_flexible_graph(
     task_clarifier: TaskClarificationExtractor | None = None,
     amender: PendingAmender | None = None,
     task_amender: TaskAmender | None = None,
-    user_extractor: RequirementExtractor | None = None,
     catalog_loader: RequirementCatalog | None = None,
 ) -> CompiledStateGraph:
     trusted = ToolContext.model_validate(context.model_dump())
@@ -206,8 +204,6 @@ def build_flexible_graph(
             for row in publication.accepted.flexible.task_outcomes
         ]
         registering = False
-    if user_extractor is not None and publication is None:
-        raise ValueError("Explicit-user admission requires a stored request binding")
     if publication and publication.task_reply and not registering:
         raise ValueError("Task selection requires canonical task re-resolution")
     if registering and (tasks or publication is None):
@@ -1045,23 +1041,14 @@ def build_flexible_graph(
             return repair(state, "PROPOSAL_CONFIRMATION_REQUIRED")
         if state.get("pending_draft"):
             return repair(state, "INVALID_ACTION", ["pending_draft"])
-        extra_calls = int(user_extractor is not None and action.source_text is None)
-        if (
-            user_extractor is not None
-            and action.source_text is None
-            and state.get("model_calls", 0) >= limits.max_model_calls
-        ):
-            raise ValueError("REACT_MODEL_LIMIT")
         try:
             result = await resolve_requirement_proposal(
                 action,
                 ctx,
                 state["message"],
                 conversation_revision,
-                user_extractor=user_extractor,
             )
             update: dict[str, Any] = {
-                "model_calls": state.get("model_calls", 0) + extra_calls,
                 "repair_feedback": None,
             }
             if isinstance(result, PendingResolution):
@@ -1095,11 +1082,7 @@ def build_flexible_graph(
                     else "REQUIREMENTS_UNCHANGED",
                 )
         except ValueError:
-            return bounded(
-                state,
-                repair(state, "INVALID_ACTION")
-                | {"model_calls": state.get("model_calls", 0) + extra_calls},
-            )
+            return bounded(state, repair(state, "INVALID_ACTION"))
         return bounded(state, acknowledge_control(state, update))
 
     builder = StateGraph(FlexibleState)

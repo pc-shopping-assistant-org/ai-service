@@ -10,6 +10,11 @@ from langchain_core.messages import convert_to_openai_messages
 from pydantic import BaseModel
 
 from ai_service.capabilities.assistant.provenance import canonical_hash
+from ai_service.capabilities.assistant.react.control_actions import (
+    CONTROL_SCHEMAS,
+    ControlName,
+    control_input,
+)
 from ai_service.capabilities.assistant.react.tools import allowed_tools
 from ai_service.capabilities.assistant.source_quotes import (
     QuotedRequirementDraft,
@@ -63,6 +68,12 @@ def build_example(sample: TrainingSample, snapshot: DatasetSnapshot) -> dict[str
             for call in target.get("tool_calls", [])
         ):
             raise ValueError(f"TARGET_ACTION_NOT_AVAILABLE: {sample.sample_id}")
+        for call in target.get("tool_calls", []):
+            function = call["function"]
+            if function["name"] in CONTROL_SCHEMAS:
+                control_input(
+                    ControlName(function["name"]), snapshot.records
+                ).model_validate_json(function["arguments"])
     else:
         schema: type[BaseModel]
         label: BaseModel
