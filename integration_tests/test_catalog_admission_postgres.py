@@ -44,6 +44,9 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
             calls.append(message)
             if message == "Chào bạn":
                 return AIMessage(content="Chào bạn! Tôi có thể giúp chọn linh kiện PC.")
+            if message == "Build PC":
+                assert "ask_clarification" not in self.tools
+                return AIMessage(content="Ngân sách và nhu cầu sử dụng của bạn là gì?")
             if message == "32GB có cần thiết không?":
                 context = json.loads(
                     messages[0].content.split(" Application context (data): ", 1)[1]
@@ -67,16 +70,14 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
                 else {
                     "kind": "PROPOSE_REQUIREMENTS",
                     "source_text": "RAM 32",
-                    "draft": {
-                        "items": [
-                            {
-                                "subject": "RAM",
-                                "predicate": "capacity",
-                                "quote": "RAM 32",
-                                "value": {"kind": "UNRESOLVED_QUANTITY", "amount": 32},
-                            }
-                        ]
-                    },
+                    "items": [
+                        {
+                            "subject": "RAM",
+                            "predicate": "capacity",
+                            "quote": "RAM 32",
+                            "value": 32,
+                        }
+                    ],
                 }
             )
             return AIMessage(
@@ -196,11 +197,9 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
                 hello = await turn("Chào bạn", 0, expected_status="COMPLETED")
                 assert hello["flexible"]["task_outcomes"] == []
                 assert "Chào bạn!" in hello["flexible"]["answer"]
-            first = await turn("Build PC", revision)
-            assert first["flexible"]["missing_fields"] == [
-                "BUDGET_REQUIRED",
-                "USE_CASE_REQUIRED",
-            ]
+            first = await turn("Build PC", revision, expected_status="COMPLETED")
+            assert "Ngân sách" in first["flexible"]["answer"]
+            assert first["flexible"]["task_outcomes"] == []
             second = await turn("RAM 32", revision + 1)
             pending = second["flexible"]["clarification"]
             assert pending is not None

@@ -155,7 +155,7 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                                     "results": [
                                         {
                                             "text": "Catalog result",
-                                            "evidence_refs": result["evidence_refs"],
+                                            "refs": result["evidence_refs"],
                                             "build_ref": None,
                                             "explanation": "Đối chiếu thông số và nhu cầu trước khi quyết định chọn linh kiện."
                                             if selected

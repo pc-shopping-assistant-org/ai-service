@@ -281,7 +281,6 @@ async def test_admitted_build_goals_load_candidates_after_merge_and_publish(
         Budget(),
         conversation_revision=0,
         publication=source,
-        user_extractor=extractor,
         catalog_loader=Hardware(),
         checkpointer=InMemorySaver(),
     )
@@ -299,7 +298,7 @@ async def test_admitted_build_goals_load_candidates_after_merge_and_publish(
     assert snapshot.flexible.status == "COMPLETED" and snapshot.public_build is not None
     assert len(loaded) == (2 if resume else 1)
     assert all(item == result["working_requirements"] for item in loaded)
-    assert extractor.calls == 1
+    assert extractor.calls == 0
     assert source.accepted.model_dump(mode="json") == before
 
 

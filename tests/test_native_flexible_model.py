@@ -74,13 +74,13 @@ async def test_multi_task_final_is_typed_provider_proposal_not_completion_author
             {
                 "task_index": 0,
                 "text": "Typed candidate",
-                "evidence_refs": result.evidence_refs,
+                "refs": result.evidence_refs,
             },
             {
                 "task_index": 1,
                 "text": "Missing fact",
-                "supporting_tool_call_ids": ["page"],
-                "evidence_refs": page.evidence_refs,
+                "calls": ["page"],
+                "refs": page.evidence_refs,
             },
         ]
     }
@@ -238,20 +238,15 @@ async def test_requirement_proposal_is_typed_without_mutating_trusted_context():
                     "name": "propose_requirements",
                     "args": {
                         "source_text": "RAM 32GB",
-                        "draft": {
-                            "items": [
-                                {
-                                    "subject": "RAM",
-                                    "predicate": "capacity",
-                                    "quote": "RAM 32GB",
-                                    "value": {
-                                        "kind": "QUANTITY",
-                                        "amount": 32,
-                                        "unit": "GB",
-                                    },
-                                }
-                            ]
-                        },
+                        "items": [
+                            {
+                                "subject": "RAM",
+                                "predicate": "capacity",
+                                "quote": "RAM 32GB",
+                                "value": 32,
+                                "unit": "GB",
+                            }
+                        ],
                     },
                 }
             ],

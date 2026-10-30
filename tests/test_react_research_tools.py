@@ -530,7 +530,7 @@ async def test_native_provider_binds_and_parses_new_research_schema(provider_nam
     )
     assert decision.action.calls[0].name == ToolName.RESEARCH_HARDWARE
     schema = provider.model.tools[0]
-    assert schema["parameters"]["additionalProperties"] is False
+    assert "additionalProperties" not in schema["parameters"]
     assert "exact model" in schema["description"]
 
 

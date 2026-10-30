@@ -1,15 +1,13 @@
-"""Application-owned admission after independent explicit-user extraction.
+"""Source-bound application admission; legacy matching receipts remain readable.
 
-Matching drafts is a bounded semantic policy, not a mathematical intent proof.
-Receipts are private native execution artifacts, never model actions/API commands.
-The executor supplies the extractor result and the real run/message/state context;
-publication must rederive the transition and still verify native lineage/stop/CAS.
+Quotes prove source occurrence, not semantic intent. Current admission resolves a
+single model draft deterministically; suggestions still require confirmation.
 """
 
 from typing import Literal
 from uuid import UUID, uuid5
 
-from pydantic import ConfigDict, JsonValue, ValidationError
+from pydantic import ConfigDict, Field, JsonValue, ValidationError, model_validator
 
 from ai_service.capabilities.assistant.conversation_core import Digest
 from ai_service.capabilities.assistant.provenance import CatalogRowV1, canonical_hash
@@ -26,12 +24,60 @@ from .resolver import Draft, RequirementDraft, resolve_draft
 
 class UserRequirementReceipt(Contract):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    policy_version: Literal["explicit-draft-match-v1"] = "explicit-draft-match-v1"
+    policy_version: Literal["explicit-draft-match-v1", "source-bound-draft-v2"] = (
+        "explicit-draft-match-v1"
+    )
     run_id: UUID
     message_hash: Digest
     base_requirements_hash: Digest
     proposed: ProposeRequirementsAction
-    extracted: RequirementDraft
+    extracted: RequirementDraft | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+    @model_validator(mode="after")
+    def receipt_shape(self) -> "UserRequirementReceipt":
+        if (self.policy_version == "explicit-draft-match-v1") != (
+            self.extracted is not None
+        ):
+            raise ValueError("Receipt evidence does not match its admission policy")
+        return self
+
+
+def _source_id(receipt: UserRequirementReceipt) -> UUID:
+    key = (
+        "explicit-user-requirements"
+        if receipt.policy_version == "explicit-draft-match-v1"
+        else "source-bound:" + canonical_hash(receipt.proposed)
+    )
+    return uuid5(receipt.run_id, key)
+
+
+def admit_source_draft(
+    state: CanonicalRequirementState,
+    proposed: ProposeRequirementsAction,
+    *,
+    run_id: UUID,
+    message: str,
+    catalog: list[CatalogRowV1],
+) -> UserRequirementReceipt | None:
+    if proposed.source_text is not None:
+        return None
+    receipt = UserRequirementReceipt(
+        policy_version="source-bound-draft-v2",
+        run_id=run_id,
+        message_hash=canonical_hash(message),
+        base_requirements_hash=requirements_hash(state),
+        proposed=proposed,
+    )
+    resolution = resolve_draft(
+        proposed.draft,
+        message_id=_source_id(receipt),
+        message=message,
+        state=state,
+        catalog=catalog,
+    )
+    return receipt if resolution.patch is not None else None
 
 
 class _LegacyUserRequirementReceipt(Contract):
@@ -128,10 +174,13 @@ def apply_user_receipt(
         or receipt.message_hash != canonical_hash(message)
         or receipt.base_requirements_hash != requirements_hash(state)
         or receipt.proposed.source_text is not None
-        or not _same_items(receipt.proposed.draft, receipt.extracted)
+        or (
+            receipt.extracted is not None
+            and not _same_items(receipt.proposed.draft, receipt.extracted)
+        )
     ):
         raise ValueError("User admission receipt does not match current source/state")
-    source = uuid5(run_id, "explicit-user-requirements")
+    source = _source_id(receipt)
     resolution = resolve_draft(
         receipt.proposed.draft,
         message_id=source,

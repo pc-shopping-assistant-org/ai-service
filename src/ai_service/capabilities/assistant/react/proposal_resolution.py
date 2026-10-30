@@ -7,7 +7,6 @@ from ai_service.capabilities.assistant.requirements.admission import (
     RequirementAdmission,
     propose_agent_patch,
 )
-from ai_service.capabilities.assistant.requirements.build import RequirementExtractor
 from ai_service.capabilities.assistant.requirements.contracts import requirements_hash
 from ai_service.capabilities.assistant.requirements.pending_resolution import (
     PendingResolution,
@@ -18,7 +17,7 @@ from ai_service.capabilities.assistant.requirements.resolver import (
 )
 from ai_service.capabilities.assistant.requirements.user_admission import (
     UserRequirementReceipt,
-    assess_user_draft,
+    admit_source_draft,
 )
 
 from .actions import ProposeRequirementsAction
@@ -30,15 +29,11 @@ async def resolve_requirement_proposal(
     context: ToolContext,
     message: str,
     conversation_revision: int,
-    *,
-    user_extractor: RequirementExtractor | None = None,
 ) -> RequirementAdmission | PendingResolution | UserRequirementReceipt:
-    if user_extractor is not None and action.source_text is None:
-        extracted = await user_extractor.extract(message, context.requirements)
-        receipt = assess_user_draft(
+    if action.source_text is None:
+        receipt = admit_source_draft(
             context.requirements,
             action,
-            extracted,
             run_id=context.run_id,
             message=message,
             catalog=context.catalog,

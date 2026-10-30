@@ -14,6 +14,8 @@ from ai_service.capabilities.assistant.react.contracts import (
     ToolName,
     ToolRecord,
 )
+from ai_service.capabilities.assistant.react.model_contracts import ResultInput
+from ai_service.capabilities.assistant.react.submissions import ResultSelection
 from ai_service.capabilities.assistant.react.tools import ToolDispatcher
 from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
@@ -41,7 +43,7 @@ def native_result(candidate: AnswerCandidate) -> AIMessage:
             {
                 "id": "submit",
                 "name": "submit_result",
-                "args": {"results": [{"task_index": 0, **selection}]},
+                "args": {"results": [ResultInput.from_selection(ResultSelection.model_validate(selection)).model_dump(mode="json", exclude_defaults=True)]},
             }
         ],
     )

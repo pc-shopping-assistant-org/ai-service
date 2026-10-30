@@ -42,20 +42,27 @@ from ai_service.capabilities.assistant.react.control_actions import (
     CONTROL_SCHEMAS,
     ControlName,
     allowed_controls,
+    control_input,
     normalize_control,
+)
+from ai_service.capabilities.assistant.react.model_contracts import (
+    RequirementInput,
+    RequirementProposalInput,
+    ResultInput,
+    ResultSubmissionInput,
 )
 from ai_service.capabilities.assistant.react.submissions import (
     ResultSelection,
-    SubmitResults,
 )
 from ai_service.capabilities.assistant.source_quotes import (
     project_requirement_draft,
 )
 from ai_service.infrastructure.providers.failures import invoke_provider
 from ai_service.infrastructure.providers.tool_projection import observation_json
+from ai_service.infrastructure.providers.tool_schema import model_tool_schema
 
 GEMINI_SIGNATURES_KEY = "__gemini_function_call_thought_signatures__"
-REACT_PROTOCOL_VERSION = "native-tool-batches-v4"
+REACT_PROTOCOL_VERSION = "compact-native-tools-v5"
 
 REACT_SYSTEM_PROMPT = (
     "You are the gearPC assistant. Respond naturally in the user's language. "
@@ -70,8 +77,10 @@ REACT_SYSTEM_PROMPT = (
     "for two products in the SAME response. Observe all results before choosing dependent "
     "calls. State-changing controls must be a separate response: merge requirements "
     "before requesting a build. Plain text is a conversational "
-    "reply; never output a JSON action envelope. propose_requirements changes only "
-    "working state after application admission. Your own tradeoffs require consent; "
+    "reply; never output a JSON action envelope. Ask ordinary clarifying questions in text. "
+    "Extract requirements once in its flat items: numeric value with unit, text value "
+    "for a product mention; missing units stay unresolved. Omit absent requirements. "
+    "propose_requirements changes working state only after application admission. Your own tradeoffs require consent; "
     "never invent user authorization, confirm a proposal or discard pending work. "
     "For proposed requirements return exact evidence quotes, not character offsets; "
     "include surrounding text if a quote repeats. "
@@ -119,10 +128,11 @@ def project_model_response(decision: FlexibleDecision, message: str) -> AIMessag
         )
     if isinstance(action, ProposeRequirementsAction):
         name = ControlName.PROPOSE_REQUIREMENTS
-        arguments = action.model_dump(mode="json", exclude={"kind"})
-        arguments["draft"] = project_requirement_draft(
-            action.draft, action.source_text or message
-        ).model_dump(mode="json")
+        quoted = project_requirement_draft(action.draft, action.source_text or message)
+        arguments = RequirementProposalInput(
+            items=[RequirementInput.from_quoted(item) for item in quoted.items],
+            source_text=action.source_text,
+        ).model_dump(mode="json", exclude_defaults=True)
     elif isinstance(action, AskClarificationAction):
         name = ControlName.ASK_CLARIFICATION
         arguments = action.model_dump(mode="json", exclude={"kind"})
@@ -166,7 +176,9 @@ def project_model_response(decision: FlexibleDecision, message: str) -> AIMessag
             )
             for index, answer, supporting in candidates
         ]
-        arguments = SubmitResults(results=selections).model_dump(mode="json")
+        arguments = ResultSubmissionInput(
+            results=[ResultInput.from_selection(item) for item in selections]
+        ).model_dump(mode="json", exclude_defaults=True)
     return _call_message(
         ToolCall(call_id="control", name=name.value, arguments=arguments),
         provider_name="openai",
@@ -193,12 +205,12 @@ def build_react_request(
             "name": name.value,
             "description": TOOL_SCHEMAS[name].__doc__
             or f"Execute {name.value} using validated arguments.",
-            "parameters": TOOL_SCHEMAS[name].model_json_schema(),
+            "parameters": model_tool_schema(TOOL_SCHEMAS[name]),
         }
         for name in allowed
     ]
     for name in allowed_controls(records, context, repair):
-        schema = CONTROL_SCHEMAS[name].model_json_schema()
+        schema = model_tool_schema(control_input(name, records))
         schema.get("properties", {}).pop("kind", None)
         if "required" in schema:
             schema["required"] = [
