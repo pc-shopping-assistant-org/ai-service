@@ -1,5 +1,6 @@
 """Small native tool inputs. Application DTOs remain the validation authority."""
 
+import re
 from typing import Literal
 from uuid import UUID
 
@@ -26,30 +27,45 @@ from .submissions import ResultSelection, SubmitResults
 
 class RequirementInput(Contract):
     subject: Subject
-    predicate: Text
+    predicate: str = Field(
+        pattern=r"^[a-z][a-z0-9_]{0,63}$",
+        description="Property only: budget, use_case, capacity, media, brand, model, identity, scope. Never include the subject or spaces.",
+    )
     value: StrictInt | str | None = None
     unit: QuantityUnit | None = None
     quote: Text
     target: Literal["REQUIREMENT", "GOAL", "RESOURCE"] = "REQUIREMENT"
     operation: Literal["SET", "CLEAR"] = "SET"
-    target_id: UUID | None = None
+    target_id: UUID | None = Field(
+        default=None,
+        description="For an update or CLEAR, copy the existing matching requirement ID from application context. Omit only for a new requirement.",
+    )
     operator: Literal["EQ", "GTE", "LTE"] = "EQ"
     strength: Literal["HARD", "SOFT"] = "HARD"
 
     def quoted(self) -> QuotedDraftItem:
-        if self.unit is not None and not isinstance(self.value, int):
+        value = self.value
+        # Provider tool schemas may encode the numeric branch of a union as text.
+        # Normalize exact unsigned integers only when the quantity has a unit.
+        if (
+            self.unit is not None
+            and isinstance(value, str)
+            and re.fullmatch(r"[0-9]+", value)
+        ):
+            value = int(value)
+        if self.unit is not None and not isinstance(value, int):
             raise ValueError("Only a numeric quantity can have a unit")
-        value = (
-            {"kind": "QUANTITY", "amount": self.value, "unit": self.unit}
+        projected = (
+            {"kind": "QUANTITY", "amount": value, "unit": self.unit}
             if self.unit is not None
-            else {"kind": "UNRESOLVED_QUANTITY", "amount": self.value}
-            if isinstance(self.value, int)
-            else {"kind": "TEXT", "text": self.value}
-            if self.value is not None
+            else {"kind": "UNRESOLVED_QUANTITY", "amount": value}
+            if isinstance(value, int)
+            else {"kind": "TEXT", "text": value}
+            if value is not None
             else None
         )
         return QuotedDraftItem.model_validate(
-            self.model_dump(exclude={"value", "unit"}) | {"value": value}
+            self.model_dump(exclude={"value", "unit"}) | {"value": projected}
         )
 
     @classmethod

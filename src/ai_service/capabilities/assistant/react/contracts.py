@@ -13,8 +13,11 @@ from ai_service.application.ports.web_search import (
     WebPageReadStatus,
 )
 from ai_service.capabilities.assistant.limits import (
+    MAX_BUILD_RESULT_BYTES,
     MAX_DIALOGUE_CHARS,
     MAX_DIALOGUE_TURNS,
+    MAX_HARDWARE_CATALOG_ROWS,
+    MAX_REACT_STATE_BYTES,
     MAX_SELECTED_PRODUCTS,
     MAX_TURN_MESSAGE_CHARS,
     MIN_COMPARISON_PRODUCTS,
@@ -38,7 +41,6 @@ from ai_service.capabilities.assistant.stateful_contracts import (
     NonNegativeInt,
     Text,
 )
-from ai_service.capabilities.pc_builder.schemas import BuildObjective
 from ai_service.capabilities.web_search.research_contracts import (
     MAX_BUILD_RESEARCH_PARTS,
     MAX_RESEARCH_SEARCH_RESULTS,
@@ -70,8 +72,9 @@ class ReactLimits(Contract):
     max_model_input_bytes: StrictInt = Field(default=128_000, ge=1024)
     max_tool_context_bytes: StrictInt = Field(default=12_000, ge=512)
     max_repairs: StrictInt = Field(default=2, ge=0, le=10)
-    max_state_bytes: StrictInt = Field(default=512_000, ge=1)
+    max_state_bytes: StrictInt = Field(default=MAX_REACT_STATE_BYTES, ge=1)
     max_tool_bytes: StrictInt = Field(default=128_000, ge=1)
+    max_build_result_bytes: StrictInt = Field(default=MAX_BUILD_RESULT_BYTES, ge=1)
 
 
 from .search_evidence import BuildSearchEvidence
@@ -114,7 +117,11 @@ class CompareProductsArgs(Contract):
 
 
 class BuildPCArgs(Contract):
-    objective: BuildObjective | None = None
+    """Build from admitted requirements using the full canonical hardware catalog.
+
+    Loads candidates automatically; do not search individual parts first.
+    Application policy selects compatible parts and the recommendation objective.
+    """
 
 
 class SearchWebArgs(Contract):
@@ -497,7 +504,9 @@ class ToolContext(Contract):
         max_length=MAX_MEMORIES,
         exclude_if=lambda value: not value,
     )
-    catalog: list[CatalogRowV1] = Field(default_factory=list, max_length=100)
+    catalog: list[CatalogRowV1] = Field(
+        default_factory=list, max_length=MAX_HARDWARE_CATALOG_ROWS
+    )
     read_catalog_allowed: bool
     execution_allowed: bool
     catalog_ready: bool = True

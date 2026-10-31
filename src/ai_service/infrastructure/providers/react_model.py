@@ -1,6 +1,7 @@
 """Text and native calls at the model boundary; application owns outcomes."""
 
 import json
+import logging
 from itertools import groupby
 from typing import Any, Protocol, cast
 
@@ -62,7 +63,8 @@ from ai_service.infrastructure.providers.tool_projection import observation_json
 from ai_service.infrastructure.providers.tool_schema import model_tool_schema
 
 GEMINI_SIGNATURES_KEY = "__gemini_function_call_thought_signatures__"
-REACT_PROTOCOL_VERSION = "compact-native-tools-v5"
+REACT_PROTOCOL_VERSION = "compact-native-tools-v6"
+logger = logging.getLogger(__name__)
 
 REACT_SYSTEM_PROMPT = (
     "You are the gearPC assistant. Respond naturally in the user's language. "
@@ -73,6 +75,10 @@ REACT_SYSTEM_PROMPT = (
     "For requested catalog, comparison or build results, use the appropriate tools "
     "and submit_result with selected evidence. Do not substitute generic advice "
     "for a requested build. Ask for missing required input. "
+    "A core build requires budget and workload. Brand, appearance and paid accessories "
+    "are optional; do not delay a requested build to ask about them. When requirements "
+    "are admitted and build_pc is available, call it and then submit its result. "
+    "Do not end with a promise to search or build later: work stops when you reply. "
     "Use native tool_calls arrays for independent operations, for example search_catalog "
     "for two products in the SAME response. Observe all results before choosing dependent "
     "calls. State-changing controls must be a separate response: merge requirements "
@@ -224,6 +230,22 @@ def build_react_request(
             }
         )
     instruction = REACT_SYSTEM_PROMPT
+    instruction += " Execution limits (data): " + json.dumps(
+        {
+            "max_tool_calls_per_batch": limits.max_tool_calls_per_batch,
+            "remaining_tool_calls": max(
+                0,
+                limits.max_tool_calls
+                - len(
+                    [
+                        record
+                        for record in records
+                        if context is None or record.origin_run_id == context.run_id
+                    ]
+                ),
+            ),
+        }
+    )
     if repair:
         instruction += " Application validation feedback: " + repair.model_dump_json()
     controls: list[ControlRecord] = []
@@ -376,7 +398,7 @@ def parse_flexible_response(
             if len(calls) == 1 and calls[0].name in allowed_controls(
                 records, context, repair
             ):
-                decision = normalize_control(calls[0], records, message)
+                decision = normalize_control(calls[0], records, message, context)
             elif not any(call.name in CONTROL_SCHEMAS for call in calls):
                 decision = FlexibleDecision(action=CallToolsAction(calls=calls))
             else:
@@ -395,7 +417,17 @@ def parse_flexible_response(
         ):
             return None
         return decision
-    except (ValidationError, ValueError, KeyError, TypeError):
+    except (ValidationError, ValueError, KeyError, TypeError) as error:
+        locations = (
+            [".".join(map(str, entry["loc"])) for entry in error.errors()]
+            if isinstance(error, ValidationError)
+            else []
+        )
+        logger.warning(
+            "model.response_rejected error_type=%s fields=%s",
+            type(error).__name__,
+            locations,
+        )
         return None
 
 
@@ -426,11 +458,13 @@ class NativeFlexibleModel:
         )
         if self._model is None:
             self._model = cast(ToolCallingModel, self.provider.create_model())
-        options = (
+        options: dict[str, Any] = (
             {"parallel_tool_calls": True}
             if self.provider.name in {"openai", "qwen"}
             else {}
         )
+        if repair and repair.allowed_next_actions == [ActionKind.FINAL_ANSWER]:
+            options["tool_choice"] = ControlName.SUBMIT_RESULT.value
         bound = self._model.bind_tools(schemas, **options) if schemas else self._model
         response = await invoke_provider(lambda: bound.ainvoke(messages))
         return parse_flexible_response(

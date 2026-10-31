@@ -42,7 +42,6 @@ from ai_service.capabilities.web_search.source_policy import ResearchSourcePolic
 from .contracts import (
     TOOL_SCHEMAS,
     AnswerCandidate,
-    BuildPCArgs,
     BuildResult,
     CatalogResult,
     CompareProductsArgs,
@@ -198,10 +197,6 @@ class ToolDispatcher:
         try:
             args = TOOL_SCHEMAS[name].model_validate(call.arguments)
         except ValidationError:
-            return rejected(ToolError.BAD_ARGUMENTS)
-        # V1 cannot silently change a versioned recommendation policy using a
-        # model hint. Explicit unsupported hints are rejected, never ignored.
-        if isinstance(args, BuildPCArgs) and args.objective is not None:
             return rejected(ToolError.BAD_ARGUMENTS)
         try:
             payload: (

@@ -159,6 +159,58 @@ async def test_submit_result_selects_canonical_evidence_without_model_outcome():
 
 
 @pytest.mark.asyncio
+async def test_selecting_build_ref_resolves_its_canonical_refs_before_explanation(
+    realistic_catalog,
+):
+    from test_requirement_pipeline import rows, state
+
+    from ai_service.capabilities.assistant.react.actions import FlexibleDecision
+    from ai_service.capabilities.assistant.react.outcomes import validate_final_answer
+    from ai_service.capabilities.assistant.react.submissions import (
+        ResultSelection,
+        SubmitResults,
+        derive_final_action,
+        evidence_requirements,
+    )
+
+    trusted = context(state(), rows(realistic_catalog))
+    service = PCBuildApplicationService()
+    call = ToolCall(call_id="build", name="build_pc", arguments={})
+    result = await ToolDispatcher(Catalog(), service).execute(call, trusted)
+    record = ToolRecord(call=call, result=result, origin_run_id=trusted.run_id)
+    selected = SubmitResults(
+        results=[
+            ResultSelection(
+                text="Untrusted price 1 VND",
+                build_ref=result.result.build_ref,
+                explanation="Lựa chọn bám theo ngân sách.",
+            )
+        ]
+    )
+    action = derive_final_action(selected, [record])
+    assert action.answer.evidence_refs == result.evidence_refs
+    validated = validate_final_answer(
+        action,
+        [result],
+        trusted,
+        [
+            CompletionRequirement(
+                kind="BUILD", constraints_revision=trusted.requirements.revision
+            )
+        ],
+        service,
+    )
+    assert validated.outcome == "BUILT"
+    assert "Untrusted price" not in validated.text
+
+    fallback = FlexibleDecision(
+        action={"kind": "RESPOND", "text": "Đây là cấu hình 1 VND"}
+    )
+    obligations = evidence_requirements(fallback, [record], trusted)
+    assert [task.kind for task in obligations] == ["BUILD"]
+
+
+@pytest.mark.asyncio
 async def test_multiple_control_calls_reject_entire_provider_response():
     call = {
         "name": "ask_clarification",

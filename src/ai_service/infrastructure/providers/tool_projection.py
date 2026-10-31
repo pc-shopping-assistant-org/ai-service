@@ -3,11 +3,35 @@
 import json
 from typing import Any
 
-from ai_service.capabilities.assistant.react.contracts import ToolResult
+from ai_service.capabilities.assistant.react.contracts import BuildResult, ToolResult
 
 
 def observation_json(result: ToolResult, byte_limit: int) -> str:
-    payload = result.model_dump(mode="json")
+    if isinstance(result.result, BuildResult):
+        # Optimizer inputs/pool identities are replay data, not model context.
+        build = result.result
+        receipt, search = build.receipt, build.search_evidence
+        trace = receipt.search_trace
+        payload = result.model_dump(mode="json", exclude={"result"})
+        payload["result"] = {
+            "tool": build.tool,
+            "build_ref": str(build.build_ref),
+            "outcome": search.outcome
+            if search and receipt.outcome != "BUILT"
+            else receipt.outcome,
+            "build": receipt.build.model_dump(mode="json", exclude_none=True)
+            if receipt.build
+            else None,
+            "requirements": [
+                entry.model_dump(mode="json") for entry in receipt.compilation.mapping
+            ],
+            "search_evidence": search.model_dump(mode="json") if search else None,
+            "metadata_rejections": trace.metadata_rejections if trace else 0,
+            "scoring_rejections": trace.scoring_rejections if trace else 0,
+        }
+        payload["projection"] = {"truncated": True}
+    else:
+        payload = result.model_dump(mode="json")
 
     def encoded() -> str:
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
