@@ -57,10 +57,13 @@ def control_input(name: ControlName, records: list[ToolRecord]) -> type[Contract
 CONTROL_DESCRIPTIONS = {
     ControlName.PROPOSE_REQUIREMENTS: (
         "Extract stated requirements once with exact quotes. Numeric value + unit; missing unit stays unresolved. "
-        "Budget: target GOAL, SETUP/budget LTE VND. Workload: GOAL, WORKLOAD/use_case EQ one of "
+        'Budget: subject="SETUP", predicate="budget", target="GOAL", operator="LTE", numeric value in VND. '
+        'Workload: subject="WORKLOAD", predicate="use_case", target="GOAL", operator="EQ", value one of '
         + ", ".join(profile.value for profile in UseCaseProfile)
-        + "; never guess a profile. Capacity is HARD; preferences SOFT. Exact identity text resolves through catalog. "
-        "Owned uses RESOURCE; paid pins use identity requirements. SET/CLEAR existing target_id. "
+        + '; never guess a profile. RAM/storage: subject="RAM"/"STORAGE", predicate="capacity", numeric value with GB/TB; '
+        'SSD/HDD: subject="STORAGE", predicate="media", text value. Capacity is HARD; preferences SOFT. Exact identity text resolves through catalog. '
+        "Owned uses RESOURCE; paid pins use identity requirements. "
+        "If subject/predicate already exists, SET/CLEAR must copy its target_id from context; do not add a second budget. "
         "source_text is only your own suggestion (requires consent)."
     ),
     ControlName.ASK_CLARIFICATION: "Ask for missing business input using actual missing field names or unresolved selection reasons. General conversation can be plain text.",
@@ -98,13 +101,25 @@ def allowed_controls(
 
 
 def normalize_control(
-    call: ToolCall, records: list[ToolRecord], message: str
+    call: ToolCall,
+    records: list[ToolRecord],
+    message: str,
+    context: ToolContext | None = None,
 ) -> FlexibleDecision:
     name = ControlName(call.name)
     if name == ControlName.PROPOSE_REQUIREMENTS:
         quoted = RequirementProposalInput.model_validate(call.arguments)
+        draft = quoted.quoted().bind(quoted.source_text or message)
+        # Existing IDs are globally unique; their trusted collection determines
+        # scope, even when the provider repeats the default REQUIREMENT target.
+        if context is not None:
+            for item in draft.items:
+                if item.target_id in context.requirements.goals:
+                    item.target = "GOAL"
+                elif item.target_id in context.requirements.requirements:
+                    item.target = "REQUIREMENT"
         action = ProposeRequirementsAction(
-            draft=quoted.quoted().bind(quoted.source_text or message),
+            draft=draft,
             source_text=quoted.source_text,
         )
         return FlexibleDecision(action=action, control_call=call)

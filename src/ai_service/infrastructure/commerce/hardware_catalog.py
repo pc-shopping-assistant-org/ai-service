@@ -11,6 +11,11 @@ from ai_service.application.call_attempts import AttemptBoundary
 from ai_service.application.errors import BackendUnavailableError
 from ai_service.application.ports.accessories import AccessorySpec, AccessoryType
 from ai_service.application.ports.hardware import ComponentCategory, ComponentSpec
+from ai_service.capabilities.assistant.limits import (
+    HARDWARE_CATALOG_PAGE_SIZE,
+    MAX_HARDWARE_CATALOG_PAGES,
+    MAX_HARDWARE_CATALOG_ROWS,
+)
 from ai_service.capabilities.assistant.provenance import CatalogRowV1, canonical_hash
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
@@ -23,6 +28,8 @@ from .product_catalog import BackendProductCatalog, Summary, Variant
 SPEC_FIELDS = (
     set(ComponentSpec.model_fields) - {"id", "name", "category", "price", "extra_specs"}
 ) | {"storage_media"}
+
+STORAGE_MASTER_TYPES = frozenset({"SSD", "HDD"})
 
 
 class HardwareCatalogMapping(Contract):
@@ -84,8 +91,8 @@ class BackendRequirementCatalog(BackendProductCatalog):
         attempts: AttemptBoundary,
         mapping: HardwareCatalogMapping,
         *,
-        max_rows: int = 100,
-        max_pages: int = 20,
+        max_rows: int = MAX_HARDWARE_CATALOG_ROWS,
+        max_pages: int = MAX_HARDWARE_CATALOG_PAGES,
     ):
         super().__init__(client, base_url, attempts)
         if max_rows < 1 or max_pages < 1:
@@ -105,13 +112,13 @@ class BackendRequirementCatalog(BackendProductCatalog):
         rows: list[CatalogRowV1] = []
         try:
             for _ in range(self.max_pages):
-                params: dict[str, JsonValue] = {"limit": 100}
+                params: dict[str, JsonValue] = {"limit": HARDWARE_CATALOG_PAGE_SIZE}
                 if cursor is not None:
                     params["cursor"] = str(cursor)
                 page = HardwarePage.model_validate(
                     await self._get("/products/snapshot", params)
                 )
-                if len(page.items) > 100:
+                if len(page.items) > HARDWARE_CATALOG_PAGE_SIZE:
                     raise ValueError("Catalog page bound exceeded")
                 for detail in page.items:
                     if detail.id in seen:
@@ -147,7 +154,11 @@ class BackendRequirementCatalog(BackendProductCatalog):
             return []
         category: ComponentCategory | AccessoryType
         try:
-            category = ComponentCategory(category_code)
+            category = (
+                ComponentCategory.STORAGE
+                if category_code in STORAGE_MASTER_TYPES
+                else ComponentCategory(category_code)
+            )
         except ValueError:
             try:
                 category = AccessoryType(category_code)
@@ -164,6 +175,8 @@ class BackendRequirementCatalog(BackendProductCatalog):
             if (key := self.mapping.spec_fields.get(field, field))
             in detail.specifications
         }
+        if category_code in STORAGE_MASTER_TYPES:
+            fields["storage_media"] = category_code
         if detail.brand_name is not None:
             fields["brand"] = detail.brand_name
         identities = [variant.id for variant in detail.variants]

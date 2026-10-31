@@ -22,6 +22,7 @@ from .contracts import (
     ConsultationExplanation,
     ProductReview,
     ToolContext,
+    ToolName,
     ToolRecord,
     WebExcerpt,
     result_web_pages,
@@ -36,10 +37,18 @@ def evidence_requirements(
     """Derive completion checks from canonical operations, never a task LLM call.
 
     Fixed UI/pending tasks take precedence at the caller. Internal searches do not
-    become separate user tasks; only submitted outcomes select completion checks.
+    become separate tasks. A started build remains an obligation through repairs;
+    a later plain response cannot bypass its result-completion check.
     """
+    started_build = any(
+        row.call.name == ToolName.BUILD_PC and row.origin_run_id == context.run_id
+        for row in records
+    )
+    build_task = CompletionRequirement(
+        kind="BUILD", constraints_revision=context.requirements.revision
+    )
     if not value:
-        return []
+        return [build_task] if started_build else []
     action = decode_flexible_decision(value).action
     if isinstance(action, AskClarificationAction):
         return [
@@ -48,7 +57,7 @@ def evidence_requirements(
             )
         ]
     if not isinstance(action, FinalAnswerAction):
-        return []
+        return [build_task] if started_build else []
     parts: list[TaskFinalCandidate | FinalAnswerAction] = (
         list(action.task_answers) if action.task_answers else [action]
     )
@@ -87,6 +96,8 @@ def evidence_requirements(
         else:
             task = CompletionRequirement(kind="ANSWER")
         tasks.append(task)
+    if started_build and not any(task.kind == "BUILD" for task in tasks):
+        tasks.append(build_task)
     return tasks
 
 
@@ -153,6 +164,26 @@ def _derive_part(
             )
         )
     ]
+    # Selecting a canonical result by call ID/build ref also selects its evidence.
+    # Do not require the model to copy the same reference into a second field.
+    resolved_selection = selection
+    if not selection.evidence_refs and any(
+        record.result and isinstance(record.result.result, BuildResult)
+        for record in selected
+    ):
+        resolved_selection = selection.model_copy(
+            update={
+                "evidence_refs": list(
+                    dict.fromkeys(
+                        ref
+                        for record in selected
+                        if record.result
+                        and isinstance(record.result.result, BuildResult)
+                        for ref in record.result.evidence_refs
+                    )
+                )
+            }
+        )
     outcome: FinalOutcome = "ANSWERED"
     supporting = list(ids)
     build_ref = selection.build_ref
@@ -189,7 +220,9 @@ def _derive_part(
             )
             else "INSUFFICIENT_EVIDENCE"
         )
-    candidate = selected_answer(selection).model_copy(update={"build_ref": build_ref})
+    candidate = selected_answer(resolved_selection).model_copy(
+        update={"build_ref": build_ref}
+    )
     return TaskFinalCandidate(
         task_index=selection.task_index,
         outcome=outcome,

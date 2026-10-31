@@ -29,6 +29,7 @@ from ai_service.capabilities.assistant.react.actions import (
 )
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
+    BuildResult,
     CompletionRequirement,
     ControlRecord,
     ReactLimits,
@@ -362,6 +363,7 @@ def build_flexible_graph(
         missing: list[str] | None = None,
         *,
         task_indices: list[int] | None = None,
+        next_actions: list[ActionKind] | None = None,
     ) -> dict[str, Any]:
         count = state.get("repairs", 0) + 1
         if count > limits.max_repairs:
@@ -370,7 +372,9 @@ def build_flexible_graph(
             code=code,
             missing_fields=missing or [],
             task_indices=task_indices or [],
-            allowed_next_actions=list(ActionKind),
+            allowed_next_actions=next_actions
+            if next_actions is not None
+            else list(ActionKind),
         )
         return bounded(
             state,
@@ -946,6 +950,22 @@ def build_flexible_graph(
                     continuing_pending=continuing,
                 )
             except ValueError:
+                if (
+                    ctx.completion_requirements
+                    and all(
+                        task.kind == "BUILD" for task in ctx.completion_requirements
+                    )
+                    and any(
+                        entry.result and isinstance(entry.result.result, BuildResult)
+                        for entry in projection(state)
+                    )
+                ):
+                    return repair(
+                        state,
+                        "TASK_INCOMPLETE",
+                        ["submit_result.results"],
+                        next_actions=[ActionKind.FINAL_ANSWER],
+                    )
                 return repair(state, "TASK_INCOMPLETE")
             return bounded(
                 state,

@@ -7,6 +7,7 @@ from langgraph.func import task
 
 from ai_service.application.call_attempts import AttemptBoundary, AttemptKind
 from ai_service.capabilities.assistant.react.contracts import (
+    BuildResult,
     ReactLimits,
     ToolCall,
     ToolContext,
@@ -44,7 +45,12 @@ async def execute_tool_batch(
             )
             observation.span.set_attribute("ai.tool.result_type", result.tool)
             observation.result_status = result.status
-        if len(result.model_dump_json().encode()) > limits.max_tool_bytes:
+        byte_limit = (
+            limits.max_build_result_bytes
+            if isinstance(result.result, BuildResult)
+            else limits.max_tool_bytes
+        )
+        if len(result.model_dump_json().encode()) > byte_limit:
             raise ValueError("REACT_TOOL_RESULT_TOO_LARGE")
         return result.model_dump(mode="json")
 
