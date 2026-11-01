@@ -192,6 +192,7 @@ def public_projection(
         )
     published = PublicBuildV1(
         objective=build.objective,
+        ranking_status=build.ranking_status,
         parts=parts,
         total_spending_vnd=build.total_price + (setup.spending if setup else 0),
         stale=False,

@@ -338,7 +338,7 @@ def test_explanation_context_factual_only() -> None:
 
     assert ctx["recommended_objective"] == "BALANCED"
     assert ctx["reason_code"] == "PROFILE_DEFAULT_OBJECTIVE"
-    assert ctx["policy_version"] == "v1"
+    assert ctx["policy_version"] == RECOMMENDATION_POLICY_VERSION
     assert ctx["total_price"] == 24_000_000
     assert ctx["objective_score"] == 88.0
     assert ctx["compatibility_status"] == "COMPATIBLE"

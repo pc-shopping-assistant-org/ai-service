@@ -23,7 +23,7 @@ def test_exact_empty_affordable_scope_can_prove_scoped_infeasibility(realistic_c
     assert report.scope == "SUPPLIED_NORMALIZED_CANDIDATES"
 
 
-def test_missing_scoring_data_is_search_incomplete_not_physical_infeasibility(
+def test_missing_scoring_data_retains_unranked_physical_feasibility(
     realistic_catalog,
 ):
     catalog = rows(
@@ -40,7 +40,9 @@ def test_missing_scoring_data_is_search_incomplete_not_physical_infeasibility(
     )
     receipt = optimize_requirements(canonical, catalog, service)
     report = search_report(canonical, catalog, service, receipt, build_ref=uuid4())
-    assert report.outcome == "SEARCH_INCOMPLETE"
+    assert report.outcome == "FEASIBLE"
+    assert receipt.build.ranking_status == "UNRANKED"
+    assert receipt.build.objective_score is None
     assert receipt.search_trace.scoring_rejections > 0
     assert not report.coverage_complete
 

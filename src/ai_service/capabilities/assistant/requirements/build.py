@@ -14,7 +14,8 @@ from ai_service.capabilities.pc_builder.application.service import (
 from ai_service.capabilities.pc_builder.errors import NoFeasibleBuildError
 from ai_service.capabilities.pc_builder.schemas import (
     OptimizerSearchTrace,
-    RankedBuild,
+    RankingStatus,
+    SelectedBuild,
     UseCaseProfile,
 )
 
@@ -45,7 +46,7 @@ class ClarificationExtractor(Protocol):
 class BuildReceipt(Contract):
     compilation: Compilation
     outcome: Literal["BUILT", "INFEASIBLE", "CLARIFICATION", "UNSUPPORTED", "CONFLICT"]
-    build: RankedBuild | None = None
+    build: SelectedBuild | None = None
     observed_use_case: UseCaseProfile | None = None
     search_trace: OptimizerSearchTrace | None = Field(
         default=None, exclude_if=lambda value: value is None
@@ -129,6 +130,10 @@ def grounded_summary(receipt: BuildReceipt, report: SatisfactionReport | None) -
     setup = receipt.compilation.setup
     total = receipt.build.total_price + (setup.spending if setup else 0)
     lines = [f"Tổng chi phí linh kiện: {total:,} VND."]
+    if receipt.build.ranking_status == RankingStatus.UNRANKED:
+        lines.append(
+            "Cấu hình đáp ứng ngân sách và các kiểm tra tương thích đã mô hình hóa; chưa đủ dữ liệu để xếp hạng hoặc khẳng định hiệu năng."
+        )
     for slot, part in sorted(receipt.build.parts.items()):
         capacity = (
             f"; dung lượng {part.capacity_gb} GB"

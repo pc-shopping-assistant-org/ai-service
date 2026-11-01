@@ -35,6 +35,7 @@ from ai_service.capabilities.pc_builder.schemas import (
     BuildObjective,
     ConstraintSource,
     PCBuildConstraints,
+    SelectedBuild,
     UseCaseProfile,
 )
 
@@ -136,7 +137,7 @@ class OptimizerPolicySnapshotV1(Contract):
 
 
 class RecommendationSnapshotV1(Contract):
-    objective: BuildObjective
+    objective: BuildObjective | None
     reason: RecommendationReason
     policy_version: Text
     # RankedBuild already holds all score/evidence and parts in the result.
@@ -249,7 +250,10 @@ class ReplaySnapshotV1(Contract):
                 )
             if not valid:
                 raise ValueError("Synthetic source disagrees with catalog evidence")
-        for build in self.optimization.result.builds.values():
+        output_builds: list[SelectedBuild] = list(self.optimization.result.builds.values())
+        if self.optimization.result.feasible_build is not None:
+            output_builds.append(self.optimization.result.feasible_build)
+        for build in output_builds:
             cpu = build.parts.get(ComponentCategory.CPU)
             for slot, part in build.parts.items():
                 if part.id is None and not any(
@@ -263,7 +267,12 @@ class ReplaySnapshotV1(Contract):
             if self.optimization.outcome != "INFEASIBLE":
                 raise ValueError("Built output requires a recommendation decision")
         elif (
-            self.recommendation.objective not in self.optimization.result.builds
+            (
+                self.recommendation.objective not in self.optimization.result.builds
+                if self.recommendation.objective is not None
+                else self.optimization.result.feasible_build is None
+                or self.recommendation.reason != RecommendationReason.FEASIBLE_UNRANKED
+            )
             or self.recommendation.policy_version != self.versions.recommendation
         ):
             raise ValueError("Recommendation must reference saved result/version")

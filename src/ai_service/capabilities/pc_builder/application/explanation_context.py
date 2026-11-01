@@ -32,7 +32,10 @@ def build_explanation_context(
     build = recommendation.build
 
     return {
-        "recommended_objective": recommendation.objective.value,
+        "recommended_objective": recommendation.objective.value
+        if recommendation.objective
+        else None,
+        "ranking_status": build.ranking_status.value,
         "reason_code": recommendation.reason_code.value,
         "policy_version": recommendation.policy_version,
         "total_price": build.total_price,

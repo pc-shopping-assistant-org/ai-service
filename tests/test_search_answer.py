@@ -19,7 +19,7 @@ async def no_result(realistic_catalog, *, incomplete=False):
     canonical = state()
     if incomplete:
         parts = [
-            part.model_copy(update={"performance_score": None})
+            part.model_copy(update={"tdp_watts": None})
             if part.category == "CPU"
             else part
             for part in realistic_catalog

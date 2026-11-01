@@ -412,7 +412,7 @@ async def test_optimizer_search_report_controls_final_graph_outcome(
     if not incomplete:
         next(iter(canonical.requirements.values())).value.amount = 1
     parts = [
-        part.model_copy(update={"performance_score": None})
+        part.model_copy(update={"tdp_watts": None})
         if incomplete and part.category == "CPU"
         else part
         for part in realistic_catalog

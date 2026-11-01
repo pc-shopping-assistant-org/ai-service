@@ -347,16 +347,16 @@ class MetricEvidence(BaseModel):
     label: str = ""
 
 
-class RankedBuild(BaseModel):
-    """A fully verified, compatible build optimized for a specific objective.
+class RankingStatus(StrEnum):
+    RANKED = "RANKED"
+    UNRANKED = "UNRANKED"
 
-    Pure mathematical/hardware evidence; free of ungrounded natural language claims.
-    """
+
+class BuildConfiguration(BaseModel):
+    """Physical compatibility and spending evidence, independent of ranking."""
 
     model_config = CORE_CONFIG
 
-    objective: BuildObjective
-    objective_score: float
     total_price: int
     parts: dict[ComponentCategory, ComponentSpec]
     power_estimate: PowerEstimate
@@ -364,6 +364,25 @@ class RankedBuild(BaseModel):
     compatibility_status: CompatibilityStatus
     owned_categories: list[ComponentCategory] = Field(default_factory=list)
     spending_prices: dict[ComponentCategory, int] = Field(default_factory=dict)
+
+
+class FeasibleBuild(BuildConfiguration):
+    ranking_status: Literal[RankingStatus.UNRANKED] = RankingStatus.UNRANKED
+    objective: None = None
+    objective_score: None = None
+
+
+class RankedBuild(BuildConfiguration):
+    """A compatible build with complete evidence for a specific ranking objective."""
+
+    ranking_status: Literal[RankingStatus.RANKED] = Field(
+        default=RankingStatus.RANKED, exclude_if=lambda value: value == RankingStatus.RANKED
+    )
+    objective: BuildObjective
+    objective_score: float
+
+
+type SelectedBuild = RankedBuild | FeasibleBuild
 
 
 class PCBuildConstraints(BaseModel):
@@ -433,7 +452,7 @@ class OptimizerSearchTrace(BaseModel):
     """Observed execution diagnostics, not a claim about the entire backend catalog."""
 
     model_config = CORE_CONFIG
-    algorithm_version: Literal["deterministic-enumeration-v3"] = "deterministic-enumeration-v3"
+    algorithm_version: Literal["deterministic-enumeration-v3", "deterministic-enumeration-v4"] = "deterministic-enumeration-v4"
     enumeration_complete: StrictBool
     pruned_candidates: StrictInt = Field(ge=0)
     metadata_rejections: StrictInt = Field(ge=0)
@@ -449,10 +468,15 @@ class OptimizationResult(BaseModel):
     target_budget_vnd: int
     use_case: UseCaseProfile
     builds: dict[BuildObjective, RankedBuild]
+    feasible_build: FeasibleBuild | None = Field(default=None, exclude_if=lambda value: value is None)
     candidates_evaluated: int
     pruned_count: int
     rejected_candidates: list[str] = Field(default_factory=list)
     search_trace: OptimizerSearchTrace | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @property
+    def has_feasible_build(self) -> bool:
+        return bool(self.builds) or self.feasible_build is not None
 
 
 class PublicStatePatch(BaseModel):
