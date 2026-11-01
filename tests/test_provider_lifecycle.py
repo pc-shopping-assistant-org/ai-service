@@ -6,6 +6,23 @@ from ai_service.infrastructure.providers.openai import OpenAIModelProvider
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model_name,supported",
+    [("gemini-3.1-flash-lite", True), ("gemini-2.5-flash", False)],
+)
+async def test_gemini_generation_is_bounded_and_reasoning_respects_model_profile(
+    model_name, supported
+):
+    provider = GeminiModelProvider(
+        Settings(_env_file=None, gemini_api_key="local-test-key", model_name=model_name)
+    )
+    model = provider.create_model()
+    assert model.max_output_tokens == 2048
+    assert model.reasoning_effort == ("low" if supported else None)
+    await provider.aclose()
+
+
+@pytest.mark.asyncio
 async def test_openai_provider_reuses_and_closes_owned_clients_without_network():
     provider = OpenAIModelProvider(
         Settings(_env_file=None, openai_api_key="local-test-key")
