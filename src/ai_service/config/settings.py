@@ -78,6 +78,25 @@ class Settings(BaseSettings):
     )
     embedding_provider: EmbeddingProviderKind = EmbeddingProviderKind.HTTP
     embedding_dimension: int = Field(default=384, ge=2, le=4096)
+    embedding_model_name: str = Field(
+        default="BAAI/bge-m3",
+        min_length=1,
+        validation_alias=AliasChoices("AI_EMBEDDING_MODEL", "EMBEDDING_MODEL"),
+    )
+    embedding_cache_dir: str = Field(
+        default="/var/cache/ai-service/huggingface",
+        min_length=1,
+        validation_alias=AliasChoices("AI_EMBEDDING_CACHE_DIR", "HF_HOME"),
+    )
+    embedding_preload_on_startup: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AI_EMBEDDING_PRELOAD_ON_STARTUP",
+            "EMBEDDING_PRELOAD_ON_STARTUP",
+        ),
+    )
+    embedding_max_length: int = Field(default=512, ge=32, le=8192)
+    embedding_batch_size: int = Field(default=32, ge=1, le=256)
     provider: AIProvider = AIProvider.FALLBACK
     model_name: str | None = None
     openai_model_name: str = "gpt-4o-mini"

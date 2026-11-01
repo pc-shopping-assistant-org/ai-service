@@ -72,6 +72,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from ai_service.infrastructure.stateful import open_stateful_resources
 
         with open_telemetry(runtime_settings):
+            if runtime_settings.embedding_preload_on_startup:
+                from ai_service.services.bge_m3 import get_bge_m3_service
+
+                await get_bge_m3_service(runtime_settings).warmup()
             async with open_stateful_resources(runtime_settings) as resources:
                 application.state.stateful = resources
                 try:
