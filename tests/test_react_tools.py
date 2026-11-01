@@ -90,6 +90,34 @@ async def test_consultation_explanation_keeps_canonical_facts_and_bound_sources(
         )
 
 
+@pytest.mark.asyncio
+async def test_catalog_specs_render_as_readable_markdown_instead_of_python_repr():
+    catalog, trusted = Catalog(), context()
+    catalog.product.specifications = {
+        "memory_gb": 32,
+        "connections": ["USB-C", "3.5 mm"],
+        "dimensions": {"width_mm": 100},
+    }
+    result = await ToolDispatcher(catalog, PCBuildApplicationService()).execute(
+        ToolCall(
+            call_id="details",
+            name="get_product_details",
+            arguments={"product_id": str(catalog.product.product_id)},
+        ),
+        trusted,
+    )
+    answer = validate_answer(
+        AnswerCandidate(text="unused", evidence_refs=result.evidence_refs),
+        [result],
+        trusted,
+        [CompletionRequirement(kind="ANSWER")],
+    )
+    assert "memory gb: 32" in answer.text
+    assert "USB-C · 3.5 mm" in answer.text
+    assert "width mm: 100" in answer.text
+    assert "{'" not in answer.text and "['" not in answer.text
+
+
 def test_state_aware_exposure_keeps_reads_and_requires_compiled_build(
     realistic_catalog,
 ):

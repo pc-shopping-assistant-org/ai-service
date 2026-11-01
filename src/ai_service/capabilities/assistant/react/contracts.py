@@ -4,7 +4,14 @@ from enum import StrEnum
 from typing import Annotated, Literal, Protocol
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field, JsonValue, StrictInt, model_validator
+from pydantic import (
+    AwareDatetime,
+    Field,
+    JsonValue,
+    StrictBool,
+    StrictInt,
+    model_validator,
+)
 
 from ai_service.application.ports.user_memory import MAX_MEMORIES, MemoryEntry
 from ai_service.application.ports.web_search import (
@@ -61,6 +68,7 @@ from ai_service.capabilities.web_search.source_policy import (
 )
 
 MAX_NATIVE_TOOL_CALLS = 16
+MAX_CATALOG_KEYWORD_CHARS = 200
 
 
 class ReactLimits(Contract):
@@ -95,8 +103,38 @@ class ToolName(StrEnum):
 
 
 class SearchCatalogArgs(Contract):
-    query: Text = Field(max_length=1000)
+    """Search store products by concise keyword, semantic need, and optional filters."""
+
+    query: Text | None = Field(default=None, max_length=MAX_CATALOG_KEYWORD_CHARS)
+    semantic_query: Text | None = Field(default=None, max_length=1000)
+    brand: Text | None = Field(default=None, max_length=100)
+    category: Text | None = Field(default=None, max_length=100)
+    min_price: NonNegativeInt | None = None
+    max_price: NonNegativeInt | None = None
+    in_stock_only: StrictBool = False
     limit: StrictInt = Field(default=10, ge=1, le=20)
+
+    @model_validator(mode="after")
+    def validate_search_args(self) -> "SearchCatalogArgs":
+        if (
+            self.query is None
+            and self.semantic_query is None
+            and self.brand is None
+            and self.category is None
+            and self.min_price is None
+            and self.max_price is None
+            and not self.in_stock_only
+        ):
+            raise ValueError(
+                "At least one search query or filter criterion is required"
+            )
+        if (
+            self.min_price is not None
+            and self.max_price is not None
+            and self.min_price > self.max_price
+        ):
+            raise ValueError("min_price cannot exceed max_price")
+        return self
 
 
 class ProductDetailsArgs(Contract):
@@ -161,7 +199,18 @@ class ProductEvidence(Contract):
 
 
 class ProductCatalog(Protocol):
-    async def search(self, query: str, limit: int) -> list[ProductEvidence]: ...
+    async def search(
+        self,
+        query: str,
+        limit: int,
+        *,
+        semantic_query: str | None = None,
+        brand: str | None = None,
+        category: str | None = None,
+        min_price: int | None = None,
+        max_price: int | None = None,
+        in_stock_only: bool = False,
+    ) -> list[ProductEvidence]: ...
     async def get(self, product_id: UUID) -> ProductEvidence | None: ...
 
 

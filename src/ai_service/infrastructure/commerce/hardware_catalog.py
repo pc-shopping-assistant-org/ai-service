@@ -23,7 +23,7 @@ from ai_service.capabilities.assistant.requirements.contracts import (
 from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.stateful_contracts import Contract
 
-from .product_catalog import BackendProductCatalog, Summary, Variant
+from .product_catalog import BackendProductCatalog, QueryParamScalar, Summary, Variant
 
 SPEC_FIELDS = (
     set(ComponentSpec.model_fields) - {"id", "name", "category", "price", "extra_specs"}
@@ -112,7 +112,7 @@ class BackendRequirementCatalog(BackendProductCatalog):
         rows: list[CatalogRowV1] = []
         try:
             for _ in range(self.max_pages):
-                params: dict[str, JsonValue] = {"limit": HARDWARE_CATALOG_PAGE_SIZE}
+                params: dict[str, QueryParamScalar] = {"limit": HARDWARE_CATALOG_PAGE_SIZE}
                 if cursor is not None:
                     params["cursor"] = str(cursor)
                 page = HardwarePage.model_validate(

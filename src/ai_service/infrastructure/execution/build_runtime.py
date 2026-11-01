@@ -156,7 +156,12 @@ async def open_build_runtime(
             ).load(RequirementDraft(items=[]), accepted.requirement_state)
         else:
             catalog = []
-        products = BackendProductCatalog(client, settings.backend_api_url, attempts)
+        products = BackendProductCatalog(
+            client,
+            settings.backend_api_url,
+            attempts,
+            settings.search_api_url,
+        )
         pending = accepted.flexible
         fixed_tasks = (
             pending is not None
