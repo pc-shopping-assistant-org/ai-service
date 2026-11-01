@@ -29,7 +29,6 @@ from ai_service.capabilities.assistant.react.actions import (
 )
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
-    BuildResult,
     CompletionRequirement,
     ControlRecord,
     ReactLimits,
@@ -191,6 +190,8 @@ def build_flexible_graph(
     catalog_loader: RequirementCatalog | None = None,
 ) -> CompiledStateGraph:
     trusted = ToolContext.model_validate(context.model_dump())
+    if publication and publication.read_only_turn:
+        trusted.read_only_turn = True
     tasks = [CompletionRequirement.model_validate(t.model_dump()) for t in required]
     registering = task_catalog is not None
     if (
@@ -199,6 +200,7 @@ def build_flexible_graph(
         and publication.accepted.flexible.status == "WAITING_INPUT"
         and publication.accepted.flexible.pending_task_resolution is None
         and not publication.discard_pending
+        and not publication.read_only_turn
     ):
         tasks = [
             row.task.model_copy(deep=True)
@@ -595,7 +597,11 @@ def build_flexible_graph(
         assert publication is not None
         ctx = current(state)
         pending = PendingResolution.model_validate(state["pending_draft"])
-        offered = public_resolution_options(pending.draft, ctx.catalog)
+        offered = (
+            publication.accepted.flexible.resolution_options
+            if publication.accepted.flexible
+            else None
+        ) or public_resolution_options(pending.draft, ctx.catalog)
         if (
             any(item.reason == "QUANTITY_UNIT_REQUIRED" for item in offered.items)
             and unit_clarifier
@@ -627,26 +633,19 @@ def build_flexible_graph(
                     "model_calls": state.get("model_calls", 0) + 1,
                 },
             )
-        # Reuse the typed continuation lane. Its deterministic validators and
-        # publication preparation remain the only transition authorities.
-        interpreted = cast(
-            FlexibleState,
-            dict(state)
-            | {
-                "reference_reply": reference.model_dump(mode="json")
-                if reference
-                else None,
-                "unit_reply": unit.model_dump(mode="json") if unit else None,
-            },
+        # A side question needs only the saved offered choices. Fetch current
+        # hardware only after a real selection, before deterministic admission.
+        loaded = await load_catalog(state) if draft_needs_catalog(
+            RequirementDraft(items=pending.draft.resolution.draft.items)
+        ) else {}
+        continued = apply_resolution_command(
+            current(cast(FlexibleState, dict(state) | loaded)), pending,
+            state["message"], conversation_revision, reference, unit,
         )
-        effective = publication.model_copy(
-            update={"reference_reply": reference, "unit_reply": unit}
-        )
-        update = initialize(interpreted, effective.turn_input(trusted, tasks))
-        return update | {
+        return bounded(state, loaded | resolution_update(continued) | {
             "free_resolution_reply": receipt.model_dump(mode="json"),
             "model_calls": state.get("model_calls", 0) + 1,
-        }
+        })
 
     async def amend_reply(state: FlexibleState) -> dict[str, Any]:
         assert publication is not None and amender is not None
@@ -673,12 +672,21 @@ def build_flexible_graph(
                     "model_calls": state.get("model_calls", 0) + 1,
                 },
             )
+        discarded = set(pending.draft.discarded_items) | {
+            item.item_index for item in receipt.amendment.discards
+        }
+        needs_catalog = draft_needs_catalog(RequirementDraft(items=[
+            item for index, item in enumerate(pending.draft.resolution.draft.items)
+            if index not in discarded
+        ]))
+        loaded = await load_catalog(state) if needs_catalog else {}
         continued = apply_amendment_receipt(
-            receipt, ctx, pending, state["message"], conversation_revision
+            receipt, current(cast(FlexibleState, dict(state) | loaded)), pending,
+            state["message"], conversation_revision,
         )
         return bounded(
             state,
-            resolution_update(continued)
+            loaded | resolution_update(continued)
             | {
                 "free_amendment": receipt.model_dump(mode="json"),
                 "model_calls": state.get("model_calls", 0) + 1,
@@ -950,15 +958,11 @@ def build_flexible_graph(
                     continuing_pending=continuing,
                 )
             except ValueError:
-                if (
-                    ctx.completion_requirements
-                    and all(
-                        task.kind == "BUILD" for task in ctx.completion_requirements
-                    )
-                    and any(
-                        entry.result and isinstance(entry.result.result, BuildResult)
-                        for entry in projection(state)
-                    )
+                if ctx.completion_requirements and any(
+                    entry.result
+                    and entry.result.status == "COMPLETED"
+                    and entry.result.evidence_refs
+                    for entry in projection(state)
                 ):
                     return repair(
                         state,

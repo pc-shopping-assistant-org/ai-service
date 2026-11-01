@@ -17,6 +17,7 @@ from ai_service.application.ports.web_search import WebPageReadResult
 from ai_service.capabilities.assistant.provenance import CatalogRowV1
 from ai_service.capabilities.assistant.react.actions import FlexibleDecision
 from ai_service.capabilities.assistant.react.contracts import (
+    CompletionRequirement,
     SavedBuildEvidence,
     ToolContext,
 )
@@ -356,6 +357,7 @@ class CountingService(PCBuildApplicationService):
         "UNIT_DISCARD",
         "MULTI",
         "FULL_SETUP",
+        "UNRANKED",
     ],
 )
 async def test_managed_confirmation_build_and_saved_explanation_preserve_snapshot(
@@ -379,6 +381,10 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
         None,
     )
     service, extractor, catalog = CountingService(), Extractor(multi), hardware()
+    if selection == "UNRANKED":
+        for row in catalog:
+            row.component.performance_score = None
+            row.component.psu_tier = None
     if selection == "FULL_SETUP":
         from ai_service.application.ports.accessories import AccessorySpec
 
@@ -533,6 +539,24 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                 engine, saver, request_versions=(2,), flexible_service=service
             )
             reader = PostgresAcceptedCheckpointReader(saver)
+            products = Products()
+
+            class ProductReader:
+                async def decide(self, message, transcript, allowed, repair, context=None):
+                    if not transcript:
+                        return FlexibleDecision(action={
+                            "kind": "CALL_TOOL", "call": {
+                                "call_id": "read", "name": "get_product_details",
+                                "arguments": {"product_id": str(products.product.product_id)},
+                            },
+                        })
+                    refs = transcript[-1].result.evidence_refs
+                    return FlexibleDecision(action={
+                        "kind": "FINAL_ANSWER", "answer": {
+                            "text": "Ignored", "evidence_refs": refs,
+                            "explanation": {"text": "Nhận xét từ sản phẩm trong catalog.", "evidence_refs": refs},
+                        },
+                    })
 
             async def factory(claim):
                 request, head = await coordinator.load(claim)
@@ -562,9 +586,10 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                     if pending and not pending.pending_task_resolution
                     else []
                 )
-                products = Products()
+                if request.selected_product_ids:
+                    required = [CompletionRequirement(kind="ANSWER", product_ids=request.selected_product_ids)]
                 graph = build_flexible_graph(
-                    WithTaskProposals(
+                    ProductReader() if request.selected_product_ids else WithTaskProposals(
                         Model(
                             missing_unit,
                             missing_reference,
@@ -681,10 +706,24 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                 assert not waiting.requirement_state.requirements
                 assert service.calls == 0 and extractor.calls == 1
             proposal = waiting.flexible.pending_proposal
+            side_turns = 0
+            if selection == "UNRANKED":
+                previous = waiting
+                waiting = await run(TurnRequestV2(
+                    conversation_id=conversation.id, request_id=uuid4(), expected_revision=1,
+                    message="Giải thích sản phẩm này trước khi tiếp tục build",
+                    selected_product_ids=[products.product.product_id],
+                ), "WAITING_INPUT")
+                assert waiting.requirement_state == previous.requirement_state
+                assert waiting.flexible.pending_proposal == proposal
+                assert waiting.flexible.task_message_id == first.request_id
+                assert products.product.name in waiting.flexible.assistant_message
+                assert service.calls == 0 and extractor.calls == 1
+                side_turns = 1
             second = TurnRequestV2(
                 conversation_id=conversation.id,
                 request_id=uuid4(),
-                expected_revision=2 if needs_selection else 1,
+                expected_revision=(2 if needs_selection else 1) + side_turns,
                 message="OK",
                 confirmation={
                     "proposal_id": proposal.proposal_id,
@@ -694,6 +733,10 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                 },
             )
             built = await run(second, "COMPLETED")
+            if selection == "UNRANKED":
+                assert built.public_build.ranking_status == "UNRANKED"
+                assert built.public_build.objective is None
+                assert "chưa đủ dữ liệu" in built.flexible.answer.text
             assert built.flexible.answer.outcome == ("MULTI_TASK" if multi else "BUILT")
             if multi:
                 assert built.flexible.status == "UNRESOLVED"
@@ -777,7 +820,7 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                 TurnRequestV2(
                     conversation_id=conversation.id,
                     request_id=uuid4(),
-                    expected_revision=3 if needs_selection else 2,
+                    expected_revision=(3 if needs_selection else 2) + side_turns,
                     message="Explain saved build",
                 ),
                 "COMPLETED",
@@ -791,7 +834,7 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
             assert service.calls == 1 and extractor.calls == 2
             record = await store.get(owner, conversation.id)
             assert (
-                record.revision == (4 if needs_selection else 3)
+                record.revision == (4 if needs_selection else 3) + side_turns
                 and record.active_run_id is None
             )
             assert (await coordinator.submit(owner, second)).status == "COMPLETED"
@@ -808,7 +851,7 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                     .all()
                 )
             assert [m["role"] for m in messages] == ["user", "assistant"] * (
-                4 if needs_selection else 3
+                (4 if needs_selection else 3) + side_turns
             )
     finally:
         if executor:

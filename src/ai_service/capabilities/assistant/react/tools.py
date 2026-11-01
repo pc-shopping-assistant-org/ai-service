@@ -108,10 +108,13 @@ def allowed_tools(
         for item in project_current_tools(records or [], context)
     ):
         names += (ToolName.RESEARCH_PC_BUILD,)
-    if (
-        context.catalog_ready
-        and compile_requirements(context.requirements, context.catalog).ready
-    ) or (not context.catalog_ready and build_needs_catalog(context.requirements)):
+    if not context.read_only_turn and (
+        (
+            context.catalog_ready
+            and compile_requirements(context.requirements, context.catalog).ready
+        )
+        or (not context.catalog_ready and build_needs_catalog(context.requirements))
+    ):
         names += (ToolName.BUILD_PC,)
     return names
 

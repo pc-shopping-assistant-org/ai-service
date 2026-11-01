@@ -141,7 +141,9 @@ async def open_build_runtime(
                 raise ValueError("Recovery publication context mismatch")
             catalog = original_context.context.catalog
         elif (
-            accepted.flexible
+            not binding.read_only_turn
+            and (request.reference_reply is not None or request.unit_reply is not None)
+            and accepted.flexible
             and accepted.flexible.pending_resolution
             and draft_needs_catalog(
                 RequirementDraft(
@@ -163,10 +165,6 @@ async def open_build_runtime(
             and request.pending_action is None
         )
         if request.selected_product_ids:
-            if pending and pending.status == "WAITING_INPUT":
-                raise ValueError(
-                    "Finish or replace the pending task before selecting new products"
-                )
             fixed_tasks = True
         tasks = (
             [item.task for item in pending.task_outcomes]
@@ -201,6 +199,7 @@ async def open_build_runtime(
                 ),
                 read_catalog_allowed=True,
                 execution_allowed=True,
+                read_only_turn=binding.read_only_turn,
                 catalog=catalog,
                 catalog_ready=bool(catalog),
                 saved_build=SavedBuildEvidence(

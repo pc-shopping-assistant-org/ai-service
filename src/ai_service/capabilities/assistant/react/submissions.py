@@ -17,9 +17,11 @@ from .actions import (
 from .contracts import (
     AnswerCandidate,
     BuildResult,
+    CatalogResult,
     ComparisonResult,
     CompletionRequirement,
     ConsultationExplanation,
+    DetailsResult,
     ProductReview,
     ToolContext,
     ToolName,
@@ -137,11 +139,10 @@ def selected_answer(selection: ResultSelection) -> AnswerCandidate:
     )
 
 
-def _derive_part(
+def resolve_result_selection(
     selection: ResultSelection, records: list[ToolRecord]
-) -> TaskFinalCandidate:
-    if selection.task_index is None:
-        raise ValueError("Conversation response is not a business-task outcome")
+) -> tuple[ResultSelection, list[ToolRecord]]:
+    """Resolve model-selected calls into canonical evidence for every answer lane."""
     by_id = {record.call.call_id: record for record in records}
     ids = selection.supporting_tool_call_ids
     if (
@@ -150,7 +151,7 @@ def _derive_part(
         or not set(ids) <= by_id.keys()
     ):
         raise ValueError("Submission requires canonical unique tool selections")
-    refs = set(selection.evidence_refs)
+    refs = set(selection.evidence_refs) | set(selection.explanation_evidence_refs or [])
     selected = [
         record
         for record in records
@@ -168,7 +169,11 @@ def _derive_part(
     # Do not require the model to copy the same reference into a second field.
     resolved_selection = selection
     if not selection.evidence_refs and any(
-        record.result and isinstance(record.result.result, BuildResult)
+        record.result
+        and isinstance(
+            record.result.result,
+            (BuildResult, CatalogResult, DetailsResult, ComparisonResult),
+        )
         for record in selected
     ):
         resolved_selection = selection.model_copy(
@@ -178,14 +183,32 @@ def _derive_part(
                         ref
                         for record in selected
                         if record.result
-                        and isinstance(record.result.result, BuildResult)
+                        and isinstance(
+                            record.result.result,
+                            (
+                                BuildResult,
+                                CatalogResult,
+                                DetailsResult,
+                                ComparisonResult,
+                            ),
+                        )
                         for ref in record.result.evidence_refs
                     )
                 )
             }
         )
+    return resolved_selection, selected
+
+
+def _derive_part(
+    selection: ResultSelection, records: list[ToolRecord]
+) -> TaskFinalCandidate:
+    if selection.task_index is None:
+        raise ValueError("Conversation response is not a business-task outcome")
+    resolved_selection, selected = resolve_result_selection(selection, records)
     outcome: FinalOutcome = "ANSWERED"
-    supporting = list(ids)
+    refs = set(resolved_selection.evidence_refs)
+    supporting = list(selection.supporting_tool_call_ids)
     build_ref = selection.build_ref
     for record in selected:
         result = record.result
