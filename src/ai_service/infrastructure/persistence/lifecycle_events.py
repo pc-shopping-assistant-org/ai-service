@@ -9,6 +9,7 @@ from ai_service.application.ports.stateful_conversation import (
     AcceptedConversationSnapshot,
 )
 from ai_service.capabilities.assistant.public_contracts import (
+    RunFailureReason,
     RunViewV1,
     StatefulErrorCode,
     TurnResultV1,
@@ -56,6 +57,7 @@ async def emit_terminal(
     status: str,
     revision: int,
     values: dict[str, Any] | None = None,
+    failure_reason: RunFailureReason | None = None,
 ) -> None:
     if status == RunStatus.FAILED_RETRYABLE:
         return
@@ -69,7 +71,11 @@ async def emit_terminal(
             conn,
             run["id"],
             "terminal",
-            {"event": ChatStreamEventType.ERROR, "code": code.value},
+            {
+                "event": ChatStreamEventType.ERROR,
+                "code": code.value,
+                "reason": failure_reason,
+            },
         )
         return
     snapshot = AcceptedConversationSnapshot.model_validate(
@@ -101,7 +107,12 @@ async def emit_terminal(
             flexible=to_public_flexible(snapshot.flexible, snapshot.requirement_state),
             products=public_tool_products(
                 [ToolRecord.model_validate(row) for row in values.get("ledger", [])],
-                selected.evidence_refs if selected else [],
+                None
+                if snapshot.flexible.response is not None
+                and not snapshot.flexible.response.evidence_refs
+                else selected.evidence_refs
+                if selected
+                else [],
             ),
         )
     else:
@@ -110,7 +121,7 @@ async def emit_terminal(
         conn,
         run["id"],
         "answer",
-        {"event": ChatStreamEventType.DELTA, "delta": result.answer},
+        {"event": ChatStreamEventType.DELTA, "delta": result.answer, "replace": True},
     )
     await append_run_event(
         conn,

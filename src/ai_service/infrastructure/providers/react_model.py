@@ -59,6 +59,11 @@ from ai_service.capabilities.assistant.source_quotes import (
     project_requirement_draft,
 )
 from ai_service.infrastructure.providers.failures import invoke_provider
+from ai_service.infrastructure.providers.model_stream import (
+    BoundModel,
+    TextStreamSink,
+    stream_public_text,
+)
 from ai_service.infrastructure.providers.tool_projection import observation_json
 from ai_service.infrastructure.providers.tool_schema import model_tool_schema
 
@@ -346,10 +351,6 @@ def build_react_request(
     return messages, schemas
 
 
-class BoundModel(Protocol):
-    async def ainvoke(self, input: list[BaseMessage]) -> AIMessage: ...
-
-
 class ToolCallingModel(BoundModel, Protocol):
     def bind_tools(self, tools: list[dict[str, Any]], **kwargs: Any) -> BoundModel: ...
 
@@ -440,10 +441,17 @@ def parse_flexible_response(
 class NativeFlexibleModel:
     """One native invocation; LangGraph owns retries, budgets and publication."""
 
-    def __init__(self, provider: ModelProvider, limits: ReactLimits | None = None):
+    def __init__(
+        self,
+        provider: ModelProvider,
+        limits: ReactLimits | None = None,
+        *,
+        text_sink: TextStreamSink | None = None,
+    ):
         self.provider = provider
         self.limits = limits or ReactLimits()
         self._model: ToolCallingModel | None = None
+        self.text_sink = text_sink
 
     async def decide(
         self,
@@ -472,7 +480,13 @@ class NativeFlexibleModel:
         if repair and repair.allowed_next_actions == [ActionKind.FINAL_ANSWER]:
             options["tool_choice"] = ControlName.SUBMIT_RESULT.value
         bound = self._model.bind_tools(schemas, **options) if schemas else self._model
-        response = await invoke_provider(lambda: bound.ainvoke(messages))
+        response = await invoke_provider(
+            lambda: (
+                stream_public_text(bound, messages, self.text_sink)
+                if self.text_sink is not None
+                else bound.ainvoke(messages)
+            )
+        )
         return parse_flexible_response(
             response,
             allowed,

@@ -224,9 +224,13 @@ async def open_build_runtime(
         task_interpreter = NativeTaskExtractor(
             provider, attempts, context=tool_context
         )
+
+        async def text_sink(text: str, replace: bool) -> None:
+            await coordinator.preview(claim, text, replace)
+
         return DurableConversationGraph(
             build_flexible_graph(
-                NativeFlexibleModel(provider),
+                NativeFlexibleModel(provider, text_sink=text_sink),
                 ToolDispatcher(
                     products,
                     service,

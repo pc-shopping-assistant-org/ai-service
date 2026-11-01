@@ -180,7 +180,10 @@ async def test_empty_task_turn_publishes_response_and_is_revalidated():
 
 
 @pytest.mark.asyncio
-async def test_grounded_conversation_response_keeps_product_cards_in_sse(monkeypatch):
+@pytest.mark.parametrize("explicit_refs", [True, False])
+async def test_grounded_conversation_response_keeps_product_cards_in_sse(
+    monkeypatch, explicit_refs
+):
     from ai_service.capabilities.assistant.react.contracts import ToolCall
     from ai_service.infrastructure.persistence import lifecycle_events
 
@@ -193,7 +196,10 @@ async def test_grounded_conversation_response_keeps_product_cards_in_sse(monkeyp
         task_message_id=uuid4(),
         task_message="GPU?",
         status="COMPLETED",
-        response={"text": "Canonical GPU", "evidence_refs": result.evidence_refs},
+        response={
+            "text": "Canonical GPU",
+            "evidence_refs": result.evidence_refs if explicit_refs else [],
+        },
     )
     events = []
 

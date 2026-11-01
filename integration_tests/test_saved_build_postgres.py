@@ -70,6 +70,16 @@ async def test_v2_rejects_legacy_saved_snapshot_after_orphan_and_reopen(
     closed = []
 
     class Model:
+        async def astream(self, messages):
+            from langchain_core.messages import AIMessageChunk
+
+            response = await self.ainvoke(messages)
+            yield AIMessageChunk(
+                content=response.content,
+                tool_calls=response.tool_calls,
+                additional_kwargs=response.additional_kwargs,
+            )
+
         def with_structured_output(self, schema, **kwargs):
             return self
 

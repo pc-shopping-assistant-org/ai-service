@@ -22,6 +22,7 @@ from ai_service.capabilities.assistant.react.contracts import (
 )
 from ai_service.capabilities.assistant.stateful_contracts import RunStatus
 from ai_service.infrastructure.persistence.schema import (
+    agent_run_events,
     agent_runs,
     conversation_messages,
     conversations,
@@ -110,7 +111,20 @@ class PostgresConversationStore:
             rows = (
                 (
                     await connection.execute(
-                        select(conversation_messages)
+                        select(
+                            conversation_messages,
+                            agent_runs.c.request_payload,
+                            agent_run_events.c.payload.label("run_result"),
+                        )
+                        .join(
+                            agent_runs,
+                            conversation_messages.c.run_id == agent_runs.c.id,
+                        )
+                        .outerjoin(
+                            agent_run_events,
+                            (agent_run_events.c.run_id == agent_runs.c.id)
+                            & (agent_run_events.c.dedup_key == "terminal"),
+                        )
                         .where(
                             conversation_messages.c.conversation_id == conversation_id,
                             conversation_messages.c.sequence > sequence,
@@ -130,6 +144,17 @@ class PostgresConversationStore:
                 role=row["role"],
                 content=row["content"],
                 created_at=row["created_at"],
+                selected_product_ids=row["request_payload"].get(
+                    "selected_product_ids", []
+                )
+                if row["role"] == "user"
+                else [],
+                products=(row["run_result"] or {})
+                .get("data", {})
+                .get("result", {})
+                .get("products", [])
+                if row["role"] == "assistant"
+                else [],
             )
             for row in rows[:limit]
         ]

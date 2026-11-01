@@ -10,6 +10,8 @@ from pydantic import AwareDatetime, ConfigDict, Field, StrictBool, model_validat
 
 from ai_service.application.ports.hardware import ComponentCategory, ResolutionTier
 from ai_service.capabilities.assistant.conversation_core import ConsultationStateV1
+from ai_service.capabilities.assistant.limits import MAX_SELECTED_PRODUCTS
+from ai_service.capabilities.assistant.schemas import ProductCard
 from ai_service.capabilities.assistant.stateful_contracts import (
     AccessoryRequestV1,
     AccessoryType,
@@ -225,6 +227,10 @@ class MessageViewV1(Contract):
     role: Literal["user", "assistant"]
     content: Text
     created_at: AwareDatetime
+    selected_product_ids: list[UUID] = Field(
+        default_factory=list, max_length=MAX_SELECTED_PRODUCTS
+    )
+    products: list[ProductCard] = Field(default_factory=list)
 
 
 class StatefulErrorCode(StrEnum):
@@ -263,6 +269,8 @@ class RunStartedV1(EventIdentityV1):
 class TextDeltaV1(EventIdentityV1):
     event: Literal["DELTA"]
     delta: Annotated[str, Field(strict=True, min_length=1)]
+    is_draft: bool = False
+    replace: bool = False
 
 
 class RunCompletedV1(EventIdentityV1):
@@ -279,9 +287,16 @@ class RunCompletedV1(EventIdentityV1):
         return self
 
 
+class RunFailureReason(StrEnum):
+    MODEL_TIMEOUT = "MODEL_TIMEOUT"
+    MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE"
+    PROCESSING_FAILED = "PROCESSING_FAILED"
+
+
 class RunErrorV1(EventIdentityV1):
     event: Literal["ERROR"]
     code: StatefulErrorCode
+    reason: RunFailureReason | None = None
 
 
 type StatefulEventV1 = Annotated[

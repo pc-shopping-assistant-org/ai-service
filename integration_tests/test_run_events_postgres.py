@@ -27,6 +27,68 @@ from ai_service.infrastructure.persistence.schema import (
 
 
 @pytest.mark.asyncio
+async def test_live_draft_is_fenced_and_history_keeps_user_attachments(postgres_dsn):
+    from ai_service.application.call_attempts import AttemptRejected
+
+    engine = create_async_engine(
+        postgres_dsn.replace("postgresql://", "postgresql+psycopg://", 1),
+        hide_parameters=True,
+    )
+    owner, conversation = uuid4(), None
+    store = PostgresConversationStore(engine)
+    try:
+        async with AsyncPostgresSaver.from_conn_string(postgres_dsn) as saver:
+            conversation = await store.create(owner, "Live draft fixture")
+            await store.initialize(
+                owner, conversation.id, NativeConversationInitializer(saver)
+            )
+            coordinator = PostgresRunCoordinator(engine, saver, request_versions=(2,))
+            selected = [uuid4()]
+            run = await coordinator.submit(
+                owner,
+                TurnRequestV2(
+                    conversation_id=conversation.id,
+                    request_id=uuid4(),
+                    expected_revision=0,
+                    message="Explain the attachment",
+                    selected_product_ids=selected,
+                ),
+            )
+            (claim,) = await coordinator.claim_pending(uuid4(), 1)
+            await coordinator.preview(claim, "Hello", True)
+            await coordinator.preview(claim, " world", False)
+            events = await PostgresRunEventStore(engine).read(
+                owner, conversation.id, run.run_id
+            )
+            assert [event.envelope.data.delta for event in events[1:]] == [
+                "Hello",
+                " world",
+            ]
+            assert events[1].envelope.data.is_draft and events[1].envelope.data.replace
+            assert not events[2].envelope.data.replace
+            assert (await store.messages(owner, conversation.id, 100, None)).items[
+                0
+            ].selected_product_ids == selected
+            await coordinator.cancel(owner, conversation.id, run.run_id)
+            with pytest.raises(AttemptRejected):
+                await coordinator.preview(
+                    claim, "Must not publish after cancellation", False
+                )
+            assert len(
+                await PostgresRunEventStore(engine).read(
+                    owner, conversation.id, run.run_id
+                )
+            ) == len(events)
+    finally:
+        if conversation is not None:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    delete(conversations).where(conversations.c.id == conversation.id)
+                )
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_event_journal_dedup_rollback_reopen_owner_and_cursor(postgres_dsn):
     engine = create_async_engine(
         postgres_dsn.replace("postgresql://", "postgresql+psycopg://", 1),
