@@ -152,6 +152,21 @@ def resolve_result_selection(
     ):
         raise ValueError("Submission requires canonical unique tool selections")
     refs = set(selection.evidence_refs) | set(selection.explanation_evidence_refs or [])
+    if not ids and not refs and selection.build_ref is None:
+        # One completed canonical operation has no selection ambiguity. Final
+        # task/identity validation still decides whether it fulfills this request.
+        candidates = [
+            record
+            for record in records
+            if record.result
+            and record.result.status == "COMPLETED"
+            and isinstance(
+                record.result.result,
+                (BuildResult, CatalogResult, DetailsResult, ComparisonResult),
+            )
+        ]
+        if len(candidates) == 1:
+            ids = [candidates[0].call.call_id]
     selected = [
         record
         for record in records

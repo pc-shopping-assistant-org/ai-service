@@ -16,6 +16,8 @@ class GeminiModelProvider(ModelProvider):
         self._model_name = settings.model_name or settings.gemini_model_name
         self._api_key = settings.gemini_api_key
         self._timeout = settings.request_timeout_seconds
+        self._max_output_tokens = settings.gemini_max_output_tokens
+        self._reasoning_effort = settings.gemini_reasoning_effort
         self._model: ChatGoogleGenerativeAI | None = None
         self._closed = False
 
@@ -40,7 +42,13 @@ class GeminiModelProvider(ModelProvider):
             vertexai=False,
             timeout=self._timeout,
             max_retries=0,
+            max_output_tokens=self._max_output_tokens,
         )
+        # Gemini families expose different reasoning controls; use the SDK profile,
+        # rather than sending unsupported Gemini 3 parameters to older models.
+        levels = (self._model.profile or {}).get("reasoning_effort_levels", [])
+        if self._reasoning_effort in levels:
+            self._model.reasoning_effort = self._reasoning_effort
         return self._model
 
     async def aclose(self) -> None:

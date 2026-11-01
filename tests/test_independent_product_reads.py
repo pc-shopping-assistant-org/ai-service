@@ -42,7 +42,7 @@ from ai_service.infrastructure.providers.react_model import NativeFlexibleModel
 @pytest.mark.parametrize(
     "waiting,attached", [(False, True), (True, True), (True, False)]
 )
-@pytest.mark.parametrize("selection", ["calls", "explanation_refs"])
+@pytest.mark.parametrize("selection", ["calls", "explanation_refs", "sole_result"])
 @pytest.mark.parametrize("pending_kind", ["UNIT", "REFERENCE"])
 async def test_product_read_completes_without_build_dependencies(
     count, waiting, attached, selection, pending_kind
@@ -143,13 +143,17 @@ async def test_product_read_completes_without_build_dependencies(
                             {
                                 "text": "Untrusted price 1 VND",
                                 **(
-                                    {"calls": ["read"]}
-                                    if selection == "calls"
-                                    else {
-                                        "explanation_refs": [
-                                            p.evidence_ref for p in products
-                                        ]
-                                    }
+                                    {}
+                                    if selection == "sole_result"
+                                    else (
+                                        {"calls": ["read"]}
+                                        if selection == "calls"
+                                        else {
+                                            "explanation_refs": [
+                                                p.evidence_ref for p in products
+                                            ]
+                                        }
+                                    )
                                 ),
                                 "explanation": "Nhận xét dựa trên các sản phẩm đã chọn.",
                                 "task_index": 0 if attached else None,
