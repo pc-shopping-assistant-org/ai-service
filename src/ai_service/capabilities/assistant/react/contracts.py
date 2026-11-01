@@ -509,6 +509,7 @@ class ToolContext(Contract):
     )
     read_catalog_allowed: bool
     execution_allowed: bool
+    read_only_turn: bool = Field(default=False, exclude_if=lambda value: not value)
     catalog_ready: bool = True
     saved_build: SavedBuildEvidence | None = None
     history: list[DialogueTurn] = Field(

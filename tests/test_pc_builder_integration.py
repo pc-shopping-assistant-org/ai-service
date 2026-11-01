@@ -70,13 +70,13 @@ def test_tools_build_pc_and_explanation_context_pipeline(realistic_catalog: list
     # Gaming 4K profile policy maps to PERFORMANCE
     assert app_result.recommendation.objective == BuildObjective.PERFORMANCE
     assert app_result.recommendation.reason_code == RecommendationReason.PROFILE_DEFAULT
-    assert app_result.recommendation.policy_version == "v1"
+    assert app_result.recommendation.policy_version == RECOMMENDATION_POLICY_VERSION
 
     # Produce factual explanation context
     ctx = tools.explain_build(app_result)
 
     assert ctx["recommended_objective"] == "PERFORMANCE"
-    assert ctx["policy_version"] == "v1"
+    assert ctx["policy_version"] == RECOMMENDATION_POLICY_VERSION
     assert ctx["reason_code"] == "PROFILE_DEFAULT_OBJECTIVE"
     assert ctx["total_price"] == app_result.recommendation.build.total_price
     assert ctx["objective_score"] == app_result.recommendation.build.objective_score
@@ -144,4 +144,4 @@ def test_ai_data_science_profile_recommends_performance(realistic_catalog: list[
 
     assert result.recommendation.objective == BuildObjective.PERFORMANCE
     assert result.recommendation.reason_code == RecommendationReason.PROFILE_DEFAULT
-    assert result.recommendation.policy_version == "v1"
+    assert result.recommendation.policy_version == RECOMMENDATION_POLICY_VERSION

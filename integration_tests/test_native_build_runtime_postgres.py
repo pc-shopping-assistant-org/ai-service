@@ -27,6 +27,7 @@ from ai_service.main import create_app
         (True, "v2", False, False),
         (True, "v2", True, False),
         (True, "v2", False, True),
+        (True, "v2", False, 2),
     ],
 )
 async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
@@ -34,12 +35,26 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
 ):
     owner = uuid4()
     product_id = uuid4()
+    selected_ids = [product_id, uuid4()] if selected == 2 else [product_id]
     closed = []
     calls = []
     web_settings = []
     failures = []
+    from ai_service.infrastructure.persistence.runs import PostgresRunCoordinator
+
+    publication = PostgresRunCoordinator._publication
+
+    async def observed_publication(self, claim, run):
+        try:
+            return await publication(self, claim, run)
+        except Exception as error:
+            failures.append(error)
+            raise
+
+    monkeypatch.setattr(PostgresRunCoordinator, "_publication", observed_publication)
     backend_calls = []
     conversation_contexts = []
+    fail_model = [False]
     from ai_service.infrastructure.execution.conversation import ConversationExecution
 
     execute = ConversationExecution.__call__
@@ -84,6 +99,8 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
             return self
 
         async def ainvoke(self, messages):
+            if fail_model[0]:
+                raise RuntimeError("Explicit failed-build provider fixture")
             calls.append(True)
             if react_enabled and not isinstance(messages[0], tuple):
                 if version == "v2":
@@ -124,12 +141,16 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                         + [
                             {
                                 "id": "search" if read_only else "build",
-                                "name": "get_product_details"
+                                "name": "compare_products"
+                                if selected == 2
+                                else "get_product_details"
                                 if selected
                                 else "search_catalog"
                                 if read_only
                                 else "build_pc",
-                                "args": {"product_id": str(product_id)}
+                                "args": {"product_ids": [str(p) for p in selected_ids]}
+                                if selected == 2
+                                else {"product_id": str(product_id)}
                                 if selected
                                 else {"query": "GPU"}
                                 if read_only
@@ -261,19 +282,20 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
 
     def respond(request):
         backend_calls.append(request.url.path)
-        if request.url.path == f"/products/{product_id}":
+        if request.url.path in {f"/products/{p}" for p in selected_ids}:
+            requested_id = UUID(request.url.path.rsplit("/", 1)[1])
             return httpx.Response(
                 200,
                 json={
                     "data": {
-                        "id": str(product_id),
+                        "id": str(requested_id),
                         "name": "Canonical GPU",
                         "status": "ACTIVE",
                         "specifications": {"vram_gb": 8},
                         "variants": [
                             {
                                 "id": str(uuid4()),
-                                "productId": str(product_id),
+                                "productId": str(requested_id),
                                 "price": 8_000_000,
                                 "quantity": 1,
                                 "status": "ACTIVE",
@@ -356,25 +378,30 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                     assert created.json()["data"]["schema_version"] == 2
                 conversation_id = UUID(created.json()["data"]["conversation_id"])
                 path = f"/api/v1/conversations/{conversation_id}"
+                payload = {
+                    "conversation_id": str(conversation_id),
+                    "request_id": str(uuid4()),
+                    "expected_revision": 0,
+                    "message": "Find GPU"
+                    if version == "v2"
+                    else "Build 30 triệu gaming",
+                    **({"schema_version": 2} if version == "v2" else {}),
+                    **(
+                        {"selected_product_ids": [str(p) for p in selected_ids]}
+                        if selected
+                        else {}
+                    ),
+                }
                 accepted = await client.post(
                     path + "/runs",
-                    json={
-                        "conversation_id": str(conversation_id),
-                        "request_id": str(uuid4()),
-                        "expected_revision": 0,
-                        "message": "Find GPU"
-                        if version == "v2"
-                        else "Build 30 triệu gaming",
-                        **({"schema_version": 2} if version == "v2" else {}),
-                        **(
-                            {"selected_product_ids": [str(product_id)]}
-                            if selected
-                            else {}
-                        ),
-                    },
+                    json=payload,
                 )
                 assert accepted.status_code == 202
                 run_id = accepted.json()["data"]["run_id"]
+                # Lost admission response: the identical request must reuse the run.
+                retried = await client.post(path + "/runs", json=payload)
+                assert retried.status_code == 202
+                assert retried.json()["data"]["run_id"] == run_id
                 async with asyncio.timeout(5):
                     while True:
                         response = await client.get(path + f"/runs/{run_id}")
@@ -389,6 +416,10 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                             break
                         await asyncio.sleep(0.01)
                 history = await client.get(path + "/messages")
+                # This also holds after publication advanced the conversation revision.
+                replayed = await client.post(path + "/runs", json=payload)
+                assert replayed.status_code == 202
+                assert replayed.json()["data"]["run_id"] == run_id
                 messages = history.json()["data"]["items"]
                 assert [m["role"] for m in messages] == ["user", "assistant"]
                 # Empty catalog must be truthful infeasibility, never sample data.
@@ -397,7 +428,9 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                     view = (await client.get(path)).json()["data"]
                     assert view["revision"] == 1
                     assert view["flexible"]["status"] == "COMPLETED"
-                    assert view["flexible"]["task_outcomes"][0]["kind"] == "ANSWER"
+                    assert view["flexible"]["task_outcomes"][0]["kind"] == (
+                        "COMPARE" if selected == 2 else "ANSWER"
+                    )
                 else:
                     assert messages[-1]["content"].startswith("INFEASIBLE")
                 assert (
@@ -495,6 +528,58 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                         last_context = conversation_contexts[-1]
                         assert len(last_context) == 1
                         assert last_context[0]["user_text"] == "Find GPU"
+                    if selected:
+                        # A terminal failed build must not poison subsequent reads.
+                        fail_model[0] = True
+                        failed = await client.post(
+                            path + "/runs",
+                            json={
+                                "schema_version": 2,
+                                "conversation_id": str(conversation_id),
+                                "request_id": str(uuid4()),
+                                "expected_revision": 2,
+                                "message": "Build PC 25 triệu gaming 1080p",
+                            },
+                        )
+                        assert failed.status_code == 202
+                        failed_id = failed.json()["data"]["run_id"]
+                        async with asyncio.timeout(5):
+                            while (
+                                await client.get(path + f"/runs/{failed_id}")
+                            ).json()["data"]["status"] in {"PENDING", "RUNNING"}:
+                                await asyncio.sleep(0.01)
+                        assert (await client.get(path + f"/runs/{failed_id}")).json()[
+                            "data"
+                        ]["status"] == "FAILED_TERMINAL"
+                        assert (await client.get(path)).json()["data"]["revision"] == 2
+                        fail_model[0] = False
+                        recovered = await client.post(
+                            path + "/runs",
+                            json={
+                                "schema_version": 2,
+                                "conversation_id": str(conversation_id),
+                                "request_id": str(uuid4()),
+                                "expected_revision": 2,
+                                "message": "Find GPU",
+                                "selected_product_ids": [str(p) for p in selected_ids],
+                            },
+                        )
+                        assert recovered.status_code == 202  # never CONVERSATION_BUSY
+                        recovered_id = recovered.json()["data"]["run_id"]
+                        async with asyncio.timeout(5):
+                            while (
+                                await client.get(path + f"/runs/{recovered_id}")
+                            ).json()["data"]["status"] in {"PENDING", "RUNNING"}:
+                                await asyncio.sleep(0.01)
+                        assert (
+                            await client.get(path + f"/runs/{recovered_id}")
+                        ).json()["data"]["status"] == "COMPLETED"
+                        assert (await client.get(path)).json()["data"]["revision"] == 3
+                        result = await client.get(path + f"/runs/{recovered_id}/result")
+                        assert result.status_code == 200
+                        assert (
+                            "8,000,000 VND" in result.json()["data"]["result"]["answer"]
+                        )
                         assert "8,000,000 VND" in last_context[0]["assistant_text"]
                     if retry:
                         assert len(failures) == 1

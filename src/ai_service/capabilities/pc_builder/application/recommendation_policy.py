@@ -1,4 +1,4 @@
-"""Application-level policy for selecting a recommended PC build among Pareto optima.
+"""Application policy selecting a ranked recommendation or an unranked feasible build.
 
 Pure application logic, versioned and isolated from the core combinatorial optimizer.
 """
@@ -11,11 +11,11 @@ from enum import StrEnum
 from ai_service.capabilities.pc_builder.schemas import (
     BuildObjective,
     OptimizationResult,
-    RankedBuild,
+    SelectedBuild,
     UseCaseProfile,
 )
 
-RECOMMENDATION_POLICY_VERSION = "v1"
+RECOMMENDATION_POLICY_VERSION = "v2"
 
 
 class RecommendationPolicyError(RuntimeError):
@@ -28,14 +28,15 @@ class RecommendationReason(StrEnum):
     USER_SELECTED = "USER_SELECTED_OBJECTIVE"
     PROFILE_DEFAULT = "PROFILE_DEFAULT_OBJECTIVE"
     DEFAULT_UNAVAILABLE = "DEFAULT_OBJECTIVE_UNAVAILABLE"
+    FEASIBLE_UNRANKED = "FEASIBLE_WITHOUT_RANKING"
 
 
 @dataclass(frozen=True, slots=True)
 class RecommendationDecision:
     """The chosen recommendation decision with provenance and policy version."""
 
-    objective: BuildObjective
-    build: RankedBuild
+    objective: BuildObjective | None
+    build: SelectedBuild
     reason_code: RecommendationReason
     policy_version: str
 
@@ -61,15 +62,23 @@ def choose_recommended_build(
     result: OptimizationResult,
     requested_objective: BuildObjective | None = None,
 ) -> RecommendationDecision:
-    """Choose the recommended build from an OptimizationResult according to policy v1.
+    """Choose a recommendation using policy v2, with an explicit unranked fallback.
 
     Rules:
-    1. If the user explicitly requested an objective, select it. If unavailable, raise ValueError.
-    2. Otherwise, look up the profile's configured default objective.
-    3. If the default objective is not feasible in the result, fall back deterministically in order:
+    1. If only an unranked feasible result exists, return it without assigning an objective.
+    2. If the user explicitly requested an objective, select it. If unavailable, raise ValueError.
+    3. Otherwise, look up the profile's configured default objective.
+    4. If the default objective is not feasible in the result, fall back deterministically in order:
        FALLBACK_OBJECTIVE_ORDER (BALANCED -> PERFORMANCE -> UPGRADE_FRIENDLY).
-    4. If no feasible builds exist at all, raise ValueError.
+    5. If no feasible builds exist at all, raise ValueError.
     """
+    if not result.builds and result.feasible_build is not None:
+        return RecommendationDecision(
+            objective=None,
+            build=result.feasible_build,
+            reason_code=RecommendationReason.FEASIBLE_UNRANKED,
+            policy_version=RECOMMENDATION_POLICY_VERSION,
+        )
     if requested_objective is not None:
         build = result.builds.get(requested_objective)
         if build is None:

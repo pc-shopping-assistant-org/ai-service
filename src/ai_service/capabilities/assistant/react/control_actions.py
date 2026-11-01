@@ -20,7 +20,7 @@ from .model_contracts import (
     RequirementProposalInput,
     ResultSubmissionInput,
 )
-from .submissions import derive_final_action, selected_answer
+from .submissions import derive_final_action, resolve_result_selection, selected_answer
 
 
 class ControlName(StrEnum):
@@ -67,7 +67,7 @@ CONTROL_DESCRIPTIONS = {
         "source_text is only your own suggestion (requires consent)."
     ),
     ControlName.ASK_CLARIFICATION: "Ask for missing business input using actual missing field names or unresolved selection reasons. General conversation can be plain text.",
-    ControlName.SUBMIT_RESULT: "Select refs/build_ref or supporting calls. task_index=null answers without completing pending work. Use explanation for advice, quotes for exact source excerpts. Application verifies outcomes and renders facts.",
+    ControlName.SUBMIT_RESULT: "Select refs/build_ref or supporting calls. One comparison is one result covering all selected products. task_index=null is only for a side answer that preserves pending work. Put actual advice/tradeoffs in explanation; text is a summary label replaced by server-rendered facts. Use quotes for exact web excerpts.",
 }
 
 
@@ -77,9 +77,11 @@ def allowed_controls(
     repair: RepairFeedback | None,
 ) -> tuple[ControlName, ...]:
     controls = []
-    if context is None or context.pending is None or context.pending.proposal is None:
+    if (context is None or not context.read_only_turn) and (
+        context is None or context.pending is None or context.pending.proposal is None
+    ):
         controls.append(ControlName.PROPOSE_REQUIREMENTS)
-    if (
+    if (context is None or not context.read_only_turn) and (
         context is None
         or context.completion_requirements
         or context.pending
@@ -131,8 +133,9 @@ def normalize_control(
         validated.model_dump()
     ).submission()
     if len(submitted.results) == 1 and submitted.results[0].task_index is None:
+        selection, _ = resolve_result_selection(submitted.results[0], records)
         response = RespondAction.model_validate(
-            selected_answer(submitted.results[0]).model_dump()
+            selected_answer(selection).model_dump()
         )
         return FlexibleDecision(action=response, control_call=call)
     return FlexibleDecision(

@@ -76,7 +76,7 @@ class CompletedOptimizationV1(Contract):
 
     @model_validator(mode="after")
     def validate_outcome(self) -> CompletedOptimizationV1:
-        if (self.outcome == "BUILT") != bool(self.result.builds):
+        if (self.outcome == "BUILT") != self.result.has_feasible_build:
             raise ValueError("Optimization outcome must match available builds")
         return self
 
@@ -158,7 +158,7 @@ class ConsultationStateV1(Contract):
             raise ValueError("A slot cannot be both owned and pinned")
         if (
             self.last_successful_build is not None
-            and not self.last_successful_build.builds
+            and not self.last_successful_build.has_feasible_build
         ):
             raise ValueError("Historical successful build must contain builds")
         if (

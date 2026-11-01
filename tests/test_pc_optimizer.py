@@ -793,7 +793,7 @@ def test_owned_exclude_from_budget_spending(optimizer: DeterministicPCOptimizer,
 
 
 def test_cpu_missing_igpu_score_does_not_fabricate(optimizer: DeterministicPCOptimizer) -> None:
-    """Property 35: When CPU has has_integrated_graphics=True but missing integrated_graphics_score, never fabricate an iGPU."""
+    """A known iGPU remains physically usable without inventing a benchmark."""
     catalog = [
         ComponentSpec(
             name="AMD Ryzen 5 7600 Incomplete Spec",
@@ -803,7 +803,7 @@ def test_cpu_missing_igpu_score_does_not_fabricate(optimizer: DeterministicPCOpt
             tdp_watts=65,
             performance_score=85,
             has_integrated_graphics=True,
-            integrated_graphics_score=None,  # Missing benchmark!
+            integrated_graphics_score=None,  # No ranking score is available.
             integrated_graphics_power_watts=15,
             includes_stock_cooler=True,
             stock_cooler_height_mm=55,
@@ -820,8 +820,10 @@ def test_cpu_missing_igpu_score_does_not_fabricate(optimizer: DeterministicPCOpt
         target_budget_vnd=ConstraintValue[int](value=20_000_000, source=ConstraintSource.USER),
         use_case=ConstraintValue[UseCaseProfile](value=UseCaseProfile.OFFICE_BUDGET),
     )
-    with pytest.raises(ValueError, match="No compatible build configuration found"):
-        optimizer.optimize(constraints, catalog)
+    result = optimizer.optimize(constraints, catalog)
+    build = next(iter(result.builds.values()), result.feasible_build)
+    assert build is not None
+    assert build.parts[ComponentCategory.GPU].performance_score is None
 
 
 def test_cooler_socket_compatibility() -> None:
