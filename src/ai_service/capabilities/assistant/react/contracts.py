@@ -138,19 +138,43 @@ class SearchCatalogArgs(Contract):
 
 
 class ProductDetailsArgs(Contract):
+    """Get full store catalog details, current price, stock status, and specifications for a known store product_id."""
+
     product_id: UUID
 
 
 class CompareProductsArgs(Contract):
+    """Compare 2 to 5 store catalog products side-by-side by product names/keywords (queries) or known store UUIDs (product_ids) without calling search_catalog first."""
+
     product_ids: list[UUID] = Field(
-        min_length=MIN_COMPARISON_PRODUCTS, max_length=MAX_SELECTED_PRODUCTS
+        default_factory=list,
+        max_length=MAX_SELECTED_PRODUCTS,
+        description="Known store product UUIDs when attached or already in context.",
+    )
+    queries: list[Text] = Field(
+        default_factory=list,
+        max_length=MAX_SELECTED_PRODUCTS,
+        description="Concise product names or keywords to look up and compare directly.",
     )
     question: Text | None = Field(default=None, max_length=1000)
 
     @model_validator(mode="after")
     def distinct_products(self) -> "CompareProductsArgs":
+        total = len(self.product_ids) + len(self.queries)
+        if total < MIN_COMPARISON_PRODUCTS or total > MAX_SELECTED_PRODUCTS:
+            raise ValueError(
+                f"Comparison requires between {MIN_COMPARISON_PRODUCTS} and {MAX_SELECTED_PRODUCTS} products"
+            )
         if len(set(self.product_ids)) != len(self.product_ids):
             raise ValueError("Product IDs must be distinct")
+        normalized_queries = [query.strip().casefold() for query in self.queries]
+        if any(
+            not query or len(query) > MAX_CATALOG_KEYWORD_CHARS
+            for query in normalized_queries
+        ):
+            raise ValueError("Comparison queries must be non-empty concise keywords")
+        if len(set(normalized_queries)) != len(normalized_queries):
+            raise ValueError("Comparison queries must be distinct")
         return self
 
 

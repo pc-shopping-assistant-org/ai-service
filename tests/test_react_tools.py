@@ -5,6 +5,7 @@ import pytest
 from test_requirement_pipeline import rows, state
 
 from ai_service.capabilities.assistant.react.contracts import (
+    TOOL_SCHEMAS,
     AnswerCandidate,
     CompletionRequirement,
     ProductEvidence,
@@ -125,8 +126,6 @@ def test_state_aware_exposure_keeps_reads_and_requires_compiled_build(
         ToolName.SEARCH_CATALOG,
         ToolName.GET_PRODUCT_DETAILS,
         ToolName.COMPARE_PRODUCTS,
-        ToolName.SEARCH_WEB,
-        ToolName.READ_WEB_PAGE,
         ToolName.RESEARCH_HARDWARE,
         ToolName.RESEARCH_COMPATIBILITY,
         ToolName.RESEARCH_WORKLOAD,
@@ -134,6 +133,9 @@ def test_state_aware_exposure_keeps_reads_and_requires_compiled_build(
     )
     ready = context(state(), rows(realistic_catalog))
     assert ToolName.BUILD_PC in allowed_tools(ready)
+    for name in allowed_tools(ready):
+        doc = TOOL_SCHEMAS[name].__doc__
+        assert doc and doc.strip(), f"Missing docstring for {name}"
     assert allowed_tools(ready.model_copy(update={"execution_allowed": False})) == ()
     assert allowed_tools(ready.model_copy(update={"read_catalog_allowed": False})) == ()
 
@@ -146,6 +148,8 @@ async def test_rejected_arguments_and_preconditions_never_invoke_handlers():
     for name, arguments in [
         ("search_catalog", {"query": "GPU", "account_id": str(uuid4())}),
         ("compare_products", {"product_ids": [str(catalog.product.product_id)] * 2}),
+        ("compare_products", {"queries": ["RTX 4070 Super", "  rtx 4070 super "]}),
+        ("compare_products", {"queries": ["RTX 4070 Super"]}),
         ("build_pc", {}),
         ("shell", {}),
     ]:
@@ -289,3 +293,105 @@ async def test_comparison_requires_all_requested_products_and_only_server_render
     )
     assert "8,000,000" in answer.text
     assert "invented" not in answer.text
+
+
+@pytest.mark.asyncio
+async def test_compare_products_resolves_keywords_in_single_turn_without_prior_search():
+    catalog = Catalog()
+    gpu_a = catalog.product.model_copy(
+        update={
+            "product_id": uuid4(),
+            "name": "ASUS Dual GeForce RTX 4070 SUPER",
+            "price_vnd": 16_990_000,
+            "evidence_ref": "catalog:gpu:a",
+        }
+    )
+    gpu_b = catalog.product.model_copy(
+        update={
+            "product_id": uuid4(),
+            "name": "Sapphire PULSE Radeon RX 7800 XT",
+            "price_vnd": 14_490_000,
+            "evidence_ref": "catalog:gpu:b",
+        }
+    )
+
+    class KeywordComparisonCatalog:
+        async def get(self, product_id):
+            return next(
+                (p for p in (gpu_a, gpu_b) if p.product_id == product_id), None
+            )
+
+        async def search(self, query, limit):
+            lowered = query.casefold()
+            if "4070" in lowered:
+                return [gpu_a][:limit]
+            if "7800" in lowered:
+                return [gpu_b][:limit]
+            if "both" in lowered:
+                return [gpu_a, gpu_b][:limit]
+            return []
+
+    trusted = context()
+    dispatcher = ToolDispatcher(KeywordComparisonCatalog(), PCBuildApplicationService())
+
+    # 1. Pure keyword comparison in a single tool call
+    result = await dispatcher.execute(
+        ToolCall(
+            call_id="compare-keywords",
+            name="compare_products",
+            arguments={"queries": ["RTX 4070 Super", "RX 7800 XT"]},
+        ),
+        trusted,
+    )
+    assert result.status == "COMPLETED"
+    assert [p.product_id for p in result.result.products] == [
+        gpu_a.product_id,
+        gpu_b.product_id,
+    ]
+    assert result.evidence_refs == ["catalog:gpu:a", "catalog:gpu:b"]
+
+    answer = validate_answer(
+        AnswerCandidate(
+            text="So sánh 2 card đồ họa", evidence_refs=result.evidence_refs
+        ),
+        [result],
+        trusted,
+        [
+            CompletionRequirement(
+                kind="COMPARE", product_ids=[gpu_a.product_id, gpu_b.product_id]
+            )
+        ],
+    )
+    assert answer.status == "COMPLETED"
+    assert gpu_a.name in answer.text and gpu_b.name in answer.text
+
+    # 2. Mixed attached product_id + keyword query deduplicates already-selected product
+    mixed = await dispatcher.execute(
+        ToolCall(
+            call_id="compare-mixed",
+            name="compare_products",
+            arguments={
+                "product_ids": [str(gpu_a.product_id)],
+                "queries": ["both"],
+            },
+        ),
+        trusted,
+    )
+    assert mixed.status == "COMPLETED"
+    assert [p.product_id for p in mixed.result.products] == [
+        gpu_a.product_id,
+        gpu_b.product_id,
+    ]
+
+    # 3. Missing keyword match returns PRODUCT_NOT_FOUND
+    not_found = await dispatcher.execute(
+        ToolCall(
+            call_id="compare-missing",
+            name="compare_products",
+            arguments={"queries": ["RTX 4070 Super", "RTX 5090 Ti Missing"]},
+        ),
+        trusted,
+    )
+    assert not_found.status == "REJECTED"
+    assert not_found.error == "PRODUCT_NOT_FOUND"
+

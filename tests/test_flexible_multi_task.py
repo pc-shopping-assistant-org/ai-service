@@ -71,7 +71,7 @@ async def test_targeted_repair_corrects_only_failed_task_without_reoptimizing(
             self.calls += 1
             return WebPageReadResult(
                 url=url,
-                final_url=url,
+                final_url=page.final_url,
                 status="READABLE",
                 extraction_status="STRUCTURED",
                 document_hash=page.document_hash,
@@ -106,8 +106,11 @@ async def test_targeted_repair_corrects_only_failed_task_without_reoptimizing(
                         "kind": "CALL_TOOL",
                         "call": {
                             "call_id": "page",
-                            "name": "read_web_page",
-                            "arguments": {"url": page.url},
+                            "name": "research_driver",
+                            "arguments": {
+                                "component_name": "ASUS RTX 4070",
+                                "max_sources": 1,
+                            },
                         },
                     }
                 )
@@ -119,6 +122,27 @@ async def test_targeted_repair_corrects_only_failed_task_without_reoptimizing(
                 assert repair.task_indices == [1]
             return FlexibleDecision(action={"kind": "FINAL_ANSWER", **payload})
 
+    class Search:
+        async def search(self, query):
+            from ai_service.application.ports.web_search import (
+                WebSearchItem,
+                WebSearchResult,
+            )
+
+            domain = query.target_domains[0] if query.target_domains else "asus.com"
+            return WebSearchResult(
+                query=query.query,
+                category=query.category,
+                items=[
+                    WebSearchItem(
+                        title="ASUS RTX 4070 Specs",
+                        url=f"https://{domain}/specs",
+                        snippet="Official specs",
+                    )
+                ],
+                total_results=1,
+            )
+
     service, reader, model = Service(), Reader(), Model()
     tasks = [
         CompletionRequirement(
@@ -128,7 +152,7 @@ async def test_targeted_repair_corrects_only_failed_task_without_reoptimizing(
     ]
     graph = build_flexible_graph(
         model,
-        ToolDispatcher(Catalog(), service, reader=reader),
+        ToolDispatcher(Catalog(), service, search_client=Search(), reader=reader),
         ctx,
         tasks,
         Budget(),
