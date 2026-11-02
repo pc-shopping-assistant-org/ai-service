@@ -92,9 +92,10 @@ async def test_consultation_explanation_keeps_canonical_facts_and_bound_sources(
 
 
 @pytest.mark.asyncio
-async def test_catalog_specs_render_as_readable_markdown_instead_of_python_repr():
+async def test_catalog_product_renders_clean_anchor_without_raw_spec_dump():
     catalog, trusted = Catalog(), context()
     catalog.product.specifications = {
+        "additional_specs": "ãng sản xuất:: HP HyperX",
         "memory_gb": 32,
         "connections": ["USB-C", "3.5 mm"],
         "dimensions": {"width_mm": 100},
@@ -113,9 +114,8 @@ async def test_catalog_specs_render_as_readable_markdown_instead_of_python_repr(
         trusted,
         [CompletionRequirement(kind="ANSWER")],
     )
-    assert "memory gb: 32" in answer.text
-    assert "USB-C · 3.5 mm" in answer.text
-    assert "width mm: 100" in answer.text
+    assert f"**{catalog.product.name}**: 8,000,000 VND." in answer.text
+    assert "additional specs" not in answer.text
     assert "{'" not in answer.text and "['" not in answer.text
 
 
