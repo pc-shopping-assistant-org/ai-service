@@ -197,7 +197,12 @@ def validate_label(sample: TrainingSample, snapshot: DatasetSnapshot) -> None:
         if isinstance(action, (CallToolAction, CallToolsAction)):
             for call in action_calls(action):
                 name = ToolName(call.name)
-                if name not in allowed_tools(snapshot.context, snapshot.records):
+                if name not in allowed_tools(snapshot.context, snapshot.records) and not (
+                    sample.review_status == "DRAFT"
+                    and snapshot.context.execution_allowed
+                    and snapshot.context.read_catalog_allowed
+                    and name in {ToolName.SEARCH_WEB, ToolName.READ_WEB_PAGE}
+                ):
                     raise ValueError("TARGET_TOOL_NOT_ALLOWED")
                 TOOL_SCHEMAS[name].model_validate(call.arguments)
         elif isinstance(action, ProposeRequirementsAction):

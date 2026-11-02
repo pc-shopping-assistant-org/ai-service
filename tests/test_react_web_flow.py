@@ -256,8 +256,8 @@ async def test_search_and_read_tool_execution_ledger() -> None:
     )
     ctx = context()
 
-    assert ToolName.SEARCH_WEB in allowed_tools(ctx)
-    assert ToolName.READ_WEB_PAGE in allowed_tools(ctx)
+    assert ToolName.SEARCH_WEB not in allowed_tools(ctx)
+    assert ToolName.READ_WEB_PAGE not in allowed_tools(ctx)
 
     # 1. Execute search_web
     search_call = ToolCall(

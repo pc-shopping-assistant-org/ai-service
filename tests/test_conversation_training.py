@@ -206,5 +206,5 @@ def test_all_pilot_react_labels_roundtrip_without_rewriting_reviewed_data():
         assert snapshot.model_dump(mode="json") == original_snapshot
         checked += 1
     assert checked > 0
-    # Old typed-clarification labels without pending/business context need review.
-    assert needs_review == {"react-13", "react-14", "react-15"}
+    # Old typed-clarification and raw web-read labels need review.
+    assert needs_review == {"react-13", "react-14", "react-15", "react-24"}

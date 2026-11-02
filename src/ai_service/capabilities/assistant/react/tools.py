@@ -2,7 +2,7 @@
 
 import re
 from typing import TypedDict
-from uuid import uuid5
+from uuid import UUID, uuid5
 
 from pydantic import JsonValue, ValidationError
 
@@ -40,6 +40,7 @@ from ai_service.capabilities.web_search.research_contracts import (
 from ai_service.capabilities.web_search.source_policy import ResearchSourcePolicy
 
 from .contracts import (
+    MAX_SELECTED_PRODUCTS,
     TOOL_SCHEMAS,
     AnswerCandidate,
     BuildResult,
@@ -94,8 +95,6 @@ def allowed_tools(
         ToolName.SEARCH_CATALOG,
         ToolName.GET_PRODUCT_DETAILS,
         ToolName.COMPARE_PRODUCTS,
-        ToolName.SEARCH_WEB,
-        ToolName.READ_WEB_PAGE,
         ToolName.RESEARCH_HARDWARE,
         ToolName.RESEARCH_COMPATIBILITY,
         ToolName.RESEARCH_WORKLOAD,
@@ -195,7 +194,12 @@ class ToolDispatcher:
             name = ToolName(call.name)
         except ValueError:
             return rejected(ToolError.UNKNOWN_TOOL)
-        if name not in allowed_tools(context, records):
+        if not context.execution_allowed or not context.read_catalog_allowed:
+            return rejected(ToolError.PREREQUISITE_MISSING)
+        if name not in allowed_tools(context, records) and name not in {
+            ToolName.SEARCH_WEB,
+            ToolName.READ_WEB_PAGE,
+        }:
             return rejected(ToolError.PREREQUISITE_MISSING)
         try:
             args = TOOL_SCHEMAS[name].model_validate(call.arguments)
@@ -256,6 +260,7 @@ class ToolDispatcher:
                 products = [product]
             elif isinstance(args, CompareProductsArgs):
                 products = []
+                seen_ids: set[UUID] = set()
                 for identifier in args.product_ids:
                     found = await self.catalog.get(identifier)
                     if found is None:
@@ -264,6 +269,24 @@ class ToolDispatcher:
                     if found.product_id != identifier:
                         raise ValueError("Canonical product identity mismatch")
                     products.append(found)
+                    seen_ids.add(found.product_id)
+                for query in args.queries:
+                    matches = await self.catalog.search(query, MAX_SELECTED_PRODUCTS)
+                    matches = [
+                        ProductEvidence.model_validate(p.model_dump()) for p in matches
+                    ]
+                    if len(matches) > MAX_SELECTED_PRODUCTS or len(
+                        {p.product_id for p in matches}
+                    ) != len(matches):
+                        raise ValueError("Invalid canonical search projection")
+                    chosen = next(
+                        (p for p in matches if p.product_id not in seen_ids),
+                        None,
+                    )
+                    if chosen is None:
+                        return rejected(ToolError.PRODUCT_NOT_FOUND)
+                    products.append(chosen)
+                    seen_ids.add(chosen.product_id)
                 payload = ComparisonResult(products=products)
             elif isinstance(args, SearchWebArgs):
                 raw = await self.search_client.search(
