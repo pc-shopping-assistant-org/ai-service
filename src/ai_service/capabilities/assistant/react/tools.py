@@ -4,7 +4,7 @@ import re
 from typing import TypedDict
 from uuid import UUID, uuid5
 
-from pydantic import JsonValue, ValidationError
+from pydantic import ValidationError
 
 from ai_service.application.cpu_work import run_cpu
 from ai_service.application.errors import BackendUnavailableError
@@ -404,17 +404,6 @@ class ToolDispatcher:
         )
 
 
-def _display_spec(value: JsonValue) -> str:
-    if isinstance(value, dict):
-        return "; ".join(
-            f"{key.replace('_', ' ')}: {_display_spec(item)}"
-            for key, item in value.items()
-        )
-    if isinstance(value, list):
-        return " · ".join(_display_spec(item) for item in value)
-    return "—" if value is None else str(value)
-
-
 def validate_answer(
     candidate: AnswerCandidate,
     ledger: list[ToolResult],
@@ -624,14 +613,7 @@ def validate_answer(
                     if product.price_vnd is not None
                     else "chưa có giá xác thực"
                 )
-                lines.append(f"\n**{product.name}**: {price}.\n")
-                if product.specifications:
-                    lines.extend(
-                        f"- {key.replace('_', ' ')}: {_display_spec(value)}"
-                        for key, value in product.specifications.items()
-                    )
-                else:
-                    lines.append("Thông số: chưa có dữ liệu xác thực.")
+                lines.append(f"\n**{product.name}**: {price}.")
                 rendered.add(product.evidence_ref)
         elif isinstance(payload, (ReadWebPageResult, SearchWebResult, ResearchResult)):
             continue
@@ -726,10 +708,7 @@ def validate_answer(
             raise ValueError("Explanation must cite selected canonical evidence")
         # Facts/financial output above remain canonical. This is explicitly an
         # LLM interpretation; reference validation is not a factuality guarantee.
-        lines.append(
-            "\nNhận định tư vấn (diễn giải, không phải số liệu benchmark):\n\n"
-            + candidate.explanation.text
-        )
+        lines.append("\n" + candidate.explanation.text)
     return ValidatedAnswer(
         text="\n".join(lines),
         status="COMPLETED",

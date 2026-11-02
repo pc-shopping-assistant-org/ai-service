@@ -457,7 +457,10 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                             and "id: " not in stream.text
                         )
                         if selected:
-                            assert "Nhận định tư vấn" in messages[-1]["content"]
+                            assert (
+                                "Đối chiếu thông số và nhu cầu"
+                                in messages[-1]["content"]
+                            )
                             completed = json.loads(
                                 stream.text.strip()
                                 .split("\n\n")[-1]
