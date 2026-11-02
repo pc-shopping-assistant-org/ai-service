@@ -70,7 +70,7 @@ class HardwareResearchFocus(StrEnum):
 
 
 class ResearchHardwareArgs(Contract):
-    """Search and read reviews/specifications of an exact model, focused on its role."""
+    """Search and read external manufacturer spec sheets and independent hardware reviews/benchmarks (thermals, noise, power draw, real-world performance) for an exact hardware model. Use catalog tools instead for store price, stock, or side-by-side store product comparison."""
 
     model: ResearchSubject
     focus: HardwareResearchFocus = HardwareResearchFocus.GENERAL
