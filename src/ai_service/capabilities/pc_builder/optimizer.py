@@ -27,6 +27,7 @@ from ai_service.capabilities.pc_builder.pruning import (
 from ai_service.capabilities.pc_builder.schemas import (
     BuildObjective,
     CompatibilityStatus,
+    FeasibleBuild,
     MetricEvidence,
     OptimizationResult,
     OptimizerSearchTrace,
@@ -566,9 +567,9 @@ def score_build(
 
 def _generate_factual_evidence(
     parts: dict[ComponentCategory, ComponentSpec],
-    objective: BuildObjective,
+    objective: BuildObjective | None,
     power: PowerEstimate,
-    score: float,
+    score: float | None,
     breakdown: ScoreBreakdown | None = None,
 ) -> list[MetricEvidence]:
     """Generate factual metric evidence strictly computed from component specifications and sizing formulas."""
@@ -586,7 +587,7 @@ def _generate_factual_evidence(
             label=f"Điểm tối ưu ({objective})",
             source="scoring_engine",
         ),
-    ]
+    ] if score is not None else []
 
     if breakdown:
         for dim in breakdown.dimensions:
@@ -770,15 +771,16 @@ class DeterministicPCOptimizer:
         }
 
         evaluated_combinations = 0
+        feasible_record: tuple[tuple[Any, ...], dict[ComponentCategory, ComponentSpec], PowerEstimate] | None = None
 
         # Deterministic constrained enumeration with early budget and compatibility pruning
         for cpu in cpus:
             if cpu.has_integrated_graphics and (
-                cpu.integrated_graphics_score is None or cpu.integrated_graphics_power_watts is None
+                cpu.integrated_graphics_power_watts is None
             ):
                 metadata_rejections += 1
             if cpu.includes_stock_cooler and (
-                cpu.stock_cooler_height_mm is None or cpu.stock_cooler_score is None
+                cpu.stock_cooler_height_mm is None
             ):
                 metadata_rejections += 1
             # Build GPU options: dedicated catalog GPUs plus iGPU only if CPU has integrated graphics
@@ -788,7 +790,6 @@ class DeterministicPCOptimizer:
                 available_gpus = list(catalog_gpus)
                 if (
                     cpu.has_integrated_graphics
-                    and cpu.integrated_graphics_score is not None
                     and cpu.integrated_graphics_power_watts is not None
                 ):
                     igpu_spec = ComponentSpec(
@@ -819,7 +820,6 @@ class DeterministicPCOptimizer:
                 if (
                     cpu.includes_stock_cooler
                     and cpu.stock_cooler_height_mm is not None
-                    and cpu.stock_cooler_score is not None
                     and (cpu.stock_cooler_tdp_watts is None or cpu.stock_cooler_tdp_watts >= (cpu.tdp_watts or 65))
                 ):
                     stock_cooler = ComponentSpec(
@@ -953,6 +953,8 @@ class DeterministicPCOptimizer:
 
                                         evaluated_combinations += 1
                                         tie_key = build_tie_key(full_parts, total_spending)
+                                        if feasible_record is None or tie_key < feasible_record[0]:
+                                            feasible_record = (tie_key, full_parts, power)
 
                                         # Score for all three objectives
                                         for obj in BuildObjective:
@@ -999,10 +1001,23 @@ class DeterministicPCOptimizer:
                     spending_prices={cat: get_spending_price(cat, part) for cat, part in parts.items()},
                 )
 
+        feasible_build = None
+        if not ranked_builds and feasible_record is not None:
+            _, parts, p_est = feasible_record
+            feasible_build = FeasibleBuild(
+                total_price=sum(get_spending_price(cat, part) for cat, part in parts.items()),
+                parts=parts,
+                power_estimate=p_est,
+                evidence=_generate_factual_evidence(parts, None, p_est, None),
+                compatibility_status=CompatibilityStatus.COMPATIBLE,
+                owned_categories=list(owned_map),
+                spending_prices={cat: get_spending_price(cat, part) for cat, part in parts.items()},
+            )
         result = OptimizationResult(
             target_budget_vnd=budget,
             use_case=profile,
             builds=ranked_builds,
+            feasible_build=feasible_build,
             candidates_evaluated=evaluated_combinations,
             pruned_count=total_pruned_candidates,
             rejected_candidates=list(dict.fromkeys(rejected_candidates)),
@@ -1014,7 +1029,7 @@ class DeterministicPCOptimizer:
                 pool_variant_ids={cat: [part.id for part in parts] for cat, parts in pruned_pools.items()},
             ),
         )
-        if not ranked_builds:
+        if not ranked_builds and feasible_build is None:
             if missing_case_support:
                 raise CaseSupportMetadataError()
             raise NoFeasibleBuildError(result)

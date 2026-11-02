@@ -12,7 +12,71 @@ from ai_service.capabilities.assistant.requirements.resolver import RequirementD
 from ai_service.infrastructure.commerce.hardware_catalog import (
     BackendRequirementCatalog,
     HardwareCatalogMapping,
+    HardwareDetail,
 )
+
+
+@pytest.mark.parametrize("hardware_type", ["SSD", "HDD"])
+def test_storage_master_types_map_to_optimizer_storage_with_canonical_media(
+    hardware_type,
+):
+    product = uuid4()
+    detail = HardwareDetail.model_validate(
+        {
+            "id": str(product),
+            "name": "Storage",
+            "categoryId": str(uuid4()),
+            "hardwareType": hardware_type,
+            "status": "ACTIVE",
+            "specifications": {"capacity_gb": 1000, "form_factor": "M.2"},
+            "variants": [
+                {
+                    "id": str(uuid4()),
+                    "productId": str(product),
+                    "sku": "DRIVE",
+                    "price": 1000000,
+                    "quantity": 10,
+                    "status": "ACTIVE",
+                }
+            ],
+        }
+    )
+    catalog = BackendRequirementCatalog(
+        None, "https://catalog.test", Budget(), HardwareCatalogMapping()
+    )
+    rows = catalog._map(detail)
+    assert len(rows) == 1
+    assert rows[0].component.category == "STORAGE"
+    assert rows[0].component.extra_specs["storage_media"] == hardware_type
+    assert rows[0].component.capacity_gb == 1000
+
+
+def test_catalog_gpu_preserves_fractional_millimetres_without_rounding():
+    product = uuid4()
+    detail = HardwareDetail.model_validate(
+        {
+            "id": str(product),
+            "name": "GPU",
+            "categoryId": str(uuid4()),
+            "hardwareType": "GPU",
+            "status": "ACTIVE",
+            "specifications": {"gpu_length_mm": 333.5},
+            "variants": [
+                {
+                    "id": str(uuid4()),
+                    "productId": str(product),
+                    "sku": "GPU",
+                    "price": 8000000,
+                    "quantity": 10,
+                    "status": "ACTIVE",
+                }
+            ],
+        }
+    )
+    catalog = BackendRequirementCatalog(
+        None, "http://catalog.test", Budget(), HardwareCatalogMapping()
+    )
+    assert catalog._map(detail)[0].component.gpu_length_mm == 333.5
 
 
 @pytest.mark.asyncio

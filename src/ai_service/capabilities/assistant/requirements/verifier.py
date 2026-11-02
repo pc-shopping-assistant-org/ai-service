@@ -2,7 +2,7 @@
 
 from uuid import UUID, uuid5
 
-from pydantic import Field
+from pydantic import Field, TypeAdapter
 
 from ai_service.application.ports.accessories import AccessorySpec, AccessoryType
 from ai_service.application.ports.hardware import ComponentCategory, ComponentSpec
@@ -14,7 +14,7 @@ from ai_service.capabilities.pc_builder.optimizer import (
     check_compatibility_status,
     stable_component_id,
 )
-from ai_service.capabilities.pc_builder.schemas import RankedBuild, UseCaseProfile
+from ai_service.capabilities.pc_builder.schemas import SelectedBuild, UseCaseProfile
 
 from .compiler import Compilation, predicate_value
 from .contracts import (
@@ -59,11 +59,7 @@ def _synthetic_matches(
             is_integrated=True,
             brand=cpu.brand,
         )
-        return (
-            cpu.integrated_graphics_score is not None
-            and cpu.integrated_graphics_power_watts is not None
-            and part == expected
-        )
+        return cpu.integrated_graphics_power_watts is not None and part == expected
     if category == ComponentCategory.COOLER and cpu.includes_stock_cooler:
         expected = ComponentSpec(
             id=uuid5(SYNTHETIC_NAMESPACE, f"{stable_component_id(cpu)}:stock_cooler"),
@@ -76,24 +72,22 @@ def _synthetic_matches(
             supported_sockets=[cpu.socket] if cpu.socket else [],
             brand=cpu.brand,
         )
-        return (
-            cpu.stock_cooler_height_mm is not None
-            and cpu.stock_cooler_score is not None
-            and part == expected
-        )
+        return cpu.stock_cooler_height_mm is not None and part == expected
     return False
 
 
 def verify_satisfaction(
     state: CanonicalRequirementState,
     compilation: Compilation,
-    build: RankedBuild,
+    build: SelectedBuild,
     catalog: list[CatalogRowV1],
     *,
     observed_use_case: UseCaseProfile,
 ) -> SatisfactionReport:
     state = CanonicalRequirementState.model_validate(state.model_dump())
-    build = RankedBuild.model_validate(build.model_dump())
+    build = TypeAdapter[SelectedBuild](SelectedBuild).validate_python(
+        build.model_dump()
+    )
     state_hash = canonical_hash(state.model_dump(mode="json"))
     report = SatisfactionReport(state_hash=state_hash, results=[])
     if set(build.parts) != set(ComponentCategory):

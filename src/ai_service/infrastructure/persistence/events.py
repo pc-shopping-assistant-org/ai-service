@@ -83,7 +83,15 @@ async def append_run_event(
         original = stored.envelope.data.model_dump(
             mode="json", exclude={"run_id", "conversation_id", "sequence"}
         )
-        if canonical_hash(original) != canonical_hash(payload):
+        normalized = _events.validate_python(
+            payload
+            | {
+                "run_id": run_id,
+                "conversation_id": run["conversation_id"],
+                "sequence": stored.sequence,
+            }
+        ).model_dump(mode="json", exclude={"run_id", "conversation_id", "sequence"})
+        if canonical_hash(original) != canonical_hash(normalized):
             raise ValueError("Event dedup key reused with different payload")
         return stored
     sequence = (

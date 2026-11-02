@@ -4,7 +4,7 @@ import re
 from typing import TypedDict
 from uuid import uuid5
 
-from pydantic import ValidationError
+from pydantic import JsonValue, ValidationError
 
 from ai_service.application.cpu_work import run_cpu
 from ai_service.application.errors import BackendUnavailableError
@@ -42,7 +42,6 @@ from ai_service.capabilities.web_search.source_policy import ResearchSourcePolic
 from .contracts import (
     TOOL_SCHEMAS,
     AnswerCandidate,
-    BuildPCArgs,
     BuildResult,
     CatalogResult,
     CompareProductsArgs,
@@ -109,10 +108,13 @@ def allowed_tools(
         for item in project_current_tools(records or [], context)
     ):
         names += (ToolName.RESEARCH_PC_BUILD,)
-    if (
-        context.catalog_ready
-        and compile_requirements(context.requirements, context.catalog).ready
-    ) or (not context.catalog_ready and build_needs_catalog(context.requirements)):
+    if not context.read_only_turn and (
+        (
+            context.catalog_ready
+            and compile_requirements(context.requirements, context.catalog).ready
+        )
+        or (not context.catalog_ready and build_needs_catalog(context.requirements))
+    ):
         names += (ToolName.BUILD_PC,)
     return names
 
@@ -199,10 +201,6 @@ class ToolDispatcher:
             args = TOOL_SCHEMAS[name].model_validate(call.arguments)
         except ValidationError:
             return rejected(ToolError.BAD_ARGUMENTS)
-        # V1 cannot silently change a versioned recommendation policy using a
-        # model hint. Explicit unsupported hints are rejected, never ignored.
-        if isinstance(args, BuildPCArgs) and args.objective is not None:
-            return rejected(ToolError.BAD_ARGUMENTS)
         try:
             payload: (
                 CatalogResult
@@ -214,7 +212,31 @@ class ToolDispatcher:
                 | ResearchResult
             )
             if isinstance(args, SearchCatalogArgs):
-                products = await self.catalog.search(args.query, args.limit)
+                has_extra_filters = any(
+                    (
+                        args.semantic_query is not None,
+                        args.brand is not None,
+                        args.category is not None,
+                        args.min_price is not None,
+                        args.max_price is not None,
+                        args.in_stock_only,
+                    )
+                )
+                if has_extra_filters:
+                    products = await self.catalog.search(
+                        args.query or "",
+                        args.limit,
+                        semantic_query=args.semantic_query,
+                        brand=args.brand,
+                        category=args.category,
+                        min_price=args.min_price,
+                        max_price=args.max_price,
+                        in_stock_only=args.in_stock_only,
+                    )
+                else:
+                    products = await self.catalog.search(
+                        args.query or args.semantic_query or "*", args.limit
+                    )
                 products = [
                     ProductEvidence.model_validate(p.model_dump()) for p in products
                 ]
@@ -357,6 +379,17 @@ class ToolDispatcher:
             result=payload,
             evidence_refs=[p.evidence_ref for p in products],
         )
+
+
+def _display_spec(value: JsonValue) -> str:
+    if isinstance(value, dict):
+        return "; ".join(
+            f"{key.replace('_', ' ')}: {_display_spec(item)}"
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return " · ".join(_display_spec(item) for item in value)
+    return "—" if value is None else str(value)
 
 
 def validate_answer(
@@ -568,9 +601,14 @@ def validate_answer(
                     if product.price_vnd is not None
                     else "chưa có giá xác thực"
                 )
-                lines.append(
-                    f"{product.name}: {price}. Thông số: {product.specifications or 'chưa có dữ liệu xác thực'}."
-                )
+                lines.append(f"\n**{product.name}**: {price}.\n")
+                if product.specifications:
+                    lines.extend(
+                        f"- {key.replace('_', ' ')}: {_display_spec(value)}"
+                        for key, value in product.specifications.items()
+                    )
+                else:
+                    lines.append("Thông số: chưa có dữ liệu xác thực.")
                 rendered.add(product.evidence_ref)
         elif isinstance(payload, (ReadWebPageResult, SearchWebResult, ResearchResult)):
             continue
@@ -666,7 +704,7 @@ def validate_answer(
         # Facts/financial output above remain canonical. This is explicitly an
         # LLM interpretation; reference validation is not a factuality guarantee.
         lines.append(
-            "Nhận định tư vấn (diễn giải, không phải số liệu benchmark):\n"
+            "\nNhận định tư vấn (diễn giải, không phải số liệu benchmark):\n\n"
             + candidate.explanation.text
         )
     return ValidatedAnswer(

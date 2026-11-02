@@ -6,10 +6,12 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field, StrictBool, model_validator
+from pydantic import AwareDatetime, ConfigDict, Field, StrictBool, model_validator
 
 from ai_service.application.ports.hardware import ComponentCategory, ResolutionTier
 from ai_service.capabilities.assistant.conversation_core import ConsultationStateV1
+from ai_service.capabilities.assistant.limits import MAX_SELECTED_PRODUCTS
+from ai_service.capabilities.assistant.schemas import ProductCard
 from ai_service.capabilities.assistant.stateful_contracts import (
     AccessoryRequestV1,
     AccessoryType,
@@ -22,7 +24,11 @@ from ai_service.capabilities.assistant.stateful_contracts import (
     RunStatus,
     Text,
 )
-from ai_service.capabilities.pc_builder.schemas import BuildObjective, UseCaseProfile
+from ai_service.capabilities.pc_builder.schemas import (
+    BuildObjective,
+    RankingStatus,
+    UseCaseProfile,
+)
 
 
 class PublicConsultationV1(Contract):
@@ -98,13 +104,25 @@ class PublicBuildPartV1(Contract):
 
 
 class PublicBuildV1(Contract):
-    objective: BuildObjective
+    # Ranked snapshots omit the default flag to preserve their historical hashes.
+    model_config = ConfigDict(
+        json_schema_extra={
+            "required": ["objective", "parts", "total_spending_vnd", "stale"]
+        }
+    )
+    objective: BuildObjective | None
+    ranking_status: RankingStatus = Field(
+        default=RankingStatus.RANKED,
+        exclude_if=lambda value: value == RankingStatus.RANKED,
+    )
     parts: list[PublicBuildPartV1] = Field(min_length=1)
     total_spending_vnd: NonNegativeInt
     stale: StrictBool
 
     @model_validator(mode="after")
     def validate_total(self) -> PublicBuildV1:
+        if (self.objective is None) != (self.ranking_status == RankingStatus.UNRANKED):
+            raise ValueError("Ranking status must match the presence of an objective")
         if len({part.slot for part in self.parts}) != len(self.parts):
             raise ValueError("V1 permits one selected part per slot/type")
         if self.total_spending_vnd != sum(part.spending_vnd for part in self.parts):
@@ -209,6 +227,10 @@ class MessageViewV1(Contract):
     role: Literal["user", "assistant"]
     content: Text
     created_at: AwareDatetime
+    selected_product_ids: list[UUID] = Field(
+        default_factory=list, max_length=MAX_SELECTED_PRODUCTS
+    )
+    products: list[ProductCard] = Field(default_factory=list)
 
 
 class StatefulErrorCode(StrEnum):
@@ -247,6 +269,8 @@ class RunStartedV1(EventIdentityV1):
 class TextDeltaV1(EventIdentityV1):
     event: Literal["DELTA"]
     delta: Annotated[str, Field(strict=True, min_length=1)]
+    is_draft: bool = False
+    replace: bool = False
 
 
 class RunCompletedV1(EventIdentityV1):
@@ -263,9 +287,16 @@ class RunCompletedV1(EventIdentityV1):
         return self
 
 
+class RunFailureReason(StrEnum):
+    MODEL_TIMEOUT = "MODEL_TIMEOUT"
+    MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE"
+    PROCESSING_FAILED = "PROCESSING_FAILED"
+
+
 class RunErrorV1(EventIdentityV1):
     event: Literal["ERROR"]
     code: StatefulErrorCode
+    reason: RunFailureReason | None = None
 
 
 type StatefulEventV1 = Annotated[

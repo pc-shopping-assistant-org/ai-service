@@ -7,8 +7,10 @@ from test_react_tools import Catalog, context
 
 from ai_service.capabilities.assistant.react.contracts import ToolCall, ToolRecord
 from ai_service.capabilities.assistant.react.submissions import (
+    ResultSelection,
     SubmitResults,
     derive_final_action,
+    resolve_result_selection,
 )
 from ai_service.capabilities.assistant.react.tools import ToolDispatcher
 from ai_service.capabilities.pc_builder.application.service import (
@@ -48,6 +50,23 @@ async def test_application_derives_catalog_outcome_from_canonical_selection():
     action = derive_final_action(submission, [ToolRecord(call=call, result=result)])
     assert action.outcome == "ANSWERED"
     assert action.answer.evidence_refs == result.evidence_refs
+
+
+@pytest.mark.asyncio
+async def test_omitted_selection_never_chooses_between_multiple_catalog_results():
+    dispatcher = ToolDispatcher(Catalog(), PCBuildApplicationService())
+    records = []
+    for identifier in ("first", "second"):
+        call = ToolCall(
+            call_id=identifier, name="search_catalog", arguments={"query": "GPU"}
+        )
+        result = await dispatcher.execute(call, context())
+        records.append(ToolRecord(call=call, result=result))
+    selection, selected = resolve_result_selection(
+        ResultSelection(text="Answer without an explicit choice"), records
+    )
+    assert selected == []
+    assert selection.evidence_refs == []
 
 
 @pytest.mark.parametrize("status", ["UNKNOWN", "CONFLICT"])

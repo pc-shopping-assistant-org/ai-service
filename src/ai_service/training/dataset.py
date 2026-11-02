@@ -22,7 +22,6 @@ from ai_service.capabilities.assistant.react.actions import (
 )
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
-    BuildPCArgs,
     CompletionRequirement,
     ToolContext,
     ToolName,
@@ -200,12 +199,7 @@ def validate_label(sample: TrainingSample, snapshot: DatasetSnapshot) -> None:
                 name = ToolName(call.name)
                 if name not in allowed_tools(snapshot.context, snapshot.records):
                     raise ValueError("TARGET_TOOL_NOT_ALLOWED")
-                arguments = TOOL_SCHEMAS[name].model_validate(call.arguments)
-                if (
-                    isinstance(arguments, BuildPCArgs)
-                    and arguments.objective is not None
-                ):
-                    raise ValueError("UNSUPPORTED_BUILD_OBJECTIVE")
+                TOOL_SCHEMAS[name].model_validate(call.arguments)
         elif isinstance(action, ProposeRequirementsAction):
             validate_requirement_draft(
                 action.draft, action.source_text or sample.message, snapshot.context

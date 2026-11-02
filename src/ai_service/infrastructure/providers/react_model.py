@@ -1,6 +1,7 @@
 """Text and native calls at the model boundary; application owns outcomes."""
 
 import json
+import logging
 from itertools import groupby
 from typing import Any, Protocol, cast
 
@@ -58,11 +59,17 @@ from ai_service.capabilities.assistant.source_quotes import (
     project_requirement_draft,
 )
 from ai_service.infrastructure.providers.failures import invoke_provider
+from ai_service.infrastructure.providers.model_stream import (
+    BoundModel,
+    TextStreamSink,
+    stream_public_text,
+)
 from ai_service.infrastructure.providers.tool_projection import observation_json
 from ai_service.infrastructure.providers.tool_schema import model_tool_schema
 
 GEMINI_SIGNATURES_KEY = "__gemini_function_call_thought_signatures__"
-REACT_PROTOCOL_VERSION = "compact-native-tools-v5"
+REACT_PROTOCOL_VERSION = "compact-native-tools-v6"
+logger = logging.getLogger(__name__)
 
 REACT_SYSTEM_PROMPT = (
     "You are the gearPC assistant. Respond naturally in the user's language. "
@@ -73,6 +80,10 @@ REACT_SYSTEM_PROMPT = (
     "For requested catalog, comparison or build results, use the appropriate tools "
     "and submit_result with selected evidence. Do not substitute generic advice "
     "for a requested build. Ask for missing required input. "
+    "A core build requires budget and workload. Brand, appearance and paid accessories "
+    "are optional; do not delay a requested build to ask about them. When requirements "
+    "are admitted and build_pc is available, call it and then submit its result. "
+    "Do not end with a promise to search or build later: work stops when you reply. "
     "Use native tool_calls arrays for independent operations, for example search_catalog "
     "for two products in the SAME response. Observe all results before choosing dependent "
     "calls. State-changing controls must be a separate response: merge requirements "
@@ -84,8 +95,14 @@ REACT_SYSTEM_PROMPT = (
     "never invent user authorization, confirm a proposal or discard pending work. "
     "For proposed requirements return exact evidence quotes, not character offsets; "
     "include surrounding text if a quote repeats. "
-    "Catalog tools establish current prices/stock/identity. Saved build prices are "
-    "historical. Research tools search manufacturers then scoped independent sources; "
+    "Catalog tools establish current prices/stock/identity. When calling search_catalog, "
+    "pass a concise product or category noun in query (e.g. 'tai nghe', 'RTX 4070', or '*' "
+    "for general catalog listing), natural-language use-case descriptions in semantic_query, "
+    "and structured constraints in brand, category, min_price, max_price and in_stock_only "
+    "instead of stuffing price phrases into query. Saved build prices are "
+    "historical. UNRANKED builds establish budget/compatibility only; do not claim "
+    "optimal performance, benchmark scores or FPS for them. Research tools search "
+    "manufacturers then scoped independent sources; "
     "search snippets are not evidence. Read pages before citing them, preserve exact "
     "web_excerpts and select returned fact refs. Missing benchmark conditions remain "
     "unknown; never invent FPS or guarantee compatibility. Use explanation for "
@@ -224,6 +241,22 @@ def build_react_request(
             }
         )
     instruction = REACT_SYSTEM_PROMPT
+    instruction += " Execution limits (data): " + json.dumps(
+        {
+            "max_tool_calls_per_batch": limits.max_tool_calls_per_batch,
+            "remaining_tool_calls": max(
+                0,
+                limits.max_tool_calls
+                - len(
+                    [
+                        record
+                        for record in records
+                        if context is None or record.origin_run_id == context.run_id
+                    ]
+                ),
+            ),
+        }
+    )
     if repair:
         instruction += " Application validation feedback: " + repair.model_dump_json()
     controls: list[ControlRecord] = []
@@ -318,10 +351,6 @@ def build_react_request(
     return messages, schemas
 
 
-class BoundModel(Protocol):
-    async def ainvoke(self, input: list[BaseMessage]) -> AIMessage: ...
-
-
 class ToolCallingModel(BoundModel, Protocol):
     def bind_tools(self, tools: list[dict[str, Any]], **kwargs: Any) -> BoundModel: ...
 
@@ -376,7 +405,7 @@ def parse_flexible_response(
             if len(calls) == 1 and calls[0].name in allowed_controls(
                 records, context, repair
             ):
-                decision = normalize_control(calls[0], records, message)
+                decision = normalize_control(calls[0], records, message, context)
             elif not any(call.name in CONTROL_SCHEMAS for call in calls):
                 decision = FlexibleDecision(action=CallToolsAction(calls=calls))
             else:
@@ -395,17 +424,34 @@ def parse_flexible_response(
         ):
             return None
         return decision
-    except (ValidationError, ValueError, KeyError, TypeError):
+    except (ValidationError, ValueError, KeyError, TypeError) as error:
+        locations = (
+            [".".join(map(str, entry["loc"])) for entry in error.errors()]
+            if isinstance(error, ValidationError)
+            else []
+        )
+        logger.warning(
+            "model.response_rejected error_type=%s fields=%s",
+            type(error).__name__,
+            locations,
+        )
         return None
 
 
 class NativeFlexibleModel:
     """One native invocation; LangGraph owns retries, budgets and publication."""
 
-    def __init__(self, provider: ModelProvider, limits: ReactLimits | None = None):
+    def __init__(
+        self,
+        provider: ModelProvider,
+        limits: ReactLimits | None = None,
+        *,
+        text_sink: TextStreamSink | None = None,
+    ):
         self.provider = provider
         self.limits = limits or ReactLimits()
         self._model: ToolCallingModel | None = None
+        self.text_sink = text_sink
 
     async def decide(
         self,
@@ -426,13 +472,21 @@ class NativeFlexibleModel:
         )
         if self._model is None:
             self._model = cast(ToolCallingModel, self.provider.create_model())
-        options = (
+        options: dict[str, Any] = (
             {"parallel_tool_calls": True}
             if self.provider.name in {"openai", "qwen"}
             else {}
         )
+        if repair and repair.allowed_next_actions == [ActionKind.FINAL_ANSWER]:
+            options["tool_choice"] = ControlName.SUBMIT_RESULT.value
         bound = self._model.bind_tools(schemas, **options) if schemas else self._model
-        response = await invoke_provider(lambda: bound.ainvoke(messages))
+        response = await invoke_provider(
+            lambda: (
+                stream_public_text(bound, messages, self.text_sink)
+                if self.text_sink is not None
+                else bound.ainvoke(messages)
+            )
+        )
         return parse_flexible_response(
             response,
             allowed,

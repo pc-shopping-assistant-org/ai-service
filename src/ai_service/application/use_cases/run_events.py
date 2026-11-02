@@ -15,7 +15,7 @@ from ai_service.application.ports.stateful_conversation import StatefulRunStore
 from ai_service.capabilities.assistant.schemas import ChatStreamEventType
 from ai_service.capabilities.assistant.stateful_contracts import RunStatus
 
-DEFAULT_POLL_SECONDS = 1.0
+DEFAULT_POLL_SECONDS = 0.2
 DEFAULT_HEARTBEAT_SECONDS = 15.0
 
 _terminal = {

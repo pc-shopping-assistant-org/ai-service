@@ -96,10 +96,10 @@ class TurnResultV2(TurnResultV1):
 
 
 def public_tool_products(
-    records: list[ToolRecord], evidence_refs: list[str]
+    records: list[ToolRecord], evidence_refs: list[str] | None
 ) -> list[ProductCard]:
-    """Only products actually selected by the validated final answer."""
-    selected = set(evidence_refs)
+    """Cards are canonical read evidence, never IDs inferred from model prose."""
+    selected = set(evidence_refs) if evidence_refs is not None else None
     products = {}
     for record in records:
         result = record.result
@@ -114,7 +114,7 @@ def public_tool_products(
             else []
         )
         for item in items:
-            if item.evidence_ref in selected:
+            if selected is None or item.evidence_ref in selected:
                 products[item.product_id] = ProductCard(
                     id=item.product_id,
                     name=item.name,
@@ -122,7 +122,7 @@ def public_tool_products(
                     specifications=item.specifications,
                     status="ACTIVE",
                 )
-    return list(products.values())[:20]
+    return list(products.values())[:MAX_PUBLIC_PRODUCTS]
 
 
 class RunCompletedV2(RunCompletedV1):

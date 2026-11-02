@@ -17,11 +17,14 @@ from .actions import (
 from .contracts import (
     AnswerCandidate,
     BuildResult,
+    CatalogResult,
     ComparisonResult,
     CompletionRequirement,
     ConsultationExplanation,
+    DetailsResult,
     ProductReview,
     ToolContext,
+    ToolName,
     ToolRecord,
     WebExcerpt,
     result_web_pages,
@@ -36,10 +39,18 @@ def evidence_requirements(
     """Derive completion checks from canonical operations, never a task LLM call.
 
     Fixed UI/pending tasks take precedence at the caller. Internal searches do not
-    become separate user tasks; only submitted outcomes select completion checks.
+    become separate tasks. A started build remains an obligation through repairs;
+    a later plain response cannot bypass its result-completion check.
     """
+    started_build = any(
+        row.call.name == ToolName.BUILD_PC and row.origin_run_id == context.run_id
+        for row in records
+    )
+    build_task = CompletionRequirement(
+        kind="BUILD", constraints_revision=context.requirements.revision
+    )
     if not value:
-        return []
+        return [build_task] if started_build else []
     action = decode_flexible_decision(value).action
     if isinstance(action, AskClarificationAction):
         return [
@@ -48,7 +59,7 @@ def evidence_requirements(
             )
         ]
     if not isinstance(action, FinalAnswerAction):
-        return []
+        return [build_task] if started_build else []
     parts: list[TaskFinalCandidate | FinalAnswerAction] = (
         list(action.task_answers) if action.task_answers else [action]
     )
@@ -87,6 +98,8 @@ def evidence_requirements(
         else:
             task = CompletionRequirement(kind="ANSWER")
         tasks.append(task)
+    if started_build and not any(task.kind == "BUILD" for task in tasks):
+        tasks.append(build_task)
     return tasks
 
 
@@ -126,11 +139,10 @@ def selected_answer(selection: ResultSelection) -> AnswerCandidate:
     )
 
 
-def _derive_part(
+def resolve_result_selection(
     selection: ResultSelection, records: list[ToolRecord]
-) -> TaskFinalCandidate:
-    if selection.task_index is None:
-        raise ValueError("Conversation response is not a business-task outcome")
+) -> tuple[ResultSelection, list[ToolRecord]]:
+    """Resolve model-selected calls into canonical evidence for every answer lane."""
     by_id = {record.call.call_id: record for record in records}
     ids = selection.supporting_tool_call_ids
     if (
@@ -139,7 +151,22 @@ def _derive_part(
         or not set(ids) <= by_id.keys()
     ):
         raise ValueError("Submission requires canonical unique tool selections")
-    refs = set(selection.evidence_refs)
+    refs = set(selection.evidence_refs) | set(selection.explanation_evidence_refs or [])
+    if not ids and not refs and selection.build_ref is None:
+        # One completed canonical operation has no selection ambiguity. Final
+        # task/identity validation still decides whether it fulfills this request.
+        candidates = [
+            record
+            for record in records
+            if record.result
+            and record.result.status == "COMPLETED"
+            and isinstance(
+                record.result.result,
+                (BuildResult, CatalogResult, DetailsResult, ComparisonResult),
+            )
+        ]
+        if len(candidates) == 1:
+            ids = [candidates[0].call.call_id]
     selected = [
         record
         for record in records
@@ -153,8 +180,50 @@ def _derive_part(
             )
         )
     ]
+    # Selecting a canonical result by call ID/build ref also selects its evidence.
+    # Do not require the model to copy the same reference into a second field.
+    resolved_selection = selection
+    if not selection.evidence_refs and any(
+        record.result
+        and isinstance(
+            record.result.result,
+            (BuildResult, CatalogResult, DetailsResult, ComparisonResult),
+        )
+        for record in selected
+    ):
+        resolved_selection = selection.model_copy(
+            update={
+                "evidence_refs": list(
+                    dict.fromkeys(
+                        ref
+                        for record in selected
+                        if record.result
+                        and isinstance(
+                            record.result.result,
+                            (
+                                BuildResult,
+                                CatalogResult,
+                                DetailsResult,
+                                ComparisonResult,
+                            ),
+                        )
+                        for ref in record.result.evidence_refs
+                    )
+                )
+            }
+        )
+    return resolved_selection, selected
+
+
+def _derive_part(
+    selection: ResultSelection, records: list[ToolRecord]
+) -> TaskFinalCandidate:
+    if selection.task_index is None:
+        raise ValueError("Conversation response is not a business-task outcome")
+    resolved_selection, selected = resolve_result_selection(selection, records)
     outcome: FinalOutcome = "ANSWERED"
-    supporting = list(ids)
+    refs = set(resolved_selection.evidence_refs)
+    supporting = list(selection.supporting_tool_call_ids)
     build_ref = selection.build_ref
     for record in selected:
         result = record.result
@@ -189,7 +258,9 @@ def _derive_part(
             )
             else "INSUFFICIENT_EVIDENCE"
         )
-    candidate = selected_answer(selection).model_copy(update={"build_ref": build_ref})
+    candidate = selected_answer(resolved_selection).model_copy(
+        update={"build_ref": build_ref}
+    )
     return TaskFinalCandidate(
         task_index=selection.task_index,
         outcome=outcome,

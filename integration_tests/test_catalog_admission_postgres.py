@@ -26,6 +26,16 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
     owner, calls, outbound = uuid4(), [], []
 
     class Model:
+        async def astream(self, messages):
+            from langchain_core.messages import AIMessageChunk
+
+            response = await self.ainvoke(messages)
+            yield AIMessageChunk(
+                content=response.content,
+                tool_calls=response.tool_calls,
+                additional_kwargs=response.additional_kwargs,
+            )
+
         def bind_tools(self, tools, **kwargs):
             self.tools = {tool["name"] for tool in tools}
             return self

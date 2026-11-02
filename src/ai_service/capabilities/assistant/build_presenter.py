@@ -109,6 +109,7 @@ def to_public_build(stage: OptimizationStage) -> PublicBuildV1 | None:
         raise ValueError("Resolved accessory spending mismatch")
     return PublicBuildV1(
         objective=build.objective,
+        ranking_status=build.ranking_status,
         parts=parts,
         total_spending_vnd=build.total_price + accessory_spending,
         stale=state.build_stale,

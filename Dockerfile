@@ -20,12 +20,15 @@ FROM python:3.12-slim-bookworm AS runtime
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/var/cache/ai-service/huggingface
 
 WORKDIR /app
 
 RUN addgroup --system app \
-    && adduser --system --ingroup app app
+    && adduser --system --ingroup app app \
+    && mkdir -p /var/cache/ai-service/huggingface \
+    && chown -R app:app /var/cache/ai-service
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --chown=app:app alembic.ini ./
@@ -35,7 +38,7 @@ USER app
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"
 
 CMD ["uvicorn", "ai_service.main:app", "--host", "0.0.0.0", "--port", "8000"]

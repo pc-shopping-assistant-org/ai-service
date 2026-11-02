@@ -82,6 +82,9 @@ class FlexiblePublicationInput(Contract):
     unit_reply: UnitClarificationReplyV1 | None = None
     task_reply: TaskClarificationReplyV1 | None = None
     discard_pending: StrictBool = False
+    read_only_turn: StrictBool = Field(
+        default=False, exclude_if=lambda value: not value
+    )
 
     @property
     def dialogue_continuation(self) -> bool:
@@ -89,6 +92,7 @@ class FlexiblePublicationInput(Contract):
             self.accepted.flexible
             and self.accepted.flexible.status == "WAITING_INPUT"
             and not self.discard_pending
+            and not self.read_only_turn
             and not any(
                 value is not None
                 for value in (
@@ -132,12 +136,16 @@ class FlexiblePublicationInput(Contract):
             raise ValueError(
                 "Request and accepted snapshot belong to different conversations"
             )
+        read_only = bool(request.selected_product_ids)
         pending = (
             accepted.flexible
-            if accepted.flexible and accepted.flexible.status == "WAITING_INPUT"
+            if not read_only
+            and accepted.flexible
+            and accepted.flexible.status == "WAITING_INPUT"
             else None
         )
         return cls(
+            read_only_turn=read_only,
             discard_pending=discard,
             accepted=accepted,
             task_message_id=pending.task_message_id if pending else request.request_id,
@@ -154,7 +162,7 @@ class FlexiblePublicationInput(Contract):
     ) -> dict:
         if self.accepted.requirement_state != context.requirements:
             raise ValueError("Publication input differs from accepted requirements")
-        pending = self.accepted.flexible
+        pending = None if self.read_only_turn else self.accepted.flexible
         if pending:
             if pending.conversation_id != context.conversation_id:
                 raise ValueError("Accepted conversation identity mismatch")
@@ -220,6 +228,36 @@ class FlexiblePublicationInput(Contract):
         if values.get("message") != self.request_message:
             raise ValueError("Graph request differs from the stored request")
         pending = self.accepted.flexible
+        if self.read_only_turn:
+            if (
+                values.get("user_receipts")
+                or context.requirements != self.accepted.requirement_state
+            ):
+                raise ValueError("Product reads cannot mutate accepted requirements")
+            prepared_read = prepare_answer_publication(
+                values, self.accepted, context, tasks, service
+            )
+            if pending and pending.status == "WAITING_INPUT":
+                return AcceptedConversationSnapshot.model_validate(
+                    self.accepted.model_dump()
+                    | {
+                        "flexible": pending.model_copy(
+                            update={
+                                "response": ConversationResponse(
+                                    text=prepared_read.answer.text,
+                                    evidence_refs=prepared_read.answer.evidence_refs,
+                                )
+                            }
+                        ).model_dump(),
+                    }
+                )
+            return accepted_snapshot_for(
+                prepared_read,
+                conversation_id=context.conversation_id,
+                task_message_id=self.task_message_id,
+                task_message=self.task_message,
+                catalog=context.catalog,
+            )
         if values.get("response") is not None:
             return self.prepare_response(values, context, tasks, conversation_revision)
         if self.discard_pending:
@@ -741,6 +779,8 @@ def revalidate_flexible_publication(
         values.get("publication_context")
     )
     ctx = execution.context
+    if ctx.read_only_turn != bool(request.selected_product_ids):
+        raise ValueError("Read-only execution differs from stored product selection")
     if request.selected_product_ids:
         selected_task = CompletionRequirement(
             kind="COMPARE" if len(request.selected_product_ids) > 1 else "ANSWER",

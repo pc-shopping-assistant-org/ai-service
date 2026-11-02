@@ -415,6 +415,11 @@ def validate_search_answer(
         else "Chưa tìm được cấu hình trong tập ứng viên đã cung cấp. Dữ liệu hoặc phạm vi tìm kiếm chưa đủ để kết luận vô nghiệm."
     )
     if not completed:
+        trace = payload.receipt.search_trace
+        if trace and trace.metadata_rejections:
+            text += " Catalog còn thiếu thông số tương thích hoặc công suất; cần bổ sung dữ liệu trước khi kết luận về ngân sách."
+        if trace and trace.scoring_rejections:
+            text += " Chưa đủ dữ liệu chấm điểm để xếp hạng cấu hình."
         text += " Yêu cầu chưa hoàn thành đầy đủ."
     return FlexibleAnswer(
         text=text,

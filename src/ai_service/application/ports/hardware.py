@@ -34,10 +34,10 @@ class ComponentSpec(BaseModel):
     supported_form_factors: list[str] = Field(default_factory=list)
     tdp_watts: int | None = None
     wattage: int | None = None  # For PSU rated wattage
-    gpu_length_mm: int | None = None
-    max_gpu_length_mm: int | None = None
-    cooler_height_mm: int | None = None
-    max_cooler_height_mm: int | None = None
+    gpu_length_mm: int | float | None = None
+    max_gpu_length_mm: int | float | None = None
+    cooler_height_mm: int | float | None = None
+    max_cooler_height_mm: int | float | None = None
     performance_score: float | None = None
     vram_gb: int | None = None
     capacity_gb: int | None = None

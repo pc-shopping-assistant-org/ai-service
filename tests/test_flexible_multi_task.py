@@ -260,7 +260,7 @@ async def test_scoped_search_result_does_not_erase_completed_catalog_task(
         next(iter(canonical.requirements.values())).value.amount = 1
     else:
         realistic_catalog = [
-            part.model_copy(update={"performance_score": None})
+            part.model_copy(update={"tdp_watts": None})
             if part.category == "CPU"
             else part
             for part in realistic_catalog

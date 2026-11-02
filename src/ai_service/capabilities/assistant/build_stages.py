@@ -77,7 +77,11 @@ def stage_recommendation(stage: OptimizationStage) -> RecommendationDecision:
     decision = stage.recommendation
     if marker.result is None or decision is None:
         raise ValueError("Built stage requires a saved recommendation decision")
-    build = marker.result.result.builds.get(decision.objective)
+    build = (
+        marker.result.result.builds.get(decision.objective)
+        if decision.objective is not None
+        else marker.result.result.feasible_build
+    )
     if build is None:
         raise ValueError("Saved recommendation has no completed build")
     return RecommendationDecision(
@@ -234,7 +238,7 @@ async def explain_build_stage(
             recommendation.build.total_price + prepared.accessory_spending_vnd
         )
         fallback = (
-            f"Cấu hình {recommendation.objective.value}: chi phí mua "
+            f"Cấu hình {recommendation.objective.value if recommendation.objective else 'chưa xếp hạng'}: chi phí mua "
             f"{context['total_setup_spending']:,} VND. "
             "Linh kiện đã sở hữu không tính vào chi phí mua."
         )

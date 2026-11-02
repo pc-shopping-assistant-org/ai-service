@@ -15,7 +15,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ai_service.application.call_attempts import ExecutionClaim
+from ai_service.application.call_attempts import AttemptRejected, ExecutionClaim
 from ai_service.application.ports.stateful_conversation import (
     AcceptedConversationSnapshot,
     RunAdmissionError,
@@ -23,6 +23,7 @@ from ai_service.application.ports.stateful_conversation import (
 from ai_service.capabilities.assistant.limits import DEFAULT_TOOL_IO_LIMIT
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.public_contracts import (
+    RunFailureReason,
     RunViewV1,
 )
 from ai_service.capabilities.assistant.react.contracts import (
@@ -44,6 +45,7 @@ from ai_service.capabilities.assistant.react.turn_contracts import (
 )
 from ai_service.capabilities.assistant.recovery_policy import (
     ExecutionIdentityV1,
+    RetryFailure,
     classify_failure,
     require_recovery_eligible,
     require_stopped_execution,
@@ -58,6 +60,7 @@ from ai_service.capabilities.assistant.requirements.pending_action import (
     validate_pending_action,
 )
 from ai_service.capabilities.assistant.requirements.resolver import PendingDraft
+from ai_service.capabilities.assistant.schemas import ChatStreamEventType
 from ai_service.capabilities.assistant.stateful_contracts import (
     CheckpointRefV1,
     ConversationHeadV1,
@@ -74,6 +77,7 @@ from .accepted_state import PostgresAcceptedCheckpointReader
 from .call_attempts import PostgresAttemptLedger
 from .checkpoint_lineage import require_checkpoint_lineage
 from .checkpoint_reconciliation import reconcile_stopped_checkpoint
+from .events import append_run_event
 from .lifecycle_events import emit_start, emit_terminal
 from .retry_cleanup import cleanup_stopped_retries
 from .schema import agent_call_budgets, agent_runs, conversation_messages, conversations
@@ -487,6 +491,30 @@ class PostgresRunCoordinator:
             )
             return True
 
+    async def preview(self, claim: ExecutionClaim, text: str, replace: bool) -> None:
+        """Draft delivery never changes accepted state or permits stale execution writes."""
+        async with self.engine.begin() as conn:
+            _, run = await self._current(conn, claim)
+            now = await conn.scalar(select(func.clock_timestamp()))
+            if (
+                run["status"] not in {RunStatus.RUNNING, RunStatus.RECOVERING}
+                or run["cancel_requested"]
+                or now >= run["retry_deadline"]
+                or now >= run["lease_expires_at"]
+            ):
+                raise AttemptRejected("STALE_EXECUTION")
+            await append_run_event(
+                conn,
+                claim.run_id,
+                f"draft:{uuid4()}",
+                {
+                    "event": ChatStreamEventType.DELTA,
+                    "delta": text,
+                    "is_draft": True,
+                    "replace": replace,
+                },
+            )
+
     async def load(
         self, claim: ExecutionClaim
     ) -> tuple[TurnRequest, ConversationHeadV1]:
@@ -897,6 +925,19 @@ class PostgresRunCoordinator:
                 status,
                 conversation["revision"] + (1 if values is not None else 0),
                 values,
+                failure_reason=(
+                    RunFailureReason.MODEL_TIMEOUT
+                    if outcome.failure == RetryFailure.UPSTREAM_TIMEOUT
+                    else RunFailureReason.MODEL_UNAVAILABLE
+                    if outcome.failure
+                    in {
+                        RetryFailure.UPSTREAM_RATE_LIMIT,
+                        RetryFailure.UPSTREAM_SERVER_ERROR,
+                    }
+                    else RunFailureReason.PROCESSING_FAILED
+                )
+                if status == RunStatus.FAILED_TERMINAL
+                else None,
             )
             if status != "FAILED_RETRYABLE":
                 await conn.execute(

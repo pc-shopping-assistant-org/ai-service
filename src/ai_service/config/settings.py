@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import AliasChoices, Field, HttpUrl, JsonValue, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,6 +29,10 @@ class Settings(BaseSettings):
     )
 
     backend_api_url: str = "http://localhost:8080/api/v1"
+    search_api_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("AI_SEARCH_API_URL", "SEARCH_API_URL"),
+    )
     request_timeout_seconds: float = 5.0
     conversation_max_messages: int = 20
     database_url: SecretStr | None = None
@@ -73,10 +78,31 @@ class Settings(BaseSettings):
     )
     embedding_provider: EmbeddingProviderKind = EmbeddingProviderKind.HTTP
     embedding_dimension: int = Field(default=384, ge=2, le=4096)
+    embedding_model_name: str = Field(
+        default="BAAI/bge-m3",
+        min_length=1,
+        validation_alias=AliasChoices("AI_EMBEDDING_MODEL", "EMBEDDING_MODEL"),
+    )
+    embedding_cache_dir: str = Field(
+        default="/var/cache/ai-service/huggingface",
+        min_length=1,
+        validation_alias=AliasChoices("AI_EMBEDDING_CACHE_DIR", "HF_HOME"),
+    )
+    embedding_preload_on_startup: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AI_EMBEDDING_PRELOAD_ON_STARTUP",
+            "EMBEDDING_PRELOAD_ON_STARTUP",
+        ),
+    )
+    embedding_max_length: int = Field(default=512, ge=32, le=8192)
+    embedding_batch_size: int = Field(default=32, ge=1, le=256)
     provider: AIProvider = AIProvider.FALLBACK
     model_name: str | None = None
     openai_model_name: str = "gpt-4o-mini"
     gemini_model_name: str = "gemini-2.5-flash"
+    gemini_max_output_tokens: int = Field(default=2048, ge=1)
+    gemini_reasoning_effort: Literal["minimal", "low", "medium", "high"] = "low"
     qwen_base_url: HttpUrl | None = None
     qwen_model_name: str = Field(default=QWEN_MODEL_ID, min_length=1)
     qwen_api_key: SecretStr | None = None
