@@ -288,8 +288,11 @@ class Model:
                     "kind": "CALL_TOOL",
                     "call": {
                         "call_id": "page",
-                        "name": "read_web_page",
-                        "arguments": {"url": "https://example.com/specs"},
+                        "name": "research_driver",
+                        "arguments": {
+                            "component_name": "ASUS GPU",
+                            "max_sources": 1,
+                        },
                     },
                 }
             )
@@ -316,7 +319,7 @@ class Model:
                             "supporting_tool_call_ids": [page.tool_call_id],
                             "answer": {
                                 "text": "999 mm",
-                                "evidence_refs": [page.result.facts[0].evidence_ref],
+                                "evidence_refs": page.evidence_refs,
                             },
                         },
                     ],
@@ -429,6 +432,28 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                 ],
             )
 
+    class Search:
+        async def search(self, query):
+            from ai_service.application.ports.web_search import (
+                WebSearchItem,
+                WebSearchResult,
+            )
+
+            domain = query.target_domains[0] if query.target_domains else "asus.com"
+            return WebSearchResult(
+                query=query.query,
+                category=query.category,
+                items=[
+                    WebSearchItem(
+                        title="ASUS GPU Specs",
+                        url=f"https://{domain}/specs",
+                        snippet="Official specs",
+                    )
+                ],
+                total_results=1,
+            )
+
+    web_search = Search()
     web_reader = Reader()
 
     class Choices:
@@ -599,7 +624,10 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                         extractor,
                     ),
                     ToolDispatcher(
-                        products, service, reader=web_reader if multi else None
+                        products,
+                        service,
+                        search_client=web_search if multi else None,
+                        reader=web_reader if multi else None,
                     ),
                     ctx,
                     required,
