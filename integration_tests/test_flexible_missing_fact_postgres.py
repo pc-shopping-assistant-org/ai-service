@@ -35,7 +35,27 @@ from ai_service.infrastructure.graph.flexible import build_flexible_graph
 async def test_missing_fact_native_reopen_does_not_refetch_or_complete_task(
     postgres_dsn, status, multi
 ):
-    url = "https://example.com/specs"
+    url = "https://asus.com/specs"
+
+    class Search:
+        async def search(self, query):
+            from ai_service.application.ports.web_search import (
+                WebSearchItem,
+                WebSearchResult,
+            )
+
+            return WebSearchResult(
+                query=query.query,
+                category=query.category,
+                items=[
+                    WebSearchItem(
+                        title="ASUS GPU Specs",
+                        url=url,
+                        snippet="Official specs",
+                    )
+                ],
+                total_results=1,
+            )
 
     class Reader:
         calls = 0
@@ -85,8 +105,11 @@ async def test_missing_fact_native_reopen_does_not_refetch_or_complete_task(
                         "kind": "CALL_TOOL",
                         "call": {
                             "call_id": "page",
-                            "name": "read_web_page",
-                            "arguments": {"url": url},
+                            "name": "research_driver",
+                            "arguments": {
+                                "component_name": "ASUS GPU A",
+                                "max_sources": 1,
+                            },
                         },
                     }
                 )
@@ -152,7 +175,9 @@ async def test_missing_fact_native_reopen_does_not_refetch_or_complete_task(
     ]
     reader, service = Reader(), PCBuildApplicationService()
     catalog = Catalog()
-    dispatcher = ToolDispatcher(catalog, service, reader=reader)
+    dispatcher = ToolDispatcher(
+        catalog, service, search_client=Search(), reader=reader
+    )
     config = {"configurable": {"thread_id": str(ctx.conversation_id)}}
 
     def compile_flow(model, saver):
