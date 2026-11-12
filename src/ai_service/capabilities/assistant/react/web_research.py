@@ -429,7 +429,9 @@ async def research_sources(
                 if len(stage_results) == MAX_RESEARCH_SEARCH_RESULTS:
                     break
             if found.note != ToolError.WEB_SEARCH_UNAVAILABLE:
-                for source in stage_results[: request.max_sources]:
+                readable_pages = []
+                unreadable_pages = []
+                for source in stage_results:
                     if source.url not in pages:
                         pages[source.url] = await read_page_evidence(
                             reader,
@@ -443,7 +445,17 @@ async def research_sources(
                     ):
                         # A redirect outside the tier is not that tier's evidence.
                         continue
-                    stage_pages.append(page)
+                    if page.status == WebPageReadStatus.READABLE:
+                        readable_pages.append(page)
+                        if len(readable_pages) >= request.max_sources:
+                            break
+                    else:
+                        unreadable_pages.append(page)
+                stage_pages = (
+                    readable_pages
+                    if readable_pages
+                    else unreadable_pages[: request.max_sources]
+                )
             status = source_status(
                 stage_results,
                 stage_pages,
