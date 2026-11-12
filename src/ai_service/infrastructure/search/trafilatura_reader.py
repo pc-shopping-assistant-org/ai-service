@@ -28,6 +28,33 @@ from ai_service.infrastructure.search.tomshardware_gpu_specs import (
 
 LOGGER = logging.getLogger(__name__)
 READABLE_MEDIA_TYPES = frozenset({"text/html", "application/xhtml+xml", "text/plain"})
+BOT_CHALLENGE_INDICATORS = frozenset(
+    {
+        "checking your browser",
+        "just a moment",
+        "verify your connection",
+        "verify you are human",
+        "attention required",
+        "cloudflare ray id",
+        "turnstile",
+        "datadome",
+        "recaptcha",
+        "automated bot check",
+        "confirm you are human",
+        "prove you are not a robot",
+        "verify you are not a bot",
+        "proves you are a human",
+        "unusual traffic from your",
+        "permission to access on this server",
+        "access denied",
+        "banned your ip",
+    }
+)
+
+
+def _is_bot_challenge(title: str | None, content: str) -> bool:
+    check_text = f"{title or ''}\n{content}".lower()
+    return any(ind in check_text for ind in BOT_CHALLENGE_INDICATORS)
 
 CURATED_PARSERS = [
     extract_asus_dimensions,
@@ -108,6 +135,18 @@ class TrafilaturaReader(WebPageReader):
                     )
 
                 cleaned_content = extracted.strip()
+
+                if _is_bot_challenge(title, cleaned_content):
+                    LOGGER.warning(
+                        "Bot challenge or access denial detected for %s; marking as UNREADABLE",
+                        final_url,
+                    )
+                    return WebPageReadResult(
+                        url=url,
+                        final_url=final_url,
+                        title=title,
+                        status=WebPageReadStatus.UNREADABLE,
+                    )
                 content_hash = hashlib.sha256(
                     cleaned_content.encode("utf-8")
                 ).hexdigest()

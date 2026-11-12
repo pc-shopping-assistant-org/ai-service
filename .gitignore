@@ -34,6 +34,7 @@ Thumbs.db
 # Local and temporary work directories
 flows/
 training_workspace/
+training_workspace_2/
 .venv-training/
 .venv-serving/
 
