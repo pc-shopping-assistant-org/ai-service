@@ -13,6 +13,7 @@ from ai_service.application.call_attempts import AttemptBoundary, AttemptKind
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.react.contracts import (
     AnswerCandidate,
+    BuildResult,
     CompletionRequirement,
     ReactLimits,
     ToolCall,
@@ -24,7 +25,11 @@ from ai_service.capabilities.assistant.react.tools import (
     ToolDispatcher,
     allowed_tools,
     call_hash,
+    project_current_tools,
     validate_answer,
+)
+from ai_service.capabilities.assistant.requirements.compiler import (
+    compile_requirements,
 )
 from ai_service.capabilities.assistant.stateful_contracts import Contract
 
@@ -115,6 +120,29 @@ def add_react_nodes(
         transcript = records(state)
         if any(entry.result is None for entry in transcript):
             raise ValueError("REACT_UNRESOLVED_TOOL_PROTOCOL")
+        if (
+            current.catalog_ready
+            and compile_requirements(current.requirements, current.catalog).ready
+        ):
+            active_builds = [
+                rec
+                for rec in project_current_tools(transcript, current)
+                if rec.result and isinstance(rec.result.result, BuildResult)
+            ]
+            if not active_builds:
+                auto_call = ToolCall(
+                    call_id=f"auto_build_{current.requirements.revision}",
+                    name=ToolName.BUILD_PC,
+                    arguments={},
+                )
+                tool_result = await dispatcher.execute(auto_call, current)
+                record = ToolRecord(
+                    origin_run_id=current.run_id,
+                    call=auto_call,
+                    result=tool_result,
+                )
+                transcript.append(record)
+                state["ledger"] = [r.model_dump(mode="json") for r in transcript]
         count = state.get("model_calls", 0)
         if count >= limits.max_model_calls:
             raise ValueError("REACT_MODEL_LIMIT")
@@ -156,6 +184,7 @@ def add_react_nodes(
                 "model_calls": count + 1,
                 answer_channel: {},
                 "phase": "DECIDED",
+                "ledger": [r.model_dump(mode="json") for r in transcript],
             },
         )
 

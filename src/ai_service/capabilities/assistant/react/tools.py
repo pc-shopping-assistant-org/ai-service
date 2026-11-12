@@ -188,10 +188,19 @@ class ToolDispatcher:
             return rejected(ToolError.UNKNOWN_TOOL)
         if not context.execution_allowed or not context.read_catalog_allowed:
             return rejected(ToolError.PREREQUISITE_MISSING)
-        if name not in allowed_tools(context, records) and name not in {
-            ToolName.SEARCH_WEB,
-            ToolName.READ_WEB_PAGE,
-        }:
+        if (
+            name not in allowed_tools(context, records)
+            and name
+            not in {
+                ToolName.SEARCH_WEB,
+                ToolName.READ_WEB_PAGE,
+            }
+            and not (
+                name == ToolName.BUILD_PC
+                and context.catalog_ready
+                and compile_requirements(context.requirements, context.catalog).ready
+            )
+        ):
             return rejected(ToolError.PREREQUISITE_MISSING)
         try:
             args = TOOL_SCHEMAS[name].model_validate(call.arguments)

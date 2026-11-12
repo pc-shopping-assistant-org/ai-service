@@ -29,9 +29,11 @@ from ai_service.capabilities.assistant.react.actions import (
 )
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
+    BuildResult,
     CompletionRequirement,
     ControlRecord,
     ReactLimits,
+    ToolCall,
     ToolContext,
     ToolError,
     ToolName,
@@ -95,6 +97,9 @@ from ai_service.capabilities.assistant.requirements.catalog_policy import (
     build_clarification_reasons,
     build_needs_catalog,
     draft_needs_catalog,
+)
+from ai_service.capabilities.assistant.requirements.compiler import (
+    compile_requirements,
 )
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
@@ -572,7 +577,42 @@ def build_flexible_graph(
             ).model_dump(mode="json")
         return bounded(state, update)
 
+    async def auto_run_build_if_ready(
+        state: FlexibleState,
+    ) -> dict[str, Any] | None:
+        ctx = current(state)
+        if not (
+            ctx.catalog_ready
+            and compile_requirements(ctx.requirements, ctx.catalog).ready
+        ):
+            return None
+        active_builds = [
+            rec
+            for rec in projection(state)
+            if rec.result and isinstance(rec.result.result, BuildResult)
+        ]
+        if active_builds:
+            return None
+        auto_call = ToolCall(
+            call_id=f"auto_build_{ctx.requirements.revision}",
+            name=ToolName.BUILD_PC,
+            arguments={},
+        )
+        tool_result = await dispatcher.execute(auto_call, ctx)
+        record = ToolRecord(
+            origin_run_id=ctx.run_id,
+            call=auto_call,
+            result=tool_result,
+        )
+        new_ledger = [
+            ToolRecord.model_validate(row).model_dump(mode="json")
+            for row in state.get("ledger", [])
+        ]
+        new_ledger.append(record.model_dump(mode="json"))
+        return {"ledger": new_ledger}
+
     async def prepare_agent(state: FlexibleState) -> dict[str, Any]:
+        update: dict[str, Any] = {}
         if (
             publication
             and publication.dialogue_continuation
@@ -582,8 +622,13 @@ def build_flexible_graph(
         if any(
             task.kind == "BUILD" for task in registered_tasks(state)
         ) and build_needs_catalog(current(state).requirements):
-            return await load_catalog(state)
-        return {}
+            catalog_update = await load_catalog(state)
+            update.update(catalog_update)
+        merged_state = cast(FlexibleState, dict(state) | update)
+        auto_build_update = await auto_run_build_if_ready(merged_state)
+        if auto_build_update:
+            update.update(auto_build_update)
+        return bounded(state, update) if update else {}
 
     async def load_proposal_catalog(state: FlexibleState) -> dict[str, Any]:
         action = decode_flexible_decision(state["decision"]).action
@@ -824,6 +869,9 @@ def build_flexible_graph(
         )
 
     async def agent(state: FlexibleState) -> dict[str, Any]:
+        auto_build_update = await auto_run_build_if_ready(state)
+        if auto_build_update:
+            state = cast(FlexibleState, dict(state) | auto_build_update)
         ctx, transcript = current(state), projection(state)
         count = state.get("model_calls", 0)
         if count >= limits.max_model_calls:
@@ -860,6 +908,7 @@ def build_flexible_graph(
                 "phase": "REGISTER_REQUEST"
                 if decision and decision.registration is not None
                 else "DECIDED",
+                **({"ledger": state["ledger"]} if auto_build_update else {}),
             },
         )
 
