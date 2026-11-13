@@ -74,8 +74,26 @@ class ResearchHardwareArgs(Contract):
     """Search and read external manufacturer spec sheets and independent hardware reviews/benchmarks (thermals, noise, power draw, real-world performance) of an exact model. Use catalog tools instead for store price, stock, or side-by-side store product comparison."""
 
     model: ResearchSubject
-    focus: HardwareResearchFocus = HardwareResearchFocus.GENERAL
-    question: ResearchQuestion | None = None
+    focus: HardwareResearchFocus = Field(
+        default=HardwareResearchFocus.GENERAL,
+        description=(
+            "Hardware evaluation aspect: THERMAL_NOISE (thermals, fan noise, power draw), "
+            "PERFORMANCE (gaming frame rates), PRODUCTIVITY (content creation, rendering, video editing), "
+            "MOTHERBOARD (VRM power delivery and board features), MEMORY (timings, bandwidth, XMP/EXPO stability), "
+            "STORAGE (drive throughput, sustained writes, endurance), CASE_AIRFLOW (chassis ventilation and cooling), "
+            "PSU_TIER (tier list ranking), PSU_QUALITY (electrical testing, ripple, component quality), "
+            "KNOWN_ISSUES (hardware defects and stability advisories), "
+            "OFFICIAL_SPECS (manufacturer physical dimensions and interfaces), "
+            "GENERAL (overall strengths and weaknesses)."
+        ),
+    )
+    question: ResearchQuestion | None = Field(
+        default=None,
+        description=(
+            "Optional concise technical keyword phrase for a specific metric or named advisory. "
+            "Omit for broad evaluations of the chosen focus."
+        ),
+    )
     max_sources: StrictInt = Field(
         default=DEFAULT_RESEARCH_SOURCES,
         ge=1,
