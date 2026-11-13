@@ -119,13 +119,15 @@ class ResearchCompatibilityArgs(Contract):
 
 
 class ResearchWorkloadArgs(Contract):
-    """Read game/application requirements or benchmarks; omit unknown test conditions."""
+    """Read game/application requirements or benchmark performance. For REQUIREMENTS mode, omit hardware and test conditions. For BENCHMARK mode, hardware must be specified."""
 
     workload: ResearchSubject
     mode: ResearchMode = ResearchMode.BENCHMARK
     benchmark_kind: WorkloadBenchmarkKind = WorkloadBenchmarkKind.GAMING
     hardware: list[ResearchSubject] = Field(
-        default_factory=list, max_length=MAX_WORKLOAD_HARDWARE
+        default_factory=list,
+        max_length=MAX_WORKLOAD_HARDWARE,
+        description="Target hardware model (GPU or CPU) being benchmarked.",
     )
     resolution: ResearchCondition | None = None
     preset: ResearchCondition | None = None
