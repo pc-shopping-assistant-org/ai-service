@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 from collections.abc import Callable
@@ -96,10 +97,31 @@ DEFAULT_SEARCH_HEADERS = {
 class DuckDuckGoSearchAdapter(WebSearchClient):
     """Zero-dependency, keyless search adapter querying DuckDuckGo HTML endpoint."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        min_request_interval: float = 2.0,
+    ) -> None:
         self.settings = settings or get_settings()
+        self.min_request_interval = min_request_interval
+        self._last_request_time: float = 0.0
+        self._lock: asyncio.Lock | None = None
+
+    def _get_lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     async def search(self, query: WebSearchQuery) -> WebSearchResult:
+        lock = self._get_lock()
+        async with lock:
+            loop = asyncio.get_running_loop()
+            now = loop.time()
+            elapsed = now - self._last_request_time
+            if elapsed < self.min_request_interval:
+                await asyncio.sleep(self.min_request_interval - elapsed)
+            self._last_request_time = loop.time()
+
         enriched_query = self._enrich_query(query)
         try:
             async with httpx.AsyncClient(
