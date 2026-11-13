@@ -9,6 +9,7 @@ from pydantic import Field, StrictInt, model_validator
 from ai_service.application.ports.hardware import ComponentCategory
 from ai_service.capabilities.assistant.stateful_contracts import Contract, Text
 
+DEFAULT_RESEARCH_SOURCES = 1
 MAX_RESEARCH_SOURCES = 2
 RESEARCH_PAGE_CHARS = 2000
 MAX_BUILD_RESEARCH_PARTS = len(ComponentCategory)
@@ -76,7 +77,7 @@ class ResearchHardwareArgs(Contract):
     focus: HardwareResearchFocus = HardwareResearchFocus.GENERAL
     question: ResearchQuestion | None = None
     max_sources: StrictInt = Field(
-        default=MAX_RESEARCH_SOURCES,
+        default=DEFAULT_RESEARCH_SOURCES,
         ge=1,
         le=MAX_RESEARCH_SOURCES,
         description="Maximum pages per source tier (official, independent review).",
@@ -90,7 +91,7 @@ class ResearchCompatibilityArgs(Contract):
     part_b: ResearchSubject
     concern: ResearchQuestion | None = None
     max_sources: StrictInt = Field(
-        default=MAX_RESEARCH_SOURCES,
+        default=DEFAULT_RESEARCH_SOURCES,
         ge=1,
         le=MAX_RESEARCH_SOURCES,
         description="Maximum pages per source tier.",
@@ -110,7 +111,7 @@ class ResearchWorkloadArgs(Contract):
     preset: ResearchCondition | None = None
     upscaling: ResearchCondition | None = None
     max_sources: StrictInt = Field(
-        default=MAX_RESEARCH_SOURCES,
+        default=DEFAULT_RESEARCH_SOURCES,
         ge=1,
         le=MAX_RESEARCH_SOURCES,
         description="Maximum pages per source tier.",
@@ -141,5 +142,5 @@ class ResearchDriverArgs(Contract):
     operating_system: ResearchCondition | None = None
     version: ResearchCondition | None = None
     max_sources: StrictInt = Field(
-        default=MAX_RESEARCH_SOURCES, ge=1, le=MAX_RESEARCH_SOURCES
+        default=DEFAULT_RESEARCH_SOURCES, ge=1, le=MAX_RESEARCH_SOURCES
     )
