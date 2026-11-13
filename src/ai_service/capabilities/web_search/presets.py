@@ -98,11 +98,8 @@ class WebSearchPresets:
     def research_hardware(
         product_name: str, focus: HardwareResearchFocus, question: str | None = None
     ) -> str:
-        return " ".join(
-            value
-            for value in (product_name, HARDWARE_SEARCH_FOCUS[focus][1], question)
-            if value
-        )
+        focus_keyword = question if question else HARDWARE_SEARCH_FOCUS[focus][1]
+        return f"{product_name} {focus_keyword}".strip()
 
     @staticmethod
     def build_guides(
