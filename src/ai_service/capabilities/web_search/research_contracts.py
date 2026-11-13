@@ -85,10 +85,12 @@ class ResearchHardwareArgs(Contract):
 
 
 class ResearchCompatibilityArgs(Contract):
-    """Read sources about a pair: BIOS, RAM clearance, fit or power connectors."""
+    """Check compatibility between a pair of PC components (physical fit, clearance, socket/BIOS support, or power connectors)."""
 
     part_a: ResearchSubject
-    part_b: ResearchSubject
+    part_b: ResearchSubject = Field(
+        description="Second physical hardware component to evaluate for compatibility. Must be a physical hardware model."
+    )
     concern: ResearchQuestion | None = None
     max_sources: StrictInt = Field(
         default=DEFAULT_RESEARCH_SOURCES,
