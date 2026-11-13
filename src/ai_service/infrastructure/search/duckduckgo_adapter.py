@@ -81,6 +81,18 @@ DOMAIN_SUGGESTIONS: dict[WebSearchCategory, list[str]] = {
 }
 
 
+DEFAULT_SEARCH_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://html.duckduckgo.com/",
+}
+
+
 class DuckDuckGoSearchAdapter(WebSearchClient):
     """Zero-dependency, keyless search adapter querying DuckDuckGo HTML endpoint."""
 
@@ -93,7 +105,7 @@ class DuckDuckGoSearchAdapter(WebSearchClient):
             async with httpx.AsyncClient(
                 timeout=self.settings.request_timeout_seconds,
                 follow_redirects=True,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+                headers=DEFAULT_SEARCH_HEADERS,
             ) as client:
                 res = await client.post(
                     "https://html.duckduckgo.com/html/",

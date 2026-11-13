@@ -50,11 +50,70 @@ BOT_CHALLENGE_INDICATORS = frozenset(
         "banned your ip",
     }
 )
+DISCLAIMER_INDICATORS = frozenset(
+    {
+        "specifications are subject to change",
+        "certified by the federal communications commission",
+        "trademarks of their respective",
+        "trademarks or registered trademarks",
+        "please refer to specification pages for full details",
+    }
+)
+NAV_KEYWORDS = frozenset(
+    {
+        "products",
+        "support",
+        "download",
+        "contact",
+        "warranty",
+        "login",
+        "home",
+        "about",
+        "news",
+        "cart",
+        "account",
+        "heatsink",
+        "fan",
+        "cooling",
+    }
+)
 
 
 def _is_bot_challenge(title: str | None, content: str) -> bool:
     check_text = f"{title or ''}\n{content}".lower()
     return any(ind in check_text for ind in BOT_CHALLENGE_INDICATORS)
+
+
+def _is_unusable_content(
+    title: str | None, content: str, facts: list[ExtractedWebFact] | None
+) -> bool:
+    if facts:
+        return False
+    if _is_bot_challenge(title, content):
+        return True
+    text = content.strip().lower()
+    if not text:
+        return True
+
+    # 1. Boilerplate / Legal disclaimer only (e.g. dynamic SPA helpdesk with no specs)
+    disclaimer_matches = sum(1 for p in DISCLAIMER_INDICATORS if p in text)
+    if disclaimer_matches >= 2 and len(text) < 1500:
+        return True
+
+    # 2. Navigation menu / category link dump (e.g. SPA where only nav bar is static HTML)
+    lines = [line.strip() for line in content.splitlines() if line.strip()]
+    if len(lines) >= 8:
+        short_lines = [line for line in lines if len(line) <= 30]
+        if len(short_lines) / len(lines) > 0.7:
+            nav_matches = sum(
+                1
+                for line in short_lines
+                if any(term in line.lower().split() for term in NAV_KEYWORDS)
+            )
+            if nav_matches / len(lines) > 0.4:
+                return True
+
+    return False
 
 CURATED_PARSERS = [
     extract_asus_dimensions,
@@ -136,9 +195,9 @@ class TrafilaturaReader(WebPageReader):
 
                 cleaned_content = extracted.strip()
 
-                if _is_bot_challenge(title, cleaned_content):
+                if _is_unusable_content(title, cleaned_content, facts):
                     LOGGER.warning(
-                        "Bot challenge or access denial detected for %s; marking as UNREADABLE",
+                        "Unusable content (bot challenge, legal boilerplate, or navigation dump) detected for %s; marking as UNREADABLE",
                         final_url,
                     )
                     return WebPageReadResult(

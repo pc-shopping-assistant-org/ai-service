@@ -79,10 +79,9 @@ class WebSearchPresets:
     def compatibility(
         part_a: str, part_b: str, specific_concern: str | None = None
     ) -> str:
-        query = f"{part_a} {part_b} compatibility official support BIOS clearance connectors"
         if specific_concern:
-            query += f" {specific_concern}"
-        return query.strip()
+            return f"{part_a} {part_b} compatibility {specific_concern}".strip()
+        return f"{part_a} {part_b} compatibility support clearance".strip()
 
     @staticmethod
     def product_reviews(
