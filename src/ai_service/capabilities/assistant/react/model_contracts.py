@@ -26,7 +26,9 @@ from .submissions import ResultSelection, SubmitResults
 
 
 class RequirementInput(Contract):
-    subject: Subject
+    subject: Subject = Field(
+        description="Scope of the requirement: SETUP, WORKLOAD, component category, or accessory.",
+    )
     predicate: str = Field(
         pattern=r"^[a-z][a-z0-9_]{0,63}$",
         description="Property only: budget, use_case, capacity, media, brand, model, identity, scope. Never include the subject or spaces.",
