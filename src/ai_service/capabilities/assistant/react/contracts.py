@@ -108,7 +108,11 @@ class SearchCatalogArgs(Contract):
     query: Text | None = Field(default=None, max_length=MAX_CATALOG_KEYWORD_CHARS)
     semantic_query: Text | None = Field(default=None, max_length=1000)
     brand: Text | None = Field(default=None, max_length=100)
-    category: Text | None = Field(default=None, max_length=100)
+    category: Text | None = Field(
+        default=None,
+        max_length=100,
+        description="Optional component category: CPU, MAINBOARD, RAM, GPU, PSU, CASE, COOLER, STORAGE, MONITOR, KEYBOARD, MOUSE, HEADSET.",
+    )
     min_price: NonNegativeInt | None = None
     max_price: NonNegativeInt | None = None
     in_stock_only: StrictBool = False
