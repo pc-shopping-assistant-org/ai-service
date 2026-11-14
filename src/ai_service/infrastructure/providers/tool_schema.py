@@ -15,6 +15,9 @@ _ANNOTATIONS = {
     "additionalProperties",
     "discriminator",
 }
+_EXCLUDED_PROPERTIES = {
+    "task_index",
+}
 
 
 def model_tool_schema(model: type[BaseModel]) -> dict[str, Any]:
@@ -24,12 +27,22 @@ def model_tool_schema(model: type[BaseModel]) -> dict[str, Any]:
         if not isinstance(schema, dict):
             return schema
         projected = {
-            key: {name: project(item) for name, item in value.items()}
+            key: {
+                name: project(item)
+                for name, item in value.items()
+                if name not in _EXCLUDED_PROPERTIES
+            }
             if key == "properties"
             else project(value)
             for key, value in schema.items()
             if key not in _ANNOTATIONS
         }
+        if "required" in projected and isinstance(projected["required"], list):
+            projected["required"] = [
+                field
+                for field in projected["required"]
+                if field not in _EXCLUDED_PROPERTIES
+            ]
         if "anyOf" in projected:
             variants = projected["anyOf"]
             non_null = [
