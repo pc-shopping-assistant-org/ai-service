@@ -170,7 +170,7 @@ class SearchCatalogArgs(Contract):
 class ProductDetailsArgs(Contract):
     """Get full store catalog details, current price, stock status, and specifications for a known store product_id."""
 
-    product_id: UUID
+    product_id: UUID = Field(description="Store product UUID in catalog.")
 
 
 class CompareProductsArgs(Contract):
@@ -184,9 +184,13 @@ class CompareProductsArgs(Contract):
     queries: list[Text] = Field(
         default_factory=list,
         max_length=MAX_SELECTED_PRODUCTS,
-        description="Concise product names or keywords to look up and compare directly.",
+        description="Concise product names or keywords to look up and compare directly (2 to 5 items).",
     )
-    question: Text | None = Field(default=None, max_length=1000)
+    question: Text | None = Field(
+        default=None,
+        max_length=1000,
+        description="Specific comparison aspect or evaluation criterion.",
+    )
 
     @model_validator(mode="after")
     def distinct_products(self) -> "CompareProductsArgs":
