@@ -105,11 +105,16 @@ class ResearchHardwareArgs(Contract):
 class ResearchCompatibilityArgs(Contract):
     """Check compatibility between a pair of PC components (physical fit, clearance, socket/BIOS support, or power connectors)."""
 
-    part_a: ResearchSubject
+    part_a: ResearchSubject = Field(
+        description="First physical hardware component to evaluate for compatibility.",
+    )
     part_b: ResearchSubject = Field(
         description="Second physical hardware component to evaluate for compatibility. Must be a physical hardware model."
     )
-    concern: ResearchQuestion | None = None
+    concern: ResearchQuestion | None = Field(
+        default=None,
+        description="Specific compatibility concern: physical dimensions, clearance, socket support, or power cabling.",
+    )
     max_sources: StrictInt = Field(
         default=DEFAULT_RESEARCH_SOURCES,
         ge=1,
@@ -121,7 +126,9 @@ class ResearchCompatibilityArgs(Contract):
 class ResearchWorkloadArgs(Contract):
     """Read game/application requirements or benchmark performance. For REQUIREMENTS mode, omit hardware and test conditions. For BENCHMARK mode, hardware must be specified."""
 
-    workload: ResearchSubject
+    workload: ResearchSubject = Field(
+        description="Name of the software application or game title.",
+    )
     mode: ResearchMode = ResearchMode.BENCHMARK
     benchmark_kind: WorkloadBenchmarkKind = WorkloadBenchmarkKind.GAMING
     hardware: list[ResearchSubject] = Field(
@@ -129,9 +136,18 @@ class ResearchWorkloadArgs(Contract):
         max_length=MAX_WORKLOAD_HARDWARE,
         description="Target hardware model (GPU or CPU) being benchmarked.",
     )
-    resolution: ResearchCondition | None = None
-    preset: ResearchCondition | None = None
-    upscaling: ResearchCondition | None = None
+    resolution: ResearchCondition | None = Field(
+        default=None,
+        description="Display resolution condition for benchmark tests.",
+    )
+    preset: ResearchCondition | None = Field(
+        default=None,
+        description="Graphics quality preset condition for benchmark tests.",
+    )
+    upscaling: ResearchCondition | None = Field(
+        default=None,
+        description="Upscaling technology condition for benchmark tests.",
+    )
     max_sources: StrictInt = Field(
         default=DEFAULT_RESEARCH_SOURCES,
         ge=1,
