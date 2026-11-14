@@ -105,18 +105,44 @@ class ToolName(StrEnum):
 class SearchCatalogArgs(Contract):
     """Search store products by concise keyword, semantic need, and optional filters."""
 
-    query: Text | None = Field(default=None, max_length=MAX_CATALOG_KEYWORD_CHARS)
-    semantic_query: Text | None = Field(default=None, max_length=1000)
-    brand: Text | None = Field(default=None, max_length=100)
+    query: Text | None = Field(
+        default=None,
+        max_length=MAX_CATALOG_KEYWORD_CHARS,
+        description="Concise product keyword or model name.",
+    )
+    semantic_query: Text | None = Field(
+        default=None,
+        max_length=1000,
+        description="Natural-language usage description, aesthetic, or feature preferences.",
+    )
+    brand: Text | None = Field(
+        default=None,
+        max_length=100,
+        description="Manufacturer or brand filter.",
+    )
     category: Text | None = Field(
         default=None,
         max_length=100,
         description="Optional component category: CPU, MAINBOARD, RAM, GPU, PSU, CASE, COOLER, STORAGE, MONITOR, KEYBOARD, MOUSE, HEADSET.",
     )
-    min_price: NonNegativeInt | None = None
-    max_price: NonNegativeInt | None = None
-    in_stock_only: StrictBool = False
-    limit: StrictInt = Field(default=10, ge=1, le=20)
+    min_price: NonNegativeInt | None = Field(
+        default=None,
+        description="Minimum price in VND.",
+    )
+    max_price: NonNegativeInt | None = Field(
+        default=None,
+        description="Maximum price in VND.",
+    )
+    in_stock_only: StrictBool = Field(
+        default=False,
+        description="Filter only products currently available in stock.",
+    )
+    limit: StrictInt = Field(
+        default=10,
+        ge=1,
+        le=20,
+        description="Maximum number of products to return (1-20).",
+    )
 
     @model_validator(mode="after")
     def validate_search_args(self) -> "SearchCatalogArgs":
