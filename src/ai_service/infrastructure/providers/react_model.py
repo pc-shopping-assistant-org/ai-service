@@ -1,5 +1,6 @@
 """Text and native calls at the model boundary; application owns outcomes."""
 
+import inspect
 import json
 import logging
 from itertools import groupby
@@ -224,8 +225,9 @@ def build_react_request(
     schemas = [
         {
             "name": name.value,
-            "description": TOOL_SCHEMAS[name].__doc__
-            or f"Execute {name.value} using validated arguments.",
+            "description": inspect.cleandoc(TOOL_SCHEMAS[name].__doc__)
+            if TOOL_SCHEMAS[name].__doc__
+            else f"Execute {name.value} using validated arguments.",
             "parameters": model_tool_schema(TOOL_SCHEMAS[name]),
         }
         for name in allowed
