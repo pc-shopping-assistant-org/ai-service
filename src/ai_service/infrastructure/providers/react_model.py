@@ -278,10 +278,6 @@ def build_react_request(
                 "memories": [item.model_dump(mode="json") for item in context.memories],
                 "history": [turn.model_dump(mode="json") for turn in context.history],
                 "task_message": context.task_message,
-                "completion_requirements": [
-                    task.model_dump(mode="json")
-                    for task in context.completion_requirements
-                ],
                 "saved_build": {
                     "evidence_ref": context.saved_build.evidence_ref,
                     "snapshot": context.saved_build.snapshot.model_dump(mode="json"),
