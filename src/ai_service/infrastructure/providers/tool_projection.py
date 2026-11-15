@@ -5,6 +5,9 @@ from typing import Any
 
 from ai_service.capabilities.assistant.react.contracts import (
     BuildResult,
+    CatalogResult,
+    ComparisonResult,
+    DetailsResult,
     ReadWebPageResult,
     ResearchResult,
     ResearchSection,
@@ -120,6 +123,23 @@ def observation_json(result: ToolResult, byte_limit: int) -> str:
             "scoring_rejections": trace.scoring_rejections if trace else 0,
         }
         payload["projection"] = {"truncated": True}
+    elif isinstance(result.result, (CatalogResult, DetailsResult, ComparisonResult)):
+        payload = _base_payload(result, include_evidence_refs=False)
+        if isinstance(result.result, DetailsResult):
+            payload["result"] = {
+                "tool": result.result.tool,
+                "product": result.result.product.model_dump(
+                    mode="json", exclude={"retrieved_at"}
+                ),
+            }
+        else:
+            payload["result"] = {
+                "tool": result.result.tool,
+                "products": [
+                    item.model_dump(mode="json", exclude={"retrieved_at"})
+                    for item in result.result.products
+                ],
+            }
     else:
         payload = _base_payload(result)
         if result.result is not None:
