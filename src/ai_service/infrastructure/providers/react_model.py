@@ -258,22 +258,28 @@ def build_react_request(
     if context is not None:
         context = ToolContext.model_validate(context.model_dump())
         controls = context.control_history
+        context_payload: dict[str, Any] = {
+            "requirements": context.requirements.model_dump(mode="json"),
+        }
+        if context.pending is not None:
+            context_payload["pending"] = context.pending.model_dump(mode="json")
+        if context.memories:
+            context_payload["memories"] = [
+                item.model_dump(mode="json") for item in context.memories
+            ]
+        if context.history:
+            context_payload["history"] = [
+                turn.model_dump(mode="json") for turn in context.history
+            ]
+        if context.task_message is not None:
+            context_payload["task_message"] = context.task_message
+        if context.saved_build is not None:
+            context_payload["saved_build"] = {
+                "evidence_ref": context.saved_build.evidence_ref,
+                "snapshot": context.saved_build.snapshot.model_dump(mode="json"),
+            }
         instruction += " Application context (data): " + json.dumps(
-            {
-                "requirements": context.requirements.model_dump(mode="json"),
-                "pending": context.pending.model_dump(mode="json")
-                if context.pending
-                else None,
-                "memories": [item.model_dump(mode="json") for item in context.memories],
-                "history": [turn.model_dump(mode="json") for turn in context.history],
-                "task_message": context.task_message,
-                "saved_build": {
-                    "evidence_ref": context.saved_build.evidence_ref,
-                    "snapshot": context.saved_build.snapshot.model_dump(mode="json"),
-                }
-                if context.saved_build
-                else None,
-            },
+            context_payload,
             ensure_ascii=False,
         )
     messages: list[BaseMessage] = [SystemMessage(instruction), HumanMessage(message)]
