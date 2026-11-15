@@ -252,22 +252,6 @@ def build_react_request(
             }
         )
     instruction = REACT_SYSTEM_PROMPT
-    instruction += " Execution limits (data): " + json.dumps(
-        {
-            "max_tool_calls_per_batch": limits.max_tool_calls_per_batch,
-            "remaining_tool_calls": max(
-                0,
-                limits.max_tool_calls
-                - len(
-                    [
-                        record
-                        for record in records
-                        if context is None or record.origin_run_id == context.run_id
-                    ]
-                ),
-            ),
-        }
-    )
     if repair:
         instruction += " Application validation feedback: " + repair.model_dump_json()
     controls: list[ControlRecord] = []
