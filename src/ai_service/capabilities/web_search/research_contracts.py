@@ -9,6 +9,7 @@ from pydantic import Field, StrictInt, model_validator
 from ai_service.application.ports.hardware import ComponentCategory
 from ai_service.capabilities.assistant.stateful_contracts import Contract, Text
 
+DEFAULT_RESEARCH_SOURCES = 1
 MAX_RESEARCH_SOURCES = 2
 RESEARCH_PAGE_CHARS = 2000
 MAX_BUILD_RESEARCH_PARTS = len(ComponentCategory)
@@ -73,10 +74,28 @@ class ResearchHardwareArgs(Contract):
     """Search and read external manufacturer spec sheets and independent hardware reviews/benchmarks (thermals, noise, power draw, real-world performance) of an exact model. Use catalog tools instead for store price, stock, or side-by-side store product comparison."""
 
     model: ResearchSubject
-    focus: HardwareResearchFocus = HardwareResearchFocus.GENERAL
-    question: ResearchQuestion | None = None
+    focus: HardwareResearchFocus = Field(
+        default=HardwareResearchFocus.GENERAL,
+        description=(
+            "Hardware evaluation aspect: THERMAL_NOISE (thermals, fan noise, power draw), "
+            "PERFORMANCE (gaming frame rates), PRODUCTIVITY (content creation, rendering, video editing), "
+            "MOTHERBOARD (VRM power delivery and board features), MEMORY (timings, bandwidth, XMP/EXPO stability), "
+            "STORAGE (drive throughput, sustained writes, endurance), CASE_AIRFLOW (chassis ventilation and cooling), "
+            "PSU_TIER (tier list ranking), PSU_QUALITY (electrical testing, ripple, component quality), "
+            "KNOWN_ISSUES (hardware defects and stability advisories), "
+            "OFFICIAL_SPECS (manufacturer physical dimensions and interfaces), "
+            "GENERAL (overall strengths and weaknesses)."
+        ),
+    )
+    question: ResearchQuestion | None = Field(
+        default=None,
+        description=(
+            "Optional concise technical keyword phrase for a specific metric or named advisory. "
+            "Omit for broad evaluations of the chosen focus."
+        ),
+    )
     max_sources: StrictInt = Field(
-        default=MAX_RESEARCH_SOURCES,
+        default=DEFAULT_RESEARCH_SOURCES,
         ge=1,
         le=MAX_RESEARCH_SOURCES,
         description="Maximum pages per source tier (official, independent review).",
@@ -84,13 +103,20 @@ class ResearchHardwareArgs(Contract):
 
 
 class ResearchCompatibilityArgs(Contract):
-    """Read sources about a pair: BIOS, RAM clearance, fit or power connectors."""
+    """Check compatibility between a pair of PC components (physical fit, clearance, socket/BIOS support, or power connectors)."""
 
-    part_a: ResearchSubject
-    part_b: ResearchSubject
-    concern: ResearchQuestion | None = None
+    part_a: ResearchSubject = Field(
+        description="First physical hardware component to evaluate for compatibility.",
+    )
+    part_b: ResearchSubject = Field(
+        description="Second physical hardware component to evaluate for compatibility. Must be a physical hardware model."
+    )
+    concern: ResearchQuestion | None = Field(
+        default=None,
+        description="Specific compatibility concern: physical dimensions, clearance, socket support, or power cabling.",
+    )
     max_sources: StrictInt = Field(
-        default=MAX_RESEARCH_SOURCES,
+        default=DEFAULT_RESEARCH_SOURCES,
         ge=1,
         le=MAX_RESEARCH_SOURCES,
         description="Maximum pages per source tier.",
@@ -98,19 +124,32 @@ class ResearchCompatibilityArgs(Contract):
 
 
 class ResearchWorkloadArgs(Contract):
-    """Read game/application requirements or benchmarks; omit unknown test conditions."""
+    """Read game/application requirements or benchmark performance. For REQUIREMENTS mode, omit hardware and test conditions. For BENCHMARK mode, hardware must be specified."""
 
-    workload: ResearchSubject
+    workload: ResearchSubject = Field(
+        description="Name of the software application or game title.",
+    )
     mode: ResearchMode = ResearchMode.BENCHMARK
     benchmark_kind: WorkloadBenchmarkKind = WorkloadBenchmarkKind.GAMING
     hardware: list[ResearchSubject] = Field(
-        default_factory=list, max_length=MAX_WORKLOAD_HARDWARE
+        default_factory=list,
+        max_length=MAX_WORKLOAD_HARDWARE,
+        description="Target hardware model (GPU or CPU) being benchmarked.",
     )
-    resolution: ResearchCondition | None = None
-    preset: ResearchCondition | None = None
-    upscaling: ResearchCondition | None = None
+    resolution: ResearchCondition | None = Field(
+        default=None,
+        description="Display resolution condition for benchmark tests.",
+    )
+    preset: ResearchCondition | None = Field(
+        default=None,
+        description="Graphics quality preset condition for benchmark tests.",
+    )
+    upscaling: ResearchCondition | None = Field(
+        default=None,
+        description="Upscaling technology condition for benchmark tests.",
+    )
     max_sources: StrictInt = Field(
-        default=MAX_RESEARCH_SOURCES,
+        default=DEFAULT_RESEARCH_SOURCES,
         ge=1,
         le=MAX_RESEARCH_SOURCES,
         description="Maximum pages per source tier.",
@@ -141,5 +180,5 @@ class ResearchDriverArgs(Contract):
     operating_system: ResearchCondition | None = None
     version: ResearchCondition | None = None
     max_sources: StrictInt = Field(
-        default=MAX_RESEARCH_SOURCES, ge=1, le=MAX_RESEARCH_SOURCES
+        default=DEFAULT_RESEARCH_SOURCES, ge=1, le=MAX_RESEARCH_SOURCES
     )

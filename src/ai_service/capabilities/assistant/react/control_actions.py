@@ -66,8 +66,17 @@ CONTROL_DESCRIPTIONS = {
         "If subject/predicate already exists, SET/CLEAR must copy its target_id from context; do not add a second budget. "
         "source_text is only your own suggestion (requires consent)."
     ),
-    ControlName.ASK_CLARIFICATION: "Ask for missing business input using actual missing field names or unresolved selection reasons. General conversation can be plain text.",
-    ControlName.SUBMIT_RESULT: "Select refs/build_ref or supporting calls. One comparison is one result covering all selected products. task_index=null is only for a side answer that preserves pending work. Put actual advice/tradeoffs in explanation; text is a summary label replaced by server-rendered facts. Use quotes for exact web excerpts.",
+    ControlName.ASK_CLARIFICATION: (
+        "Ask for missing business input using actual missing field names (e.g. 'BUDGET_REQUIRED', 'USE_CASE_REQUIRED') "
+        "or unresolved selection reasons when required information is not available in context. "
+        "Do not ask for fields already present in context. General conversation can be plain text."
+    ),
+    ControlName.SUBMIT_RESULT: (
+        "Submit final verified answers with supporting evidence citations (refs) after research or catalog lookup. "
+        "Select refs/build_ref or supporting calls. One comparison is one result covering all selected products. "
+        "Put actual advice/tradeoffs in explanation; text is a summary label replaced by server-rendered facts. "
+        "Use quotes for exact web excerpts."
+    ),
 }
 
 

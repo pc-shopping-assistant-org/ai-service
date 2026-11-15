@@ -79,10 +79,9 @@ class WebSearchPresets:
     def compatibility(
         part_a: str, part_b: str, specific_concern: str | None = None
     ) -> str:
-        query = f"{part_a} {part_b} compatibility official support BIOS clearance connectors"
         if specific_concern:
-            query += f" {specific_concern}"
-        return query.strip()
+            return f"{part_a} {part_b} compatibility {specific_concern}".strip()
+        return f"{part_a} {part_b} compatibility support clearance".strip()
 
     @staticmethod
     def product_reviews(
@@ -99,11 +98,8 @@ class WebSearchPresets:
     def research_hardware(
         product_name: str, focus: HardwareResearchFocus, question: str | None = None
     ) -> str:
-        return " ".join(
-            value
-            for value in (product_name, HARDWARE_SEARCH_FOCUS[focus][1], question)
-            if value
-        )
+        focus_keyword = question if question else HARDWARE_SEARCH_FOCUS[focus][1]
+        return f"{product_name} {focus_keyword}".strip()
 
     @staticmethod
     def build_guides(

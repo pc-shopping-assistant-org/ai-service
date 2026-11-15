@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 from collections.abc import Callable
@@ -81,19 +82,52 @@ DOMAIN_SUGGESTIONS: dict[WebSearchCategory, list[str]] = {
 }
 
 
+DEFAULT_SEARCH_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://html.duckduckgo.com/",
+}
+
+
 class DuckDuckGoSearchAdapter(WebSearchClient):
     """Zero-dependency, keyless search adapter querying DuckDuckGo HTML endpoint."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        min_request_interval: float = 2.0,
+    ) -> None:
         self.settings = settings or get_settings()
+        self.min_request_interval = min_request_interval
+        self._last_request_time: float = 0.0
+        self._lock: asyncio.Lock | None = None
+
+    def _get_lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     async def search(self, query: WebSearchQuery) -> WebSearchResult:
+        lock = self._get_lock()
+        async with lock:
+            loop = asyncio.get_running_loop()
+            now = loop.time()
+            elapsed = now - self._last_request_time
+            if elapsed < self.min_request_interval:
+                await asyncio.sleep(self.min_request_interval - elapsed)
+            self._last_request_time = loop.time()
+
         enriched_query = self._enrich_query(query)
         try:
             async with httpx.AsyncClient(
                 timeout=self.settings.request_timeout_seconds,
                 follow_redirects=True,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+                headers=DEFAULT_SEARCH_HEADERS,
             ) as client:
                 res = await client.post(
                     "https://html.duckduckgo.com/html/",

@@ -183,3 +183,37 @@ async def test_trafilatura_reader_handles_empty_html(
 
     assert result.status == WebPageReadStatus.EMPTY
     assert result.content is None
+
+
+@pytest.mark.asyncio
+async def test_trafilatura_reader_marks_bot_challenge_as_unreadable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bot_html = """
+    <!DOCTYPE html>
+    <html>
+    <head><title>Just a moment...</title></head>
+    <body>
+        <p>Please wait while we check your browser before accessing the site.</p>
+        <p>Cloudflare Ray ID: 89ab12cd34ef</p>
+    </body>
+    </html>
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=bot_html, request=request)
+
+    transport = httpx.MockTransport(handler)
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: original_client(transport=transport, **kwargs),
+    )
+
+    reader = TrafilaturaReader()
+    result = await reader.read("https://example.com/bot-challenge")
+
+    assert result.status == WebPageReadStatus.UNREADABLE
+    assert result.content is None
+    assert result.evidence_ref is None

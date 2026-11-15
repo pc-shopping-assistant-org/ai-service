@@ -1,5 +1,6 @@
 """Text and native calls at the model boundary; application owns outcomes."""
 
+import inspect
 import json
 import logging
 from itertools import groupby
@@ -206,6 +207,13 @@ def project_model_response(decision: FlexibleDecision, message: str) -> AIMessag
     )
 
 
+def _tool_description(name: ToolName) -> str:
+    doc = TOOL_SCHEMAS[name].__doc__
+    if doc:
+        return inspect.cleandoc(doc)
+    return f"Execute {name.value} using validated arguments."
+
+
 def build_react_request(
     message: str,
     transcript: list[ToolRecord],
@@ -224,8 +232,7 @@ def build_react_request(
     schemas = [
         {
             "name": name.value,
-            "description": TOOL_SCHEMAS[name].__doc__
-            or f"Execute {name.value} using validated arguments.",
+            "description": _tool_description(name),
             "parameters": model_tool_schema(TOOL_SCHEMAS[name]),
         }
         for name in allowed
@@ -276,10 +283,6 @@ def build_react_request(
                 "memories": [item.model_dump(mode="json") for item in context.memories],
                 "history": [turn.model_dump(mode="json") for turn in context.history],
                 "task_message": context.task_message,
-                "completion_requirements": [
-                    task.model_dump(mode="json")
-                    for task in context.completion_requirements
-                ],
                 "saved_build": {
                     "evidence_ref": context.saved_build.evidence_ref,
                     "snapshot": context.saved_build.snapshot.model_dump(mode="json"),
