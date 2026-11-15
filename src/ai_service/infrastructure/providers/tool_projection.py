@@ -16,6 +16,21 @@ def _clip(text: str, limit: int) -> str:
     return text.encode()[: max(limit, 0)].decode("utf-8", errors="ignore")
 
 
+def _base_payload(
+    result: ToolResult, *, include_evidence_refs: bool = True
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "tool_call_id": result.tool_call_id,
+        "tool": result.tool,
+        "status": result.status,
+    }
+    if result.error is not None:
+        payload["error"] = result.error
+    if include_evidence_refs and result.evidence_refs:
+        payload["evidence_refs"] = result.evidence_refs
+    return payload
+
+
 def _source(page: ReadWebPageResult) -> dict[str, Any]:
     source: dict[str, Any] = {"url": page.url, "status": page.status.value}
     if page.final_url != page.url:
@@ -26,8 +41,6 @@ def _source(page: ReadWebPageResult) -> dict[str, Any]:
         source["evidence_ref"] = page.evidence_ref
     if page.content:
         source["content"] = page.content
-    if page.next_offset is not None:
-        source["next_offset"] = page.next_offset
     if page.facts:
         source["facts"] = [item.model_dump(mode="json") for item in page.facts]
     return source
@@ -47,12 +60,12 @@ def _section(section: ResearchSection) -> dict[str, Any]:
 
 
 def _research_payload(result: ToolResult, research: ResearchResult, limit: int) -> str:
-    payload = result.model_dump(mode="json", exclude={"result"})
+    payload = _base_payload(result, include_evidence_refs=False)
     projected: dict[str, Any] = {
-        "tool": research.tool.value,
         "sections": [_section(section) for section in research.sections],
-        "missing_conditions": [c.value for c in research.missing_conditions],
     }
+    if research.missing_conditions:
+        projected["missing_conditions"] = [c.value for c in research.missing_conditions]
     if research.build_source_ref is not None:
         projected["build_source_ref"] = research.build_source_ref
     payload["result"] = projected
@@ -89,9 +102,8 @@ def observation_json(result: ToolResult, byte_limit: int) -> str:
         build = result.result
         receipt, search = build.receipt, build.search_evidence
         trace = receipt.search_trace
-        payload = result.model_dump(mode="json", exclude={"result"})
+        payload = _base_payload(result)
         payload["result"] = {
-            "tool": build.tool,
             "build_ref": str(build.build_ref),
             "outcome": search.outcome
             if search and receipt.outcome != "BUILT"
@@ -108,7 +120,9 @@ def observation_json(result: ToolResult, byte_limit: int) -> str:
         }
         payload["projection"] = {"truncated": True}
     else:
-        payload = result.model_dump(mode="json")
+        payload = _base_payload(result)
+        if result.result is not None:
+            payload["result"] = result.model_dump(mode="json")["result"]
 
     def encoded() -> str:
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
