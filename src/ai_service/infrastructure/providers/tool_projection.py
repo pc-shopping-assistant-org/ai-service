@@ -32,9 +32,10 @@ def _base_payload(
 
 
 def _source(page: ReadWebPageResult) -> dict[str, Any]:
-    source: dict[str, Any] = {"url": page.url, "status": page.status.value}
-    if page.final_url != page.url:
-        source["final_url"] = page.final_url
+    source: dict[str, Any] = {
+        "url": page.final_url or page.url,
+        "status": page.status.value,
+    }
     if page.title:
         source["title"] = page.title
     if page.evidence_ref:
