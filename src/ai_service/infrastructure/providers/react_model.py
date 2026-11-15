@@ -256,7 +256,11 @@ def build_react_request(
             context_payload["history"] = [
                 turn.model_dump(mode="json") for turn in context.history
             ]
-        if context.task_message is not None:
+        if (
+            context.pending is not None
+            and context.task_message
+            and context.task_message != message
+        ):
             context_payload["task_message"] = context.task_message
         if context.saved_build is not None:
             context_payload["saved_build"] = {
