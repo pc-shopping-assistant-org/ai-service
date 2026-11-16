@@ -98,6 +98,56 @@ def _research_payload(result: ToolResult, research: ResearchResult, limit: int) 
     return output
 
 
+_INTERNAL_PART_KEYS = {
+    "category",
+    "performance_score",
+    "integrated_graphics_score",
+    "stock_cooler_score",
+}
+
+
+def _clean_part(part: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in part.items()
+        if key not in _INTERNAL_PART_KEYS
+        and value is not None
+        and value is not False
+        and value != []
+        and value != {}
+    }
+
+
+def _clean_build(raw: dict[str, Any]) -> dict[str, Any]:
+    cleaned: dict[str, Any] = {
+        "total_price": raw["total_price"],
+    }
+    if raw.get("objective") is not None:
+        cleaned["objective"] = raw["objective"]
+    if raw.get("ranking_status") is not None:
+        cleaned["ranking_status"] = raw["ranking_status"]
+    cleaned["compatibility_status"] = raw["compatibility_status"]
+    if raw.get("owned_categories"):
+        cleaned["owned_categories"] = raw["owned_categories"]
+    if power := raw.get("power_estimate"):
+        cleaned["power_estimate"] = {
+            "estimated_sustained_peak_watts": power["estimated_sustained_peak_watts"],
+            "recommended_capacity_watts": power["recommended_capacity_watts"],
+        }
+    cleaned["parts"] = {
+        slot: _clean_part(part) for slot, part in raw.get("parts", {}).items()
+    }
+    return cleaned
+
+
+def _clean_requirement_mapping(entry: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in entry.items()
+        if not (key == "target_bindings" and not value)
+    }
+
+
 def project_build_result(build: BuildResult) -> dict[str, Any]:
     # Optimizer inputs/pool identities are replay data, not model context.
     receipt, search = build.receipt, build.search_evidence
@@ -106,15 +156,21 @@ def project_build_result(build: BuildResult) -> dict[str, Any]:
         "outcome": search.outcome
         if search and receipt.outcome != "BUILT"
         else receipt.outcome,
-        "build": receipt.build.model_dump(mode="json", exclude_none=True)
+        "build": _clean_build(
+            receipt.build.model_dump(mode="json", exclude_none=True)
+        )
         if receipt.build
         else None,
         "requirements": [
-            entry.model_dump(mode="json") for entry in receipt.compilation.mapping
+            _clean_requirement_mapping(entry.model_dump(mode="json"))
+            for entry in receipt.compilation.mapping
         ],
     }
-    if search is not None:
-        projected["search_evidence"] = search.model_dump(mode="json")
+    if search is not None and receipt.outcome != "BUILT":
+        projected["search_evidence"] = {
+            "outcome": search.outcome,
+            "termination": search.termination,
+        }
     return projected
 
 
