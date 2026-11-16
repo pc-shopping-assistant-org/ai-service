@@ -98,31 +98,35 @@ def _research_payload(result: ToolResult, research: ResearchResult, limit: int) 
     return output
 
 
+def project_build_result(build: BuildResult) -> dict[str, Any]:
+    # Optimizer inputs/pool identities are replay data, not model context.
+    receipt, search = build.receipt, build.search_evidence
+    projected: dict[str, Any] = {
+        "build_ref": str(build.build_ref),
+        "outcome": search.outcome
+        if search and receipt.outcome != "BUILT"
+        else receipt.outcome,
+        "build": receipt.build.model_dump(mode="json", exclude_none=True)
+        if receipt.build
+        else None,
+        "requirements": [
+            entry.model_dump(mode="json") for entry in receipt.compilation.mapping
+        ],
+    }
+    if search is not None:
+        projected["search_evidence"] = search.model_dump(mode="json")
+    return projected
+
+
 def observation_json(result: ToolResult, byte_limit: int) -> str:
     if isinstance(result.result, ResearchResult):
         return _research_payload(result, result.result, byte_limit)
     if isinstance(result.result, BuildResult):
-        # Optimizer inputs/pool identities are replay data, not model context.
         build = result.result
-        receipt, search = build.receipt, build.search_evidence
-        trace = receipt.search_trace
-        payload = _base_payload(result)
-        payload["result"] = {
-            "build_ref": str(build.build_ref),
-            "outcome": search.outcome
-            if search and receipt.outcome != "BUILT"
-            else receipt.outcome,
-            "build": receipt.build.model_dump(mode="json", exclude_none=True)
-            if receipt.build
-            else None,
-            "requirements": [
-                entry.model_dump(mode="json") for entry in receipt.compilation.mapping
-            ],
-            "search_evidence": search.model_dump(mode="json") if search else None,
-            "metadata_rejections": trace.metadata_rejections if trace else 0,
-            "scoring_rejections": trace.scoring_rejections if trace else 0,
-        }
-        payload["projection"] = {"truncated": True}
+        payload = _base_payload(
+            result, include_evidence_refs=build.receipt.outcome != "BUILT"
+        )
+        payload["result"] = project_build_result(build)
     elif isinstance(result.result, (CatalogResult, DetailsResult, ComparisonResult)):
         payload = _base_payload(result, include_evidence_refs=False)
         if isinstance(result.result, DetailsResult):
