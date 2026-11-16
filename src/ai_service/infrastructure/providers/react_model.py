@@ -32,6 +32,7 @@ from ai_service.capabilities.assistant.react.contracts import (
     MAX_NATIVE_TOOL_CALLS,
     TOOL_SCHEMAS,
     AnswerCandidate,
+    BuildResult,
     ControlRecord,
     ReactLimits,
     ToolCall,
@@ -65,7 +66,10 @@ from ai_service.infrastructure.providers.model_stream import (
     TextStreamSink,
     stream_public_text,
 )
-from ai_service.infrastructure.providers.tool_projection import observation_json
+from ai_service.infrastructure.providers.tool_projection import (
+    observation_json,
+    project_build_result,
+)
 from ai_service.infrastructure.providers.tool_schema import model_tool_schema
 
 GEMINI_SIGNATURES_KEY = "__gemini_function_call_thought_signatures__"
@@ -238,6 +242,15 @@ def build_react_request(
     if repair:
         instruction += " Application validation feedback: " + repair.model_dump_json()
     controls: list[ControlRecord] = []
+    latest_build = next(
+        (
+            record.result.result
+            for record in reversed(records)
+            if record.result is not None
+            and isinstance(record.result.result, BuildResult)
+        ),
+        None,
+    )
     if context is not None:
         context = ToolContext.model_validate(context.model_dump())
         controls = context.control_history
@@ -265,14 +278,23 @@ def build_react_request(
                 "evidence_ref": context.saved_build.evidence_ref,
                 "snapshot": context.saved_build.snapshot.model_dump(mode="json"),
             }
+        if latest_build is not None:
+            context_payload["build_result"] = project_build_result(latest_build)
         instruction += " Application context (data): " + json.dumps(
             context_payload,
+            ensure_ascii=False,
+        )
+    elif latest_build is not None:
+        instruction += " Application context (data): " + json.dumps(
+            {"build_result": project_build_result(latest_build)},
             ensure_ascii=False,
         )
     messages: list[BaseMessage] = [SystemMessage(instruction), HumanMessage(message)]
     pairs: list[tuple[int, ToolCall, str]] = []
     for index, record in enumerate(records):
         assert record.result is not None
+        if record.call.name == ToolName.BUILD_PC:
+            continue
         pairs.append(
             (
                 record.model_step
