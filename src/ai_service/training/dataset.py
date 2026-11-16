@@ -201,7 +201,12 @@ def validate_label(sample: TrainingSample, snapshot: DatasetSnapshot) -> None:
                     sample.review_status == "DRAFT"
                     and snapshot.context.execution_allowed
                     and snapshot.context.read_catalog_allowed
-                    and name in {ToolName.SEARCH_WEB, ToolName.READ_WEB_PAGE}
+                    and name
+                    in {
+                        ToolName.SEARCH_WEB,
+                        ToolName.READ_WEB_PAGE,
+                        ToolName.BUILD_PC,
+                    }
                 ):
                     raise ValueError("TARGET_TOOL_NOT_ALLOWED")
                 TOOL_SCHEMAS[name].model_validate(call.arguments)

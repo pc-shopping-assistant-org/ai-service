@@ -100,7 +100,12 @@ async def test_catalog_request_executes_without_a_task_model_step():
             next(m.content for m in replies if m.name == "search_catalog")
         )
         return native_result(
-            AnswerCandidate(text="Catalog", evidence_refs=result["evidence_refs"])
+            AnswerCandidate(
+                text="Catalog",
+                evidence_refs=[
+                    item["evidence_ref"] for item in result["result"]["products"]
+                ],
+            )
         )
 
     provider.model.ainvoke = invoke
