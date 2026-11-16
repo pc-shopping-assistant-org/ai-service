@@ -52,7 +52,6 @@ from ai_service.capabilities.assistant.react.model_contracts import (
     RequirementInput,
     RequirementProposalInput,
     ResultInput,
-    ResultSubmissionInput,
 )
 from ai_service.capabilities.assistant.react.submissions import (
     ResultSelection,
@@ -178,16 +177,49 @@ def project_model_response(decision: FlexibleDecision, message: str) -> AIMessag
                 supporting_tool_call_ids=supporting,
                 web_excerpts=answer.web_excerpts,
                 review=answer.review,
-                explanation=answer.explanation.text if answer.explanation else None,
+                explanation=(
+                    answer.explanation.text
+                    if answer.explanation
+                    else "\n\n".join(
+                        part
+                        for part in (
+                            f"### Đánh giá: {answer.review.product_name}",
+                            answer.review.summary,
+                            (
+                                "**Ưu điểm:**\n"
+                                + "\n".join(f"- {pro}" for pro in answer.review.pros)
+                            )
+                            if answer.review.pros
+                            else "",
+                            (
+                                "**Nhược điểm:**\n"
+                                + "\n".join(f"- {con}" for con in answer.review.cons)
+                            )
+                            if answer.review.cons
+                            else "",
+                            f"**Tổng kết:**\n{answer.review.verdict}",
+                        )
+                        if part
+                    )
+                    if answer.review is not None
+                    else None
+                ),
                 explanation_evidence_refs=answer.explanation.evidence_refs
                 if answer.explanation
                 else None,
             )
             for index, answer, supporting in candidates
         ]
-        arguments = ResultSubmissionInput(
-            results=[ResultInput.from_selection(item) for item in selections]
-        ).model_dump(mode="json", exclude_defaults=True)
+        arguments = {
+            "results": [
+                ResultInput.from_selection(item).model_dump(
+                    mode="json",
+                    exclude_defaults=True,
+                    exclude={"task_index", "text", "review"},
+                )
+                for item in selections
+            ]
+        }
     return _call_message(
         ToolCall(call_id="control", name=name.value, arguments=arguments),
         provider_name="openai",
