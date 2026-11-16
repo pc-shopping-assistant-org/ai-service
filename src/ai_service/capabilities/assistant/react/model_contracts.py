@@ -95,7 +95,7 @@ class RequirementProposalInput(Contract):
 
 
 class EvidenceResultInput(Contract):
-    text: Text = Field(max_length=8000)
+    text: Text | None = Field(default=None, max_length=8000)
     refs: list[Text] = Field(default_factory=list, max_length=100)
     build_ref: UUID | None = None
     calls: list[Text] = Field(default_factory=list, max_length=20)
@@ -110,7 +110,7 @@ class ResultInput(EvidenceResultInput):
 
     def selection(self) -> ResultSelection:
         return ResultSelection(
-            text=self.text,
+            text=self.text or self.explanation or "Submitted",
             evidence_refs=self.refs,
             build_ref=self.build_ref,
             supporting_tool_call_ids=self.calls,

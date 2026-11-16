@@ -17,6 +17,7 @@ _ANNOTATIONS = {
 }
 _EXCLUDED_PROPERTIES = {
     "task_index",
+    "text",
 }
 
 
