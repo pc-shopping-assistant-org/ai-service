@@ -96,16 +96,35 @@ class RequirementProposalInput(Contract):
 
 class EvidenceResultInput(Contract):
     text: Text | None = Field(default=None, max_length=8000)
-    refs: list[Text] = Field(default_factory=list, max_length=100)
-    build_ref: UUID | None = None
-    calls: list[Text] = Field(default_factory=list, max_length=20)
+    refs: list[Text] = Field(
+        default_factory=list,
+        max_length=100,
+        description="Selected evidence_ref strings from tool outputs or build_result.",
+    )
+    build_ref: UUID | None = Field(
+        default=None,
+        description="UUID from build_result.build_ref when submitting a PC build.",
+    )
+    calls: list[Text] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Optional supporting tool_call_id values (not tool names).",
+    )
     task_index: StrictInt | None = Field(default=0, ge=0, lt=8)
-    explanation: Text | None = Field(default=None, max_length=3000)
+    explanation: Text | None = Field(
+        default=None,
+        max_length=3000,
+        description="Final answer, advice, or tradeoffs for the user (no URLs).",
+    )
     explanation_refs: list[Text] | None = Field(default=None, max_length=20)
 
 
 class ResultInput(EvidenceResultInput):
-    quotes: list[WebExcerpt] = Field(default_factory=list, max_length=8)
+    quotes: list[WebExcerpt] = Field(
+        default_factory=list,
+        max_length=8,
+        description="Verbatim substrings copied from selected readable web sources.",
+    )
     review: ProductReview | None = None
 
     def selection(self) -> ResultSelection:
@@ -144,6 +163,6 @@ class ResultSubmissionInput(Contract):
 
 
 class EvidenceSubmissionInput(Contract):
-    """Catalog/build submissions need no web quotation or review fields."""
+    """Catalog/build submissions need no web quotation fields."""
 
     results: list[EvidenceResultInput] = Field(min_length=1, max_length=8)

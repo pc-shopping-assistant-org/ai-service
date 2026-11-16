@@ -215,7 +215,7 @@ def project_model_response(decision: FlexibleDecision, message: str) -> AIMessag
                 ResultInput.from_selection(item).model_dump(
                     mode="json",
                     exclude_defaults=True,
-                    exclude={"task_index", "text", "review"},
+                    exclude={"task_index", "text", "review", "explanation_refs"},
                 )
                 for item in selections
             ]
