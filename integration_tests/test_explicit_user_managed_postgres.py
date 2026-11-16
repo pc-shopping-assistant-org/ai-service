@@ -568,7 +568,7 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                     receipts[0]["proposed"]["draft"]["items"][0]["value"]["amount"]
                     == 25_000_000
                 )
-            assert len(ledger) == (2 if read_first and not confirm_then_edit else 1)
+            assert len(ledger) == (2 if confirm_then_edit or read_first else 1)
             if read_first and not confirm_then_edit:
                 assert ledger[0]["call"]["call_id"] == "before"
                 assert ledger[0]["result"]["constraints_revision"] == 0
