@@ -215,13 +215,13 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                         "draft": current_draft(context.requirements).model_dump(),
                     }
                 )
+            if recover and not self.failed:
+                self.failed = True
+                raise ExecutionFailed(RetryFailure.UPSTREAM_TIMEOUT)
+            if recover or confirm_then_edit:
+                edits_committed.set()
+                await gate.wait()
             if not transcript:
-                if recover and not self.failed:
-                    self.failed = True
-                    raise ExecutionFailed(RetryFailure.UPSTREAM_TIMEOUT)
-                if recover or confirm_then_edit:
-                    edits_committed.set()
-                    await gate.wait()
                 return FlexibleDecision(
                     action={
                         "kind": "CALL_TOOL",
