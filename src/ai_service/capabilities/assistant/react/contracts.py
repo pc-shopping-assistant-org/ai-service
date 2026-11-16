@@ -108,7 +108,7 @@ class SearchCatalogArgs(Contract):
     query: Text | None = Field(
         default=None,
         max_length=MAX_CATALOG_KEYWORD_CHARS,
-        description="Concise product keyword or model name.",
+        description="Concise product keyword, model name, or '*' for general catalog listing.",
     )
     semantic_query: Text | None = Field(
         default=None,

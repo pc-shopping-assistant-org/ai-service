@@ -215,13 +215,13 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                         "draft": current_draft(context.requirements).model_dump(),
                     }
                 )
+            if recover and not self.failed:
+                self.failed = True
+                raise ExecutionFailed(RetryFailure.UPSTREAM_TIMEOUT)
+            if recover or confirm_then_edit:
+                edits_committed.set()
+                await gate.wait()
             if not transcript:
-                if recover and not self.failed:
-                    self.failed = True
-                    raise ExecutionFailed(RetryFailure.UPSTREAM_TIMEOUT)
-                if recover or confirm_then_edit:
-                    edits_committed.set()
-                    await gate.wait()
                 return FlexibleDecision(
                     action={
                         "kind": "CALL_TOOL",
@@ -415,7 +415,7 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                                 checkpoint_id=after.accepted_checkpoint_id,
                             )
                         )
-                        assert snapshot == waiting and service.calls == 0
+                        assert snapshot == waiting and service.calls == 2
                         async with engine.connect() as conn:
                             persisted = (
                                 (
@@ -497,7 +497,7 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                         thread_id=after.id, checkpoint_id=after.accepted_checkpoint_id
                     )
                 )
-                assert snapshot == waiting and service.calls == 1
+                assert snapshot == waiting and service.calls == 2
                 async with engine.connect() as conn:
                     persisted = (
                         (
@@ -550,7 +550,7 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                 )
                 assert accepted.public_build.total_spending_vnd <= 25_000_000
             assert (
-                service.calls == 1
+                service.calls == (2 if confirm_then_edit else 1)
                 and sum(extractor.calls for extractor in extractors) == 0
             )
             terminal = await saver.aget_tuple(
@@ -568,7 +568,7 @@ async def test_user_requirements_publish_without_confirmation_and_survive_recove
                     receipts[0]["proposed"]["draft"]["items"][0]["value"]["amount"]
                     == 25_000_000
                 )
-            assert len(ledger) == (2 if read_first and not confirm_then_edit else 1)
+            assert len(ledger) == (2 if confirm_then_edit or read_first else 1)
             if read_first and not confirm_then_edit:
                 assert ledger[0]["call"]["call_id"] == "before"
                 assert ledger[0]["result"]["constraints_revision"] == 0

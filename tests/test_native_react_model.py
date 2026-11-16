@@ -137,7 +137,10 @@ async def test_native_transcript_projects_matched_pairs_and_parses_answer():
     assistant, tool = provider.model.messages[2:]
     assert isinstance(assistant, AIMessage) and isinstance(tool, ToolMessage)
     assert assistant.tool_calls[0]["id"] == tool.tool_call_id == call.call_id
-    assert json.loads(tool.content)["evidence_refs"] == result.evidence_refs
+    assert [
+        item["evidence_ref"]
+        for item in json.loads(tool.content)["result"]["products"]
+    ] == result.evidence_refs
 
 
 @pytest.mark.asyncio

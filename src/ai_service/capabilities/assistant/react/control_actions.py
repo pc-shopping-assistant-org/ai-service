@@ -74,7 +74,7 @@ CONTROL_DESCRIPTIONS = {
     ControlName.SUBMIT_RESULT: (
         "Submit final verified answers with supporting evidence citations (refs) after research or catalog lookup. "
         "Select refs/build_ref or supporting calls. One comparison is one result covering all selected products. "
-        "Put actual advice/tradeoffs in explanation; text is a summary label replaced by server-rendered facts. "
+        "Put your answer, advice, or tradeoffs in explanation (server renders canonical facts above it). "
         "Use quotes for exact web excerpts."
     ),
 }

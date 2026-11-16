@@ -9,7 +9,11 @@ from test_react_tools import context
 from test_training_dataset import dataset, sample
 from test_training_evaluation import run_config
 
-from ai_service.capabilities.assistant.react.actions import CallToolAction, action_calls
+from ai_service.capabilities.assistant.react.actions import (
+    CallToolAction,
+    FinalAnswerAction,
+    action_calls,
+)
 from ai_service.capabilities.assistant.react.contracts import CompletionRequirement
 from ai_service.capabilities.assistant.react.tools import allowed_tools
 from ai_service.infrastructure.providers.react_model import (
@@ -150,6 +154,26 @@ def test_control_targets_export_native_calls_matching_serving_schema(tmp_path, k
     assert parsed is not None and parsed.action == record.target.action
 
 
+def _expected_roundtrip_action(action):
+    if isinstance(action, FinalAnswerAction):
+        return action.model_copy(
+            update={
+                "answer": action.answer.model_copy(update={"text": "Submitted"}),
+                "task_answers": [
+                    part.model_copy(
+                        update={
+                            "answer": part.answer.model_copy(
+                                update={"text": "Submitted"}
+                            )
+                        }
+                    )
+                    for part in action.task_answers
+                ],
+            }
+        )
+    return action
+
+
 def test_existing_final_label_exports_submit_result_and_roundtrips_canonical_action():
     loaded = load_dataset(PILOT)
     record = next(item for item in loaded.samples if item.sample_id == "react-23")
@@ -166,10 +190,14 @@ def test_existing_final_label_exports_submit_result_and_roundtrips_canonical_act
     assert len(payload["results"]) == 1
     assert "outcome" not in payload["results"][0]
     assert "status" not in payload["results"][0]
+    assert "text" not in payload["results"][0]
     parsed = parse_export(example, snapshot)
     assert parsed is not None
-    assert parsed.action == record.target.action
-    assert parsed.model_dump(exclude={"control_call"}) == record.target.model_dump(
+    expected = record.target.model_copy(
+        update={"action": _expected_roundtrip_action(record.target.action)}
+    )
+    assert parsed.action == expected.action
+    assert parsed.model_dump(exclude={"control_call"}) == expected.model_dump(
         exclude={"control_call"}
     )
     assert record.target.model_dump(mode="json") == original_label
@@ -201,10 +229,18 @@ def test_all_pilot_react_labels_roundtrip_without_rewriting_reviewed_data():
                 record.sample_id
             )
         else:
-            assert parsed.action == record.target.action, record.sample_id
+            assert parsed.action == _expected_roundtrip_action(record.target.action), (
+                record.sample_id
+            )
         assert record.model_dump(mode="json") == original_label
         assert snapshot.model_dump(mode="json") == original_snapshot
         checked += 1
     assert checked > 0
-    # Old typed-clarification and raw web-read labels need review.
-    assert needs_review == {"react-13", "react-14", "react-15", "react-24"}
+    # Old typed-clarification, build_pc, and raw web-read labels need review.
+    assert needs_review == {
+        "react-13",
+        "react-14",
+        "react-15",
+        "react-21",
+        "react-24",
+    }

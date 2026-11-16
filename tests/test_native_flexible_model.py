@@ -297,4 +297,9 @@ async def test_v2_uses_canonical_gemini_tool_pairs_after_serialization():
     ai, tool = provider.model.messages[-2:]
     assert ai.additional_kwargs[GEMINI_SIGNATURES_KEY] == {"c1": "opaque"}
     assert isinstance(tool, ToolMessage) and tool.tool_call_id == "c1"
-    assert tool.content == result.model_dump_json()
+    from ai_service.capabilities.assistant.react.contracts import ReactLimits
+    from ai_service.infrastructure.providers.tool_projection import observation_json
+
+    assert tool.content == observation_json(
+        result, ReactLimits().max_tool_context_bytes
+    )

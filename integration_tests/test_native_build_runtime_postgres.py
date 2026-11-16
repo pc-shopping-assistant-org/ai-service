@@ -176,6 +176,14 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                         request=httpx.Request("POST", "https://model.test/chat")
                     )
                 if version == "v2":
+                    refs = (
+                        [result["result"]["product"]["evidence_ref"]]
+                        if "product" in result.get("result", {})
+                        else [
+                            item["evidence_ref"]
+                            for item in result.get("result", {}).get("products", [])
+                        ]
+                    )
                     return AIMessage(
                         content="",
                         tool_calls=[
@@ -186,7 +194,7 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                                     "results": [
                                         {
                                             "text": "Catalog result",
-                                            "refs": result["evidence_refs"],
+                                            "refs": refs,
                                             "build_ref": None,
                                             "explanation": "Đối chiếu thông số và nhu cầu trước khi quyết định chọn linh kiện."
                                             if selected

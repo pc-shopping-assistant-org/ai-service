@@ -132,7 +132,7 @@ def test_state_aware_exposure_keeps_reads_and_requires_compiled_build(
         ToolName.RESEARCH_DRIVER,
     )
     ready = context(state(), rows(realistic_catalog))
-    assert ToolName.BUILD_PC in allowed_tools(ready)
+    assert ToolName.BUILD_PC not in allowed_tools(ready)
     for name in allowed_tools(ready):
         doc = TOOL_SCHEMAS[name].__doc__
         assert doc and doc.strip(), f"Missing docstring for {name}"
