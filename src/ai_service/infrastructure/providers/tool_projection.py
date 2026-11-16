@@ -140,14 +140,6 @@ def _clean_build(raw: dict[str, Any]) -> dict[str, Any]:
     return cleaned
 
 
-def _clean_requirement_mapping(entry: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in entry.items()
-        if not (key == "target_bindings" and not value)
-    }
-
-
 def project_build_result(build: BuildResult) -> dict[str, Any]:
     # Optimizer inputs/pool identities are replay data, not model context.
     receipt, search = build.receipt, build.search_evidence
@@ -161,10 +153,6 @@ def project_build_result(build: BuildResult) -> dict[str, Any]:
         )
         if receipt.build
         else None,
-        "requirements": [
-            _clean_requirement_mapping(entry.model_dump(mode="json"))
-            for entry in receipt.compilation.mapping
-        ],
     }
     if search is not None and receipt.outcome != "BUILT":
         projected["search_evidence"] = {
