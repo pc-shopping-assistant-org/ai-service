@@ -32,6 +32,7 @@ from ai_service.capabilities.assistant.react.contracts import (
     CompletionRequirement,
     ControlRecord,
     ReactLimits,
+    ToolCall,
     ToolContext,
     ToolError,
     ToolName,
@@ -583,15 +584,21 @@ def build_flexible_graph(
         if state.get("phase") == "DECIDED":
             return {}
         ctx = current(state)
+        tasks_for_turn = registered_tasks(state)
         should_build = (
             not ctx.read_only_turn
             and ctx.execution_allowed
             and ctx.read_catalog_allowed
+            and not state.get("pending_proposal")
+            and not state.get("pending_draft")
             and build_needs_catalog(ctx.requirements)
             and (
-                any(task.kind == "BUILD" for task in registered_tasks(state))
-                or ctx.requirements != trusted.requirements
-                or ctx.saved_build is None
+                any(task.kind == "BUILD" for task in tasks_for_turn)
+                if tasks_for_turn
+                else (
+                    ctx.requirements != trusted.requirements
+                    or ctx.saved_build is None
+                )
             )
             and not any(
                 entry.call.name == ToolName.BUILD_PC
