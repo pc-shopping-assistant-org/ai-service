@@ -96,6 +96,7 @@ from ai_service.capabilities.assistant.requirements.catalog_policy import (
     build_needs_catalog,
     draft_needs_catalog,
 )
+from ai_service.capabilities.assistant.requirements.compiler import compile_requirements
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
 )
@@ -579,11 +580,67 @@ def build_flexible_graph(
             and (current(state).requirements == trusted.requirements)
         ):
             return {}
-        if any(
-            task.kind == "BUILD" for task in registered_tasks(state)
-        ) and build_needs_catalog(current(state).requirements):
-            return await load_catalog(state)
-        return {}
+        if state.get("phase") == "DECIDED":
+            return {}
+        ctx = current(state)
+        should_build = (
+            not ctx.read_only_turn
+            and ctx.execution_allowed
+            and ctx.read_catalog_allowed
+            and build_needs_catalog(ctx.requirements)
+            and (
+                any(task.kind == "BUILD" for task in registered_tasks(state))
+                or ctx.requirements != trusted.requirements
+                or ctx.saved_build is None
+            )
+            and not any(
+                entry.call.name == ToolName.BUILD_PC
+                and entry.origin_run_id == ctx.run_id
+                and entry.result is not None
+                and entry.result.constraints_revision == ctx.requirements.revision
+                for entry in records(state)
+            )
+        )
+        if not should_build:
+            return {}
+        loaded = await load_catalog(state) if not ctx.catalog_ready else {}
+        merged = cast(FlexibleState, dict(state) | loaded)
+        ctx = current(merged)
+        if not (
+            ctx.catalog_ready
+            and compile_requirements(ctx.requirements, ctx.catalog).ready
+        ):
+            return loaded
+        if merged.get("tool_calls", 0) >= limits.max_tool_calls:
+            return loaded
+        entries = records(merged)
+        used = {
+            entry.call.call_id
+            for entry in entries
+            if entry.origin_run_id == ctx.run_id
+        } | {entry.call.call_id for entry in ctx.control_history}
+        call_id = (
+            "build" if "build" not in used else f"build_{ctx.requirements.revision}"
+        )
+        entries.append(
+            ToolRecord(
+                call=ToolCall(call_id=call_id, name=ToolName.BUILD_PC, arguments={}),
+                result=None,
+                origin_run_id=ctx.run_id,
+                model_step=merged.get("model_calls", 0),
+            )
+        )
+        await execute_tool_batch(
+            entries, ctx, merged.get("model_calls", 0), dispatcher, attempts, limits
+        )
+        return bounded(
+            merged,
+            loaded
+            | {
+                "ledger": [item.model_dump(mode="json") for item in entries],
+                "tool_calls": merged.get("tool_calls", 0) + 1,
+            },
+        )
 
     async def load_proposal_catalog(state: FlexibleState) -> dict[str, Any]:
         action = decode_flexible_decision(state["decision"]).action
