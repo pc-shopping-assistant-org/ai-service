@@ -22,9 +22,6 @@ from ai_service.capabilities.assistant.requirements.build import (
     optimize_requirements,
     verify_receipt,
 )
-from ai_service.capabilities.assistant.requirements.catalog_policy import (
-    build_needs_catalog,
-)
 from ai_service.capabilities.assistant.requirements.compiler import compile_requirements
 from ai_service.capabilities.assistant.requirements.search_report import search_report
 from ai_service.capabilities.pc_builder.application.service import (
