@@ -247,18 +247,8 @@ async def test_admitted_build_goals_load_candidates_after_merge_and_publish(
                 return FlexibleDecision(
                     action={"kind": "PROPOSE_REQUIREMENTS", "draft": draft.model_dump()}
                 )
-            if not transcript:
-                assert ToolName.BUILD_PC in allowed
-                return FlexibleDecision(
-                    action={
-                        "kind": "CALL_TOOL",
-                        "call": {
-                            "call_id": "build",
-                            "name": "build_pc",
-                            "arguments": {},
-                        },
-                    }
-                )
+            assert ToolName.BUILD_PC not in allowed
+            assert transcript
             outcome = transcript[-1].result
             return FlexibleDecision(
                 action={
