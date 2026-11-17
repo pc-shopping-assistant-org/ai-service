@@ -126,6 +126,8 @@ def compile_setup(
         problems.append(("CONFLICT", "CONFLICTING_BUDGET_SCOPE"))
     elif scopes:
         scope = next(iter(scopes))
+    elif per_slot:
+        scope = BudgetScope.FULL_SETUP
     if per_slot and scope != BudgetScope.FULL_SETUP:
         problems.append(("NEEDS_CLARIFICATION", "ACCESSORY_SCOPE_CONFIRMATION"))
     if scope == BudgetScope.FULL_SETUP and not per_slot:
