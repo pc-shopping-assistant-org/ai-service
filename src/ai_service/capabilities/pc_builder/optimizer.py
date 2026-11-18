@@ -254,6 +254,10 @@ def stable_component_id(comp: ComponentSpec) -> str:
         comp.max_gpu_length_mm or 0,
         comp.cooler_height_mm or 0,
         comp.max_cooler_height_mm or 0,
+        comp.radiator_mm or 0,
+        comp.max_radiator_mm or 0,
+        comp.m2_slots or 0,
+        comp.interface or "",
         int(bool(comp.has_integrated_graphics)),
         comp.integrated_graphics_score or 0.0,
         comp.integrated_graphics_power_watts or 0,
@@ -394,12 +398,20 @@ def check_compatibility_status(
         elif gpu.gpu_length_mm is None or case.max_gpu_length_mm is None:
             return CompatibilityStatus.UNKNOWN
 
-    # 5. Cooler Height vs Case Max Cooler Height
+    # 5. Cooler Clearance vs Case (Radiator for AIO, Height for Air)
     if cooler and case:
-        if cooler.cooler_height_mm is None or case.max_cooler_height_mm is None:
+        if cooler.radiator_mm is not None:
+            if case.max_radiator_mm is None:
+                return CompatibilityStatus.UNKNOWN
+            if case.max_radiator_mm == 0 or cooler.radiator_mm > case.max_radiator_mm:
+                return CompatibilityStatus.INCOMPATIBLE
+        elif cooler.cooler_height_mm is not None:
+            if case.max_cooler_height_mm is None:
+                return CompatibilityStatus.UNKNOWN
+            if cooler.cooler_height_mm > case.max_cooler_height_mm:
+                return CompatibilityStatus.INCOMPATIBLE
+        else:
             return CompatibilityStatus.UNKNOWN
-        if cooler.cooler_height_mm > case.max_cooler_height_mm:
-            return CompatibilityStatus.INCOMPATIBLE
 
     # 6. PSU Rated Wattage vs Minimum System Required Wattage
     if psu:
@@ -422,6 +434,15 @@ def check_compatibility_status(
                 return CompatibilityStatus.INCOMPATIBLE
         else:
             return CompatibilityStatus.UNKNOWN
+
+    # 8. Storage vs Mainboard M.2 Interface
+    storage = parts.get(ComponentCategory.STORAGE)
+    if storage and mb:
+        s_iface = storage.interface
+        s_ff = storage.form_factor
+        is_m2 = (s_iface and "NVME" in _norm(s_iface)) or (s_ff and "M.2" in str(s_ff).upper())
+        if is_m2 and mb.m2_slots is not None and mb.m2_slots == 0:
+            return CompatibilityStatus.INCOMPATIBLE
 
     return CompatibilityStatus.COMPATIBLE
 
@@ -902,8 +923,11 @@ class DeterministicPCOptimizer:
                                 continue
 
                             for cooler in available_coolers:
-                                # Cooler height check
-                                if cooler.cooler_height_mm and case.max_cooler_height_mm and cooler.cooler_height_mm > case.max_cooler_height_mm:
+                                # Cooler clearance check (Radiator for AIO, Height for Air)
+                                if cooler.radiator_mm is not None and case.max_radiator_mm is not None:
+                                    if case.max_radiator_mm == 0 or cooler.radiator_mm > case.max_radiator_mm:
+                                        continue
+                                elif cooler.cooler_height_mm and case.max_cooler_height_mm and cooler.cooler_height_mm > case.max_cooler_height_mm:
                                     continue
 
                                 # Cooler socket check

@@ -65,6 +65,7 @@ class LocalHardwareRuleEngine(HardwareRuleEngine):
         cases = by_cat.get(ComponentCategory.CASE, [])
         coolers = by_cat.get(ComponentCategory.COOLER, [])
         psus = by_cat.get(ComponentCategory.PSU, [])
+        storages = by_cat.get(ComponentCategory.STORAGE, [])
 
         # 1. CPU vs Mainboard Socket Check
         if cpus and mainboards:
@@ -137,22 +138,50 @@ class LocalHardwareRuleEngine(HardwareRuleEngine):
                     )
                 )
 
-        # 5. CPU Cooler Height vs Case Max Cooler Height
+        # 5. CPU Cooler Clearance vs Case
         if coolers and cases:
             cooler = coolers[0]
             case = cases[0]
-            c_height = cooler.cooler_height_mm or cooler.extra_specs.get("height_mm")
-            case_max_c = case.max_cooler_height_mm or case.extra_specs.get("max_cooler_height_mm")
-            if c_height and case_max_c and int(c_height) > int(case_max_c):
-                issues.append(
-                    CompatibilityIssue(
-                        level="ERROR",
-                        category="COOLER_CLEARANCE",
-                        components_involved=[cooler.name, case.name],
-                        message=f"Chiều cao tản nhiệt ({c_height}mm) cấn nắp hông của vỏ case ({case_max_c}mm).",
-                        suggestion="Chọn tản nhiệt khí thấp hơn hoặc dùng tản nhiệt nước AIO.",
+            rad_size = cooler.radiator_mm or cooler.extra_specs.get("radiator_mm")
+            case_max_rad = case.max_radiator_mm if case.max_radiator_mm is not None else case.extra_specs.get("max_radiator_mm")
+
+            if rad_size is not None:
+                # AIO Liquid Cooler check
+                if case_max_rad is not None:
+                    if int(case_max_rad) == 0:
+                        issues.append(
+                            CompatibilityIssue(
+                                level="ERROR",
+                                category="COOLER_CLEARANCE",
+                                components_involved=[cooler.name, case.name],
+                                message=f"Vỏ case ({case.name}) không hỗ trợ lắp đặt tản nhiệt nước AIO.",
+                                suggestion="Chọn tản nhiệt khí hoặc đổi sang vỏ case có hỗ trợ két nước AIO.",
+                            )
+                        )
+                    elif int(rad_size) > int(case_max_rad):
+                        issues.append(
+                            CompatibilityIssue(
+                                level="ERROR",
+                                category="COOLER_CLEARANCE",
+                                components_involved=[cooler.name, case.name],
+                                message=f"Kích thước két nước AIO ({rad_size}mm) vượt quá kích thước hỗ trợ tối đa của vỏ case ({case_max_rad}mm).",
+                                suggestion=f"Chọn tản nhiệt nước AIO kích thước nhỏ hơn (tối đa {case_max_rad}mm) hoặc đổi sang vỏ case lớn hơn.",
+                            )
+                        )
+            else:
+                # Air Cooler check
+                c_height = cooler.cooler_height_mm or cooler.extra_specs.get("height_mm") or cooler.extra_specs.get("cooler_height_mm")
+                case_max_c = case.max_cooler_height_mm or case.extra_specs.get("max_cooler_height_mm")
+                if c_height and case_max_c and int(c_height) > int(case_max_c):
+                    issues.append(
+                        CompatibilityIssue(
+                            level="ERROR",
+                            category="COOLER_CLEARANCE",
+                            components_involved=[cooler.name, case.name],
+                            message=f"Chiều cao tản nhiệt ({c_height}mm) cấn nắp hông của vỏ case ({case_max_c}mm).",
+                            suggestion="Chọn tản nhiệt khí thấp hơn hoặc dùng tản nhiệt nước AIO.",
+                        )
                     )
-                )
 
         # 6. PSU Wattage Check vs Recommended
         if psus:
@@ -186,6 +215,29 @@ class LocalHardwareRuleEngine(HardwareRuleEngine):
                     components_involved=[cpu.name, cooler.name],
                     message="Tản nhiệt không hỗ trợ socket của CPU.",
                 ))
+
+        # 7. Mainboard vs Storage Interface Check
+        if mainboards and storages:
+            mb = mainboards[0]
+            for storage in storages:
+                s_iface = storage.interface or storage.extra_specs.get("interface")
+                s_ff = storage.form_factor or storage.extra_specs.get("form_factor")
+                is_m2_nvme = (
+                    (s_iface and "NVME" in _norm_str(s_iface))
+                    or (s_ff and "M.2" in str(s_ff).upper())
+                )
+                if is_m2_nvme:
+                    mb_m2 = mb.m2_slots if mb.m2_slots is not None else mb.extra_specs.get("m2_slots")
+                    if mb_m2 is not None and int(mb_m2) == 0:
+                        issues.append(
+                            CompatibilityIssue(
+                                level="ERROR",
+                                category="STORAGE_INTERFACE_MISMATCH",
+                                components_involved=[mb.name, storage.name],
+                                message=f"Bo mạch chủ ({mb.name}) không có khe cắm M.2 NVMe để lắp ổ cứng ({storage.name}).",
+                                suggestion="Chọn bo mạch chủ có khe cắm M.2 hoặc chọn ổ cứng chuẩn SATA 2.5\".",
+                            )
+                        )
 
         errors_count = sum(1 for i in issues if i.level == "ERROR")
         warnings_count = sum(1 for i in issues if i.level == "WARNING")

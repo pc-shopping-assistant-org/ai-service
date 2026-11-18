@@ -38,6 +38,10 @@ class ComponentSpec(BaseModel):
     max_gpu_length_mm: int | float | None = None
     cooler_height_mm: int | float | None = None
     max_cooler_height_mm: int | float | None = None
+    radiator_mm: int | float | None = None
+    max_radiator_mm: int | float | None = None
+    m2_slots: int | None = None
+    interface: str | None = None
     performance_score: float | None = None
     vram_gb: int | None = None
     capacity_gb: int | None = None
@@ -196,3 +200,10 @@ class HardwareRuleEngine(Protocol):
         target_use_case: str = "Gaming",
     ) -> PeripheralRecommendation:
         """Recommend matching monitor specifications and peripherals."""
+
+
+class ComponentSource(Protocol):
+    """Where the specs of a chosen part come from: the catalog that owns the product."""
+
+    async def component(self, variant_id: UUID, category: ComponentCategory) -> ComponentSpec | None:
+        """The spec of one variant read as the given category; None when the catalog has no such variant."""

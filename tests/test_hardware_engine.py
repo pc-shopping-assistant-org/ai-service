@@ -74,6 +74,42 @@ def test_cooler_clearance_fails(engine: LocalHardwareRuleEngine) -> None:
     assert any(i.category == "COOLER_CLEARANCE" for i in report.issues)
 
 
+def test_aio_radiator_clearance_fails(engine: LocalHardwareRuleEngine) -> None:
+    components = [
+        ComponentSpec(name="Thermalright Aqua Elite 360", category=ComponentCategory.COOLER, radiator_mm=360),
+        ComponentSpec(name="Compact Case", category=ComponentCategory.CASE, max_radiator_mm=240),
+    ]
+    report = engine.check_compatibility(components)
+    assert report.is_compatible is False
+    assert any(i.category == "COOLER_CLEARANCE" for i in report.issues)
+
+
+def test_aio_radiator_zero_support_fails(engine: LocalHardwareRuleEngine) -> None:
+    components = [
+        ComponentSpec(name="Thermalright Aqua Elite 240", category=ComponentCategory.COOLER, radiator_mm=240),
+        ComponentSpec(name="Office Case", category=ComponentCategory.CASE, max_radiator_mm=0),
+    ]
+    report = engine.check_compatibility(components)
+    assert report.is_compatible is False
+    assert any(i.category == "COOLER_CLEARANCE" for i in report.issues)
+
+
+def test_aio_radiator_fits_successfully(engine: LocalHardwareRuleEngine) -> None:
+    components = [
+        ComponentSpec(name="Intel Core i5-13600K", category=ComponentCategory.CPU, socket="LGA1700", tdp_watts=125),
+        ComponentSpec(
+            name="Thermalright Aqua Elite 360",
+            category=ComponentCategory.COOLER,
+            radiator_mm=360,
+            supported_sockets=["LGA1700", "AM5"],
+        ),
+        ComponentSpec(name="Montech King 95", category=ComponentCategory.CASE, max_radiator_mm=360),
+    ]
+    report = engine.check_compatibility(components)
+    assert report.is_compatible is True
+    assert not any(i.category == "COOLER_CLEARANCE" for i in report.issues)
+
+
 def test_wattage_calculation(engine: LocalHardwareRuleEngine) -> None:
     components = [
         ComponentSpec(name="Intel Core i5-13600K", category=ComponentCategory.CPU, tdp_watts=125),
