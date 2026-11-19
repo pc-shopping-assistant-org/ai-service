@@ -62,7 +62,7 @@ async def check_candidates(
 
 
 @router.get("/compatibility/prebuilt-builds", response_model=ApiResponse[list[dict[str, Any]]], tags=["compatibility"])
-async def get_prebuilt_builds() -> ApiResponse[list[dict[str, Any]]]:
+def get_prebuilt_builds() -> ApiResponse[list[dict[str, Any]]]:
     """Returns prebuilt conflict-free PC configurations generated from catalog_db."""
     import json
     import os
@@ -82,6 +82,6 @@ async def get_prebuilt_builds() -> ApiResponse[list[dict[str, Any]]]:
         with open(data_file, "r", encoding="utf-8") as f:
             builds = json.load(f)
         return ApiResponse(data=builds)
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return ApiResponse(data=[])
 
