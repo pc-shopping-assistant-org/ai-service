@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ComponentCategory(StrEnum):
@@ -38,10 +38,6 @@ class ComponentSpec(BaseModel):
     max_gpu_length_mm: int | float | None = None
     cooler_height_mm: int | float | None = None
     max_cooler_height_mm: int | float | None = None
-    radiator_mm: int | float | None = None
-    max_radiator_mm: int | float | None = None
-    m2_slots: int | None = None
-    interface: str | None = None
     performance_score: float | None = None
     vram_gb: int | None = None
     capacity_gb: int | None = None
@@ -58,6 +54,39 @@ class ComponentSpec(BaseModel):
     is_integrated: bool = False
     supported_sockets: list[str] = Field(default_factory=list)
     extra_specs: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_extra_hardware_specs(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            extra = dict(data.get("extra_specs") or {})
+            for key in ("radiator_mm", "max_radiator_mm", "m2_slots", "interface"):
+                if key in data and data[key] is not None:
+                    extra.setdefault(key, data[key])
+            if extra:
+                data = dict(data)
+                data["extra_specs"] = extra
+        return data
+
+    @property
+    def radiator_mm(self) -> int | None:
+        val = self.extra_specs.get("radiator_mm")
+        return int(val) if val is not None else None
+
+    @property
+    def max_radiator_mm(self) -> int | None:
+        val = self.extra_specs.get("max_radiator_mm")
+        return int(val) if val is not None else None
+
+    @property
+    def m2_slots(self) -> int | None:
+        val = self.extra_specs.get("m2_slots")
+        return int(val) if val is not None else None
+
+    @property
+    def interface(self) -> str | None:
+        val = self.extra_specs.get("interface")
+        return str(val) if val is not None else None
 
 
 class CompatibilityIssue(BaseModel):
