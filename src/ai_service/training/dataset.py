@@ -240,7 +240,10 @@ def load_dataset(directory: Path, *, require_approved: bool = False) -> LoadedDa
     manifest = DatasetManifest.model_validate_json(
         (directory / MANIFEST_FILE).read_bytes()
     )
-    files = {name: (directory / name).read_bytes() for name in manifest.files}
+    files = {
+        name: (directory / name).read_bytes().replace(b"\r\n", b"\n")
+        for name in manifest.files
+    }
     for name, content in files.items():
         if hashlib.sha256(content).hexdigest() != manifest.files[name]:
             raise ValueError(f"CONTENT_HASH_MISMATCH: {name}")

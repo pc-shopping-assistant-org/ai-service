@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 from uuid import UUID
@@ -9,7 +10,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 EXTRA_HARDWARE_SPEC_FIELDS = frozenset(
-    {"radiator_mm", "max_radiator_mm", "m2_slots", "interface", "cooler_type"}
+    {"radiator_mm", "max_radiator_mm", "m2_slots", "interface", "cooler_type", "kit_modules"}
 )
 
 
@@ -34,7 +35,6 @@ class ComponentSpec(BaseModel):
     socket: str | None = None
     ram_type: str | None = None  # e.g., "DDR4", "DDR5"
     ram_slots: int | None = None
-    kit_modules: int | None = Field(default=None, gt=0)
     form_factor: str | None = None  # e.g., "ATX", "Micro-ATX", "Mini-ITX"
     supported_form_factors: list[str] = Field(default_factory=list)
     tdp_watts: int | None = None
@@ -72,6 +72,19 @@ class ComponentSpec(BaseModel):
                 data = dict(data)
                 data["extra_specs"] = extra
         return data
+
+    def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> ComponentSpec:
+        if update and "kit_modules" in update:
+            update = dict(update)
+            extra = dict(update.get("extra_specs") or self.extra_specs)
+            extra["kit_modules"] = update.pop("kit_modules")
+            update["extra_specs"] = extra
+        return super().model_copy(update=update, deep=deep)
+
+    @property
+    def kit_modules(self) -> int | None:
+        val = self.extra_specs.get("kit_modules")
+        return int(val) if val is not None else None
 
     @property
     def radiator_mm(self) -> int | None:

@@ -283,6 +283,7 @@ async def test_the_catalog_source_keeps_extra_hardware_specs() -> None:
         "m2_slots": 3,
         "interface": "NVMe",
         "cooler_type": "aio",
+        "kit_modules": 2,
     }
     assert (spec.radiator_mm, spec.max_radiator_mm, spec.m2_slots, spec.interface) == (
         360,

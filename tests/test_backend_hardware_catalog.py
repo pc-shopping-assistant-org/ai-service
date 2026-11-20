@@ -120,6 +120,7 @@ def test_catalog_snapshot_keeps_extra_hardware_specs():
         "m2_slots": 3,
         "interface": "NVMe",
         "cooler_type": "aio",
+        "kit_modules": 2,
     }
     assert (
         component.radiator_mm,
