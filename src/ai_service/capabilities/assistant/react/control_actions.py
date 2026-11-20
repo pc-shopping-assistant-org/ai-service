@@ -67,7 +67,8 @@ CONTROL_DESCRIPTIONS = {
         "source_text is only your own suggestion (requires consent)."
     ),
     ControlName.ASK_CLARIFICATION: (
-        "Ask for missing business input using actual missing field names (e.g. 'BUDGET_REQUIRED', 'USE_CASE_REQUIRED') "
+        "Ask for missing business input using actual missing field names (e.g. 'BUDGET_REQUIRED', 'USE_CASE_REQUIRED', "
+        "'ACCESSORY_BUDGET_REQUIRED') "
         "or unresolved selection reasons when required information is not available in context. "
         "Do not ask for fields already present in context. General conversation can be plain text."
     ),
