@@ -29,8 +29,10 @@ def part(category: ComponentCategory, **fields: object) -> ComponentSpec:
 def build() -> dict[str, ComponentSpec]:
     return {
         "CPU": part(ComponentCategory.CPU, socket="AM5", tdp_watts=105),
-        "MAINBOARD": part(ComponentCategory.MAINBOARD, socket="AM5", ram_type="DDR5", form_factor="ATX"),
-        "RAM": part(ComponentCategory.RAM, ram_type="DDR5"),
+        "MAINBOARD": part(
+            ComponentCategory.MAINBOARD, socket="AM5", ram_type="DDR5", ram_slots=4, form_factor="ATX"
+        ),
+        "RAM": part(ComponentCategory.RAM, ram_type="DDR5", kit_modules=2),
         "GPU": part(ComponentCategory.GPU, gpu_length_mm=300, tdp_watts=250),
         "CASE": part(
             ComponentCategory.CASE, supported_form_factors=["ATX", "mATX"], max_gpu_length_mm=400, max_cooler_height_mm=165,
@@ -50,7 +52,7 @@ def test_a_matching_build_is_ok_on_every_rule() -> None:
 
     assert result.overall == CheckStatus.OK
     assert {r.rule for r in result.results} == {
-        "SOCKET", "RAM_TYPE", "FORM_FACTOR", "GPU_CLEARANCE", "COOLER_CLEARANCE", "COOLER_SOCKET", "PSU_WATTAGE", "SSD_INTERFACE",
+        "SOCKET", "RAM_TYPE", "RAM_SLOTS", "FORM_FACTOR", "GPU_CLEARANCE", "COOLER_CLEARANCE", "COOLER_SOCKET", "PSU_WATTAGE", "SSD_INTERFACE",
     }
     assert all(r.status == CheckStatus.OK and r.missing_attributes == [] for r in result.results)
 
@@ -105,6 +107,42 @@ def test_ram_gpu_cooler_and_case_clearances_are_each_reported() -> None:
     assert statuses["GPU_CLEARANCE"] == CheckStatus.INCOMPATIBLE
     assert statuses["COOLER_CLEARANCE"] == CheckStatus.INCOMPATIBLE
     assert statuses["FORM_FACTOR"] == CheckStatus.INCOMPATIBLE
+
+
+def test_ram_kit_exceeding_mainboard_slots_is_incompatible() -> None:
+    parts = build()
+    parts["MAINBOARD"] = part(
+        ComponentCategory.MAINBOARD, socket="AM5", ram_type="DDR5", ram_slots=2, form_factor="ATX"
+    )
+    parts["RAM"] = part(ComponentCategory.RAM, ram_type="DDR5", kit_modules=4)
+
+    result = check_build(ENGINE, parts)
+    ram_slots = next(r for r in result.results if r.rule == "RAM_SLOTS")
+
+    assert result.overall == CheckStatus.INCOMPATIBLE
+    assert ram_slots.status == CheckStatus.INCOMPATIBLE
+
+
+@pytest.mark.parametrize(
+    ("mainboard_fields", "ram_fields", "missing"),
+    [
+        ({"ram_type": "DDR5"}, {"ram_type": "DDR5", "kit_modules": 2}, ["MAINBOARD.ram_slots"]),
+        ({"ram_type": "DDR5", "ram_slots": 4}, {"ram_type": "DDR5"}, ["RAM.kit_modules"]),
+    ],
+)
+def test_ram_slot_rule_is_unknown_when_slot_or_kit_count_is_missing(
+    mainboard_fields: dict[str, object],
+    ram_fields: dict[str, object],
+    missing: list[str],
+) -> None:
+    parts = build()
+    parts["MAINBOARD"] = part(ComponentCategory.MAINBOARD, **mainboard_fields)
+    parts["RAM"] = part(ComponentCategory.RAM, **ram_fields)
+
+    result = next(r for r in check_build(ENGINE, parts).results if r.rule == "RAM_SLOTS")
+
+    assert result.status == CheckStatus.UNKNOWN
+    assert result.missing_attributes == missing
 
 
 def test_m2_ssd_without_m2_slots_on_mainboard_is_incompatible() -> None:
@@ -214,6 +252,45 @@ async def test_the_catalog_source_reads_specs_and_keeps_a_part_whose_one_value_i
     assert spec is not None
     assert (spec.id, spec.name, spec.price, spec.socket, spec.brand) == (variant_id, "Ryzen 7", 5_000_000, "AM5", "AMD")
     assert spec.tdp_watts is None
+
+
+@pytest.mark.asyncio
+async def test_the_catalog_source_keeps_extra_hardware_specs() -> None:
+    variant_id, product_id = uuid4(), uuid4()
+    catalog = Catalog(
+        {"id": str(variant_id), "productId": str(product_id), "price": 2_000_000},
+        {
+            "name": "AIO Cooler",
+            "specifications": {
+                "radiator_mm": 360,
+                "max_radiator_mm": 420,
+                "m2_slots": 3,
+                "interface": "NVMe",
+                "cooler_type": "aio",
+                "kit_modules": 2,
+            },
+        },
+    )
+
+    spec = await BackendComponentSource(catalog).component(
+        variant_id, ComponentCategory.COOLER  # type: ignore[arg-type]
+    )
+
+    assert spec is not None
+    assert spec.extra_specs == {
+        "radiator_mm": 360,
+        "max_radiator_mm": 420,
+        "m2_slots": 3,
+        "interface": "NVMe",
+        "cooler_type": "aio",
+    }
+    assert (spec.radiator_mm, spec.max_radiator_mm, spec.m2_slots, spec.interface) == (
+        360,
+        420,
+        3,
+        "NVMe",
+    )
+    assert spec.kit_modules == 2
 
 
 @pytest.mark.asyncio

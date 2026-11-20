@@ -10,7 +10,11 @@ from pydantic import BaseModel, Field, JsonValue, StrictBool, model_validator
 from ai_service.application.call_attempts import AttemptBoundary
 from ai_service.application.errors import BackendUnavailableError
 from ai_service.application.ports.accessories import AccessorySpec, AccessoryType
-from ai_service.application.ports.hardware import ComponentCategory, ComponentSpec
+from ai_service.application.ports.hardware import (
+    EXTRA_HARDWARE_SPEC_FIELDS,
+    ComponentCategory,
+    ComponentSpec,
+)
 from ai_service.capabilities.assistant.limits import (
     HARDWARE_CATALOG_PAGE_SIZE,
     MAX_HARDWARE_CATALOG_PAGES,
@@ -27,7 +31,7 @@ from .product_catalog import BackendProductCatalog, QueryParamScalar, Summary, V
 
 SPEC_FIELDS = (
     set(ComponentSpec.model_fields) - {"id", "name", "category", "price", "extra_specs"}
-) | {"storage_media"}
+) | EXTRA_HARDWARE_SPEC_FIELDS | {"storage_media"}
 
 STORAGE_MASTER_TYPES = frozenset({"SSD", "HDD"})
 

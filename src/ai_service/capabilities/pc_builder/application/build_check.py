@@ -64,6 +64,10 @@ RULES = (
     PairRule("SOCKET", "CPU", "MAINBOARD", (("CPU", "socket"), ("MAINBOARD", "socket")), frozenset({"SOCKET_MISMATCH"})),
     PairRule("RAM_TYPE", "MAINBOARD", "RAM", (("MAINBOARD", "ram_type"), ("RAM", "ram_type")), frozenset({"RAM_TYPE_MISMATCH"})),
     PairRule(
+        "RAM_SLOTS", "MAINBOARD", "RAM", (("MAINBOARD", "ram_slots"), ("RAM", "kit_modules")),
+        frozenset({"RAM_SLOTS_EXCEEDED"}),
+    ),
+    PairRule(
         "FORM_FACTOR", "MAINBOARD", "CASE", (("MAINBOARD", "form_factor"), ("CASE", "supported_form_factors")),
         frozenset({"FORM_FACTOR_MISMATCH", "FORM_FACTOR_UNKNOWN"}), frozenset({"FORM_FACTOR_UNKNOWN"}),
     ),

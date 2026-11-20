@@ -383,6 +383,12 @@ def check_compatibility_status(
             return CompatibilityStatus.UNKNOWN
         if _norm(mb.ram_type) != _norm(ram.ram_type):
             return CompatibilityStatus.INCOMPATIBLE
+        if (
+            mb.ram_slots is not None
+            and ram.kit_modules is not None
+            and ram.kit_modules > mb.ram_slots
+        ):
+            return CompatibilityStatus.INCOMPATIBLE
 
     # 3. Mainboard Form Factor vs Case: must be known and supported
     if mb and case:

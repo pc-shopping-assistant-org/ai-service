@@ -5,12 +5,12 @@
     "tier": "tier1",
     "goal": "office",
     "subtitle": "Văn phòng & Đồ họa nhẹ",
-    "total_price": 17516000,
-    "fingerprint": "01a119fe-8dfb-799b-8d61-9b3a5d84e72e-01a119fe-8dff-778f-a569-5184ebc208c8-01a119fe-8e1a-717d-af5b-920e08c656e7-01a119fe-8e1f-7927-b6f3-9483476b4c7f-01a119fe-8e25-7fe7-bd69-69bde5053f4e-01a119fe-8e29-7d1d-8478-160fbca681b3-01a119fe-8e43-7844-933b-c645eb8407a7-01a119fe-8e56-7af4-bd15-897e02ab2028",
+    "total_price": 18616000,
+    "fingerprint": "01a119fe-8dfb-799b-8d61-9b3a5d84e72e-01a119fe-8dff-778f-a569-5184ebc208c8-01a119fe-8e1a-717d-af5b-920e08c656e7-01a119fe-8e1f-74a3-a855-0947ca025095-01a119fe-8e25-7fe7-bd69-69bde5053f4e-01a119fe-8e29-7d1d-8478-160fbca681b3-01a119fe-8e43-7844-933b-c645eb8407a7-01a119fe-8e56-7af4-bd15-897e02ab2028",
     "selection": {
       "CPU": "01a119fe-8dff-778f-a569-5184ebc208c8",
       "MAINBOARD": "01a119fe-8e1a-717d-af5b-920e08c656e7",
-      "RAM": "01a119fe-8e1f-7927-b6f3-9483476b4c7f",
+      "RAM": "01a119fe-8e1f-74a3-a855-0947ca025095",
       "GPU": "01a119fe-8dfb-799b-8d61-9b3a5d84e72e",
       "PSU": "01a119fe-8e29-7d1d-8478-160fbca681b3",
       "CASE": "01a119fe-8e43-7844-933b-c645eb8407a7",
@@ -33,11 +33,11 @@
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/c3d0df1e-f028-5498-bc5d-5a63c16ea3cf/11248_mainboard_gigabyte_b560m_ds3h_v3__2_.jpg"
       },
       "RAM": {
-        "id": "01a119fe-8e1f-7927-b6f3-9483476b4c7f",
-        "product_id": "01a119fe-8e1f-7913-a308-af811bfe5606",
-        "name": "RAM TEAMGROUP T-Force Vulcan Z 8GB 3200Mhz DDR4",
-        "price": 1790000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/1210b10f-94f7-53bb-a084-545f56aa7280/9935_39097_ab83b9eabf5f291fdee24f0ab8ff6056.jpg"
+        "id": "01a119fe-8e1f-74a3-a855-0947ca025095",
+        "product_id": "01a119fe-8e1f-7e84-bf4b-ba9c35522ec0",
+        "name": "Ram GEIL ORION 16GB Bus 3200Mhz DDR4",
+        "price": 2890000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/26516d43-0d7e-532a-b27d-3a2523a79715/11040_ram_geil_orion_16gb_ddr4_3200mhz_01.png"
       },
       "GPU": {
         "id": "01a119fe-8dfb-799b-8d61-9b3a5d84e72e",
@@ -82,12 +82,12 @@
     "tier": "tier1",
     "goal": "office",
     "subtitle": "Văn phòng & Đồ họa nhẹ",
-    "total_price": 20548000,
-    "fingerprint": "01a119fe-8df8-7956-8ce3-53e094a4922d-01a119fe-8e00-7ada-8b00-bc975a55befd-01a119fe-8e1d-72ec-bf7a-3a8f8f02245d-01a119fe-8e1f-7d48-9458-a25397916170-01a119fe-8e26-7e5b-bec0-34477825ead4-01a119fe-8e2b-71b1-8603-5dbfaf22901c-01a119fe-8e42-7a90-8bd6-f8e009bbdef9-01a119fe-8e59-7be7-b872-df84d1712c79",
+    "total_price": 21048000,
+    "fingerprint": "01a119fe-8df8-7956-8ce3-53e094a4922d-01a119fe-8e00-7ada-8b00-bc975a55befd-01a119fe-8e1d-72ec-bf7a-3a8f8f02245d-01a119fe-8e1e-7864-a4a7-3615c5d34756-01a119fe-8e26-7e5b-bec0-34477825ead4-01a119fe-8e2b-71b1-8603-5dbfaf22901c-01a119fe-8e42-7a90-8bd6-f8e009bbdef9-01a119fe-8e59-7be7-b872-df84d1712c79",
     "selection": {
       "CPU": "01a119fe-8e00-7ada-8b00-bc975a55befd",
       "MAINBOARD": "01a119fe-8e1d-72ec-bf7a-3a8f8f02245d",
-      "RAM": "01a119fe-8e1f-7d48-9458-a25397916170",
+      "RAM": "01a119fe-8e1e-7864-a4a7-3615c5d34756",
       "GPU": "01a119fe-8df8-7956-8ce3-53e094a4922d",
       "PSU": "01a119fe-8e2b-71b1-8603-5dbfaf22901c",
       "CASE": "01a119fe-8e42-7a90-8bd6-f8e009bbdef9",
@@ -110,11 +110,11 @@
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/04738139-8c9f-5ea4-901e-91b745622b7e/10026_58049_mainboard_asrock_h470m_hdv_1.jpg"
       },
       "RAM": {
-        "id": "01a119fe-8e1f-7d48-9458-a25397916170",
-        "product_id": "01a119fe-8e1f-7829-8bef-e0b37ff3a5c1",
-        "name": "Ram GEIL Evo Spear 16GB DDR4 3200MHz",
-        "price": 2890000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/55f8cff4-f881-5b1d-b369-276e8c2c3a2e/11055_ram_geil_evo_spear_16gb_ddr4_bus_3200_1.jpg"
+        "id": "01a119fe-8e1e-7864-a4a7-3615c5d34756",
+        "product_id": "01a119fe-8e1e-7fd2-8b12-7425f245acb1",
+        "name": "RAM TEAMGROUP T-Force Vulcan Z 16GB (1x16GB) DDR4 3200MHz",
+        "price": 3390000,
+        "image_url": "https://pcmarket.vn/media/product/9932_46124_ram_tea_tlzgd416g3200hc16f01_c.jpg"
       },
       "GPU": {
         "id": "01a119fe-8df8-7956-8ce3-53e094a4922d",
@@ -308,83 +308,6 @@
     }
   },
   {
-    "id": "build-019",
-    "name": "PC CPU Intel Core i5-10400F · GTX 1050 TI",
-    "tier": "tier1",
-    "goal": "office",
-    "subtitle": "Văn phòng & Đồ họa nhẹ",
-    "total_price": 24438000,
-    "fingerprint": "01a119fe-8dfb-7034-9d08-fb74de789528-01a119fe-8e04-7c4b-8ccb-5059b7e02d1c-01a119fe-8e0d-702c-87e8-14688db07eb1-01a119fe-8e1f-7d48-9458-a25397916170-01a119fe-8e26-7980-bea4-87d96a8560f1-01a119fe-8e30-760b-a7a4-b809ff8bda7b-01a119fe-8e37-7d6c-a0c3-5295972e90c5-01a119fe-8e52-7b47-85f7-8f8ff3e6c0f6",
-    "selection": {
-      "CPU": "01a119fe-8e04-7c4b-8ccb-5059b7e02d1c",
-      "MAINBOARD": "01a119fe-8e0d-702c-87e8-14688db07eb1",
-      "RAM": "01a119fe-8e1f-7d48-9458-a25397916170",
-      "GPU": "01a119fe-8dfb-7034-9d08-fb74de789528",
-      "PSU": "01a119fe-8e30-760b-a7a4-b809ff8bda7b",
-      "CASE": "01a119fe-8e37-7d6c-a0c3-5295972e90c5",
-      "COOLER": "01a119fe-8e52-7b47-85f7-8f8ff3e6c0f6",
-      "SSD": "01a119fe-8e26-7980-bea4-87d96a8560f1"
-    },
-    "components": {
-      "CPU": {
-        "id": "01a119fe-8e04-7c4b-8ccb-5059b7e02d1c",
-        "product_id": "01a119fe-8e04-79dc-ae23-4c202ac91d33",
-        "name": "CPU Intel Core i5-10400F (3.4GHz turbo up to 4.4Ghz, 6 nhân 12 luồng, 12MB Cache, 65W) - Socket Intel LGA 1200",
-        "price": 2699000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/dafb189a-fde5-50cf-bd66-2da08fd73cf1/8317_10400f.jpg"
-      },
-      "MAINBOARD": {
-        "id": "01a119fe-8e0d-702c-87e8-14688db07eb1",
-        "product_id": "01a119fe-8e0d-7833-8f48-345584d5edf5",
-        "name": "MAINBOARD SSTC H510M-HD",
-        "price": 1790000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/c0813b77-18eb-5467-9c65-3c20e731b08f/13533_sstc_h510m_pcm___3_.jpg"
-      },
-      "RAM": {
-        "id": "01a119fe-8e1f-7d48-9458-a25397916170",
-        "product_id": "01a119fe-8e1f-7829-8bef-e0b37ff3a5c1",
-        "name": "Ram GEIL Evo Spear 16GB DDR4 3200MHz",
-        "price": 2890000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/55f8cff4-f881-5b1d-b369-276e8c2c3a2e/11055_ram_geil_evo_spear_16gb_ddr4_bus_3200_1.jpg"
-      },
-      "GPU": {
-        "id": "01a119fe-8dfb-7034-9d08-fb74de789528",
-        "product_id": "01a119fe-8dfb-76cc-91bc-91a009a8818d",
-        "name": "Card màn hình Colorful GeForce GTX 1050Ti NE 4G-V",
-        "price": 5390000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/6f214607-ab47-5225-8050-963aadcb403e/9202_579_card_m__n_h__nh_colorful_geforce_gtx_1050ti_ne_4g_v_0.jpeg"
-      },
-      "PSU": {
-        "id": "01a119fe-8e30-760b-a7a4-b809ff8bda7b",
-        "product_id": "01a119fe-8e30-741b-9c09-f035f23be0ae",
-        "name": "Nguồn ASUS TUF Gaming 1000W GOLD PCI GEN 5.0 - 80 Plus Gold",
-        "price": 4889000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/7514fe68-bd69-5baa-8218-651151ac6a66/10472_nguon_asus_tuf_gaming_1000w_80gold_7.jpg"
-      },
-      "CASE": {
-        "id": "01a119fe-8e37-7d6c-a0c3-5295972e90c5",
-        "product_id": "01a119fe-8e37-73fc-b7d6-524d9ecba3f6",
-        "name": "Vỏ CASE MAGIC GA-02 PRO CURVED (ATX)",
-        "price": 1190000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/00d8e3ae-ba93-5fe8-99d9-6ae2f269df34/13058_case_magic_ga_02_pro_curved_atx.png"
-      },
-      "COOLER": {
-        "id": "01a119fe-8e52-7b47-85f7-8f8ff3e6c0f6",
-        "product_id": "01a119fe-8e52-7c71-8163-eae5e18af536",
-        "name": "TẢN NHIỆT CPU ID-COOLING SE-214-XT ARGB",
-        "price": 500000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/75b827bd-0565-5f36-8eae-33ab8cd90732/13528_tan_nhiet_cpu_id_cooling_se_214_xt_argb__3_.png"
-      },
-      "SSD": {
-        "id": "01a119fe-8e26-7980-bea4-87d96a8560f1",
-        "product_id": "01a119fe-8e26-7da0-b193-b8cf6beff9a1",
-        "name": "Ổ CỨNG HDD SEAGATE BARRACUDA 4TB 3.5 INCH 5400RPM, SATA, 256MB CACHE (ST4000DM004)",
-        "price": 5090000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/3e027df3-74c3-5557-8f6f-90d33870ed43/2035_ae4bff7f84f196a7909cbff2545f19c1.jpg"
-      }
-    }
-  },
-  {
     "id": "build-007",
     "name": "PC CPU Intel Core i3-10105 · GTX 1650",
     "tier": "tier1",
@@ -539,6 +462,83 @@
     }
   },
   {
+    "id": "build-019",
+    "name": "PC CPU Intel Core i5-10400F · GTX 1050 TI",
+    "tier": "tier1",
+    "goal": "office",
+    "subtitle": "Văn phòng & Đồ họa nhẹ",
+    "total_price": 24938000,
+    "fingerprint": "01a119fe-8dfb-7034-9d08-fb74de789528-01a119fe-8e04-7c4b-8ccb-5059b7e02d1c-01a119fe-8e0d-702c-87e8-14688db07eb1-01a119fe-8e1e-7864-a4a7-3615c5d34756-01a119fe-8e26-7980-bea4-87d96a8560f1-01a119fe-8e30-760b-a7a4-b809ff8bda7b-01a119fe-8e37-7d6c-a0c3-5295972e90c5-01a119fe-8e52-7b47-85f7-8f8ff3e6c0f6",
+    "selection": {
+      "CPU": "01a119fe-8e04-7c4b-8ccb-5059b7e02d1c",
+      "MAINBOARD": "01a119fe-8e0d-702c-87e8-14688db07eb1",
+      "RAM": "01a119fe-8e1e-7864-a4a7-3615c5d34756",
+      "GPU": "01a119fe-8dfb-7034-9d08-fb74de789528",
+      "PSU": "01a119fe-8e30-760b-a7a4-b809ff8bda7b",
+      "CASE": "01a119fe-8e37-7d6c-a0c3-5295972e90c5",
+      "COOLER": "01a119fe-8e52-7b47-85f7-8f8ff3e6c0f6",
+      "SSD": "01a119fe-8e26-7980-bea4-87d96a8560f1"
+    },
+    "components": {
+      "CPU": {
+        "id": "01a119fe-8e04-7c4b-8ccb-5059b7e02d1c",
+        "product_id": "01a119fe-8e04-79dc-ae23-4c202ac91d33",
+        "name": "CPU Intel Core i5-10400F (3.4GHz turbo up to 4.4Ghz, 6 nhân 12 luồng, 12MB Cache, 65W) - Socket Intel LGA 1200",
+        "price": 2699000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/dafb189a-fde5-50cf-bd66-2da08fd73cf1/8317_10400f.jpg"
+      },
+      "MAINBOARD": {
+        "id": "01a119fe-8e0d-702c-87e8-14688db07eb1",
+        "product_id": "01a119fe-8e0d-7833-8f48-345584d5edf5",
+        "name": "MAINBOARD SSTC H510M-HD",
+        "price": 1790000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/c0813b77-18eb-5467-9c65-3c20e731b08f/13533_sstc_h510m_pcm___3_.jpg"
+      },
+      "RAM": {
+        "id": "01a119fe-8e1e-7864-a4a7-3615c5d34756",
+        "product_id": "01a119fe-8e1e-7fd2-8b12-7425f245acb1",
+        "name": "RAM TEAMGROUP T-Force Vulcan Z 16GB (1x16GB) DDR4 3200MHz",
+        "price": 3390000,
+        "image_url": "https://pcmarket.vn/media/product/9932_46124_ram_tea_tlzgd416g3200hc16f01_c.jpg"
+      },
+      "GPU": {
+        "id": "01a119fe-8dfb-7034-9d08-fb74de789528",
+        "product_id": "01a119fe-8dfb-76cc-91bc-91a009a8818d",
+        "name": "Card màn hình Colorful GeForce GTX 1050Ti NE 4G-V",
+        "price": 5390000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/6f214607-ab47-5225-8050-963aadcb403e/9202_579_card_m__n_h__nh_colorful_geforce_gtx_1050ti_ne_4g_v_0.jpeg"
+      },
+      "PSU": {
+        "id": "01a119fe-8e30-760b-a7a4-b809ff8bda7b",
+        "product_id": "01a119fe-8e30-741b-9c09-f035f23be0ae",
+        "name": "Nguồn ASUS TUF Gaming 1000W GOLD PCI GEN 5.0 - 80 Plus Gold",
+        "price": 4889000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/7514fe68-bd69-5baa-8218-651151ac6a66/10472_nguon_asus_tuf_gaming_1000w_80gold_7.jpg"
+      },
+      "CASE": {
+        "id": "01a119fe-8e37-7d6c-a0c3-5295972e90c5",
+        "product_id": "01a119fe-8e37-73fc-b7d6-524d9ecba3f6",
+        "name": "Vỏ CASE MAGIC GA-02 PRO CURVED (ATX)",
+        "price": 1190000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/00d8e3ae-ba93-5fe8-99d9-6ae2f269df34/13058_case_magic_ga_02_pro_curved_atx.png"
+      },
+      "COOLER": {
+        "id": "01a119fe-8e52-7b47-85f7-8f8ff3e6c0f6",
+        "product_id": "01a119fe-8e52-7c71-8163-eae5e18af536",
+        "name": "TẢN NHIỆT CPU ID-COOLING SE-214-XT ARGB",
+        "price": 500000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/75b827bd-0565-5f36-8eae-33ab8cd90732/13528_tan_nhiet_cpu_id_cooling_se_214_xt_argb__3_.png"
+      },
+      "SSD": {
+        "id": "01a119fe-8e26-7980-bea4-87d96a8560f1",
+        "product_id": "01a119fe-8e26-7da0-b193-b8cf6beff9a1",
+        "name": "Ổ CỨNG HDD SEAGATE BARRACUDA 4TB 3.5 INCH 5400RPM, SATA, 256MB CACHE (ST4000DM004)",
+        "price": 5090000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/3e027df3-74c3-5557-8f6f-90d33870ed43/2035_ae4bff7f84f196a7909cbff2545f19c1.jpg"
+      }
+    }
+  },
+  {
     "id": "build-002",
     "name": "PC CPU Intel Core i5-10400 · GTX 1660 SUPER",
     "tier": "tier1",
@@ -621,12 +621,12 @@
     "tier": "tier1",
     "goal": "office",
     "subtitle": "Văn phòng & Đồ họa nhẹ",
-    "total_price": 26547000,
-    "fingerprint": "01a119fe-8df9-7fdf-a73f-0858673e456d-01a119fe-8e02-79c9-b4a4-8b5ecb16d71f-01a119fe-8e0d-7853-8646-906dd402ece7-01a119fe-8e1e-7864-a4a7-3615c5d34756-01a119fe-8e23-7617-8eeb-ca2bfed064cd-01a119fe-8e2a-7143-86a5-8aada019e795-01a119fe-8e3d-752d-880b-d95783837100-01a119fe-8e5c-700a-b181-f0a051570b05",
+    "total_price": 25747000,
+    "fingerprint": "01a119fe-8df9-7fdf-a73f-0858673e456d-01a119fe-8e02-79c9-b4a4-8b5ecb16d71f-01a119fe-8e0d-7853-8646-906dd402ece7-01a119fe-8e1e-7911-b702-2c22fb2b7e78-01a119fe-8e23-7617-8eeb-ca2bfed064cd-01a119fe-8e2a-7143-86a5-8aada019e795-01a119fe-8e3d-752d-880b-d95783837100-01a119fe-8e5c-700a-b181-f0a051570b05",
     "selection": {
       "CPU": "01a119fe-8e02-79c9-b4a4-8b5ecb16d71f",
       "MAINBOARD": "01a119fe-8e0d-7853-8646-906dd402ece7",
-      "RAM": "01a119fe-8e1e-7864-a4a7-3615c5d34756",
+      "RAM": "01a119fe-8e1e-7911-b702-2c22fb2b7e78",
       "GPU": "01a119fe-8df9-7fdf-a73f-0858673e456d",
       "PSU": "01a119fe-8e2a-7143-86a5-8aada019e795",
       "CASE": "01a119fe-8e3d-752d-880b-d95783837100",
@@ -649,11 +649,11 @@
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/98850e76-6773-5893-bb30-e7032f72f51a/10333_1.jpg"
       },
       "RAM": {
-        "id": "01a119fe-8e1e-7864-a4a7-3615c5d34756",
-        "product_id": "01a119fe-8e1e-7fd2-8b12-7425f245acb1",
-        "name": "RAM TEAMGROUP T-Force Vulcan Z 16GB (1x16GB) DDR4 3200MHz",
-        "price": 3390000,
-        "image_url": "https://pcmarket.vn/media/product/9932_46124_ram_tea_tlzgd416g3200hc16f01_c.jpg"
+        "id": "01a119fe-8e1e-7911-b702-2c22fb2b7e78",
+        "product_id": "01a119fe-8e1e-78df-a0ed-09cbaf99c42e",
+        "name": "Ram SSTC 16GB DDR4 3200MHz AMD/Intel (U3200A-C22)",
+        "price": 2590000,
+        "image_url": "https://pcmarket.vn/media/product/13414_ram_sstc_16gb_ddr4_3200mhz_black_intel_amd.jpg"
       },
       "GPU": {
         "id": "01a119fe-8df9-7fdf-a73f-0858673e456d",
@@ -699,11 +699,11 @@
     "goal": "office",
     "subtitle": "Văn phòng & Đồ họa nhẹ",
     "total_price": 26606000,
-    "fingerprint": "01a119fe-8dfa-7f53-8c5b-55f44b242c3a-01a119fe-8e00-7ada-8b00-bc975a55befd-01a119fe-8e1d-7e5a-93e4-3262e3dca1f7-01a119fe-8e1f-7f6a-a4ae-a85eab9a2303-01a119fe-8e24-72d0-9419-f42f0db92b9a-01a119fe-8e2f-763c-a279-2b3f27bdb31c-01a119fe-8e39-76a5-b550-0c2ec0834c82-01a119fe-8e59-76ff-81a8-ab2f0dbd125d",
+    "fingerprint": "01a119fe-8dfa-7f53-8c5b-55f44b242c3a-01a119fe-8e00-7ada-8b00-bc975a55befd-01a119fe-8e1d-7e5a-93e4-3262e3dca1f7-01a119fe-8e1f-7d48-9458-a25397916170-01a119fe-8e24-72d0-9419-f42f0db92b9a-01a119fe-8e2f-763c-a279-2b3f27bdb31c-01a119fe-8e39-76a5-b550-0c2ec0834c82-01a119fe-8e59-76ff-81a8-ab2f0dbd125d",
     "selection": {
       "CPU": "01a119fe-8e00-7ada-8b00-bc975a55befd",
       "MAINBOARD": "01a119fe-8e1d-7e5a-93e4-3262e3dca1f7",
-      "RAM": "01a119fe-8e1f-7f6a-a4ae-a85eab9a2303",
+      "RAM": "01a119fe-8e1f-7d48-9458-a25397916170",
       "GPU": "01a119fe-8dfa-7f53-8c5b-55f44b242c3a",
       "PSU": "01a119fe-8e2f-763c-a279-2b3f27bdb31c",
       "CASE": "01a119fe-8e39-76a5-b550-0c2ec0834c82",
@@ -726,11 +726,11 @@
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/d592cc62-2aa8-5e43-9f3c-f6a1576946a6/10505_main_msi_pro_h510m_b_1.png"
       },
       "RAM": {
-        "id": "01a119fe-8e1f-7f6a-a4ae-a85eab9a2303",
-        "product_id": "01a119fe-8e1f-79af-974f-240933dfad33",
-        "name": "Ram PNY XLR8 Gaming 16GB (1x16GB) DDR4 3200MHz",
+        "id": "01a119fe-8e1f-7d48-9458-a25397916170",
+        "product_id": "01a119fe-8e1f-7829-8bef-e0b37ff3a5c1",
+        "name": "Ram GEIL Evo Spear 16GB DDR4 3200MHz",
         "price": 2890000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/2ba28bdd-42f4-53b5-92ee-a6c7daed2f0a/11882_ram_pny_xlr8_16gb_3200mhz_1.png"
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/55f8cff4-f881-5b1d-b369-276e8c2c3a2e/11055_ram_geil_evo_spear_16gb_ddr4_bus_3200_1.jpg"
       },
       "GPU": {
         "id": "01a119fe-8dfa-7f53-8c5b-55f44b242c3a",
@@ -766,83 +766,6 @@
         "name": "Ổ CỨNG NVME KIOXIA EXCERIA BASIC 1TB GEN 4X4 (6600 MB/s - 7200 MB/s)",
         "price": 5390000,
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/81994df1-5ca9-5aef-9365-8b9e6310be93/13560_o_cung_nvme_kioxia_exceria_basic_1tb_gen_4x4__1_.png"
-      }
-    }
-  },
-  {
-    "id": "build-006",
-    "name": "PC CPU Intel Core i3 12100F - TRAY NEW · T400",
-    "tier": "tier1",
-    "goal": "office",
-    "subtitle": "Văn phòng & Đồ họa nhẹ",
-    "total_price": 28569000,
-    "fingerprint": "01a119fe-8df9-7ce6-bf0c-4ffdc81b8e90-01a119fe-8e00-746e-a452-ee737a0754e0-01a119fe-8e0e-7cfd-bd99-29ff0c906887-01a119fe-8e1f-7927-b6f3-9483476b4c7f-01a119fe-8e24-7d4d-ab3f-94af42e7d383-01a119fe-8e29-7b02-93bb-38c96b879309-01a119fe-8e37-7960-9270-0c02a42e9e16-01a119fe-8e5c-7845-abc8-89aafd2adcd2",
-    "selection": {
-      "CPU": "01a119fe-8e00-746e-a452-ee737a0754e0",
-      "MAINBOARD": "01a119fe-8e0e-7cfd-bd99-29ff0c906887",
-      "RAM": "01a119fe-8e1f-7927-b6f3-9483476b4c7f",
-      "GPU": "01a119fe-8df9-7ce6-bf0c-4ffdc81b8e90",
-      "PSU": "01a119fe-8e29-7b02-93bb-38c96b879309",
-      "CASE": "01a119fe-8e37-7960-9270-0c02a42e9e16",
-      "COOLER": "01a119fe-8e5c-7845-abc8-89aafd2adcd2",
-      "SSD": "01a119fe-8e24-7d4d-ab3f-94af42e7d383"
-    },
-    "components": {
-      "CPU": {
-        "id": "01a119fe-8e00-746e-a452-ee737a0754e0",
-        "product_id": "01a119fe-8e00-7e0b-b710-4be42034a620",
-        "name": "CPU Intel Core i3 12100F - TRAY NEW (3.3GHz Turbo 4.3GHz / 4 Nhân 8 Luồng / 12MB / LGA 1700)",
-        "price": 2990000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/f344aaef-0751-5481-928c-2e41cee7b9f0/12441_cpu_intel_core_i3_12100f___tray_new_pcm.jpg"
-      },
-      "MAINBOARD": {
-        "id": "01a119fe-8e0e-7cfd-bd99-29ff0c906887",
-        "product_id": "01a119fe-8e0e-7b19-8911-58589120bdd3",
-        "name": "Mainboard ASUS TUF GAMING B760M-PLUS D4",
-        "price": 3499000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/755fd391-405d-523c-b19b-bd47d3a11d6f/10328_1.jpg"
-      },
-      "RAM": {
-        "id": "01a119fe-8e1f-7927-b6f3-9483476b4c7f",
-        "product_id": "01a119fe-8e1f-7913-a308-af811bfe5606",
-        "name": "RAM TEAMGROUP T-Force Vulcan Z 8GB 3200Mhz DDR4",
-        "price": 1790000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/1210b10f-94f7-53bb-a084-545f56aa7280/9935_39097_ab83b9eabf5f291fdee24f0ab8ff6056.jpg"
-      },
-      "GPU": {
-        "id": "01a119fe-8df9-7ce6-bf0c-4ffdc81b8e90",
-        "product_id": "01a119fe-8df9-7664-8854-7dce338dac45",
-        "name": "Card màn hình Nvidia Quadro LEADTEK T400 4GB GDDR6",
-        "price": 4470000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/845294e7-e366-583d-a307-9c9e7a1e1198/10497_1.jpg"
-      },
-      "PSU": {
-        "id": "01a119fe-8e29-7b02-93bb-38c96b879309",
-        "product_id": "01a119fe-8e29-7661-9ba6-2ddbdb5e7221",
-        "name": "Nguồn máy tính SuperFlower Leadex VII XG 1300W ATX3.1 80 Plus Gold SF-1300F14XG",
-        "price": 5690000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/69a26a3d-1e3c-5c3c-b037-8e27c56ee93d/12841_leadex_vii_xg_1300w_atx3_1_sf_1300f14xg_bk_2.jpg"
-      },
-      "CASE": {
-        "id": "01a119fe-8e37-7960-9270-0c02a42e9e16",
-        "product_id": "01a119fe-8e37-7550-81c8-d778f604df50",
-        "name": "CASE XIGMATEK AQUA ML Arctic",
-        "price": 790000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/06654c03-318d-5a8c-8b0f-d58136f7cc75/13432_case_xigmatek_aqua_ml_arctic_1.jpg"
-      },
-      "COOLER": {
-        "id": "01a119fe-8e5c-7845-abc8-89aafd2adcd2",
-        "product_id": "01a119fe-8e5c-7727-99c5-87a02676decd",
-        "name": "Quạt Tản Nhiệt CPU Cooler Master T400i",
-        "price": 350000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/ecdefd6b-1f51-5a44-8e2e-3acdc169ee58/8141_588b7b5a74be9a09049bbbbe3ba192a1.jpg"
-      },
-      "SSD": {
-        "id": "01a119fe-8e24-7d4d-ab3f-94af42e7d383",
-        "product_id": "01a119fe-8e24-7787-b44a-625c0072616f",
-        "name": "Ổ CỨNG SSD SAMSUNG 990 PRO 1TB PCIE NVME 4.0X4 (ĐỌC 7450MB/S - GHI 6900MB/S) - (MZ-V9P1T0BW)",
-        "price": 8990000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/319e310c-1d68-5fb0-b413-216add6b5bfd/11271_"
       }
     }
   },
@@ -920,6 +843,83 @@
         "name": "Ổ cứng SSD AGI AI238 512GB 2.5 inch SATA III - AGI500GIMAI238-CB",
         "price": 1990000,
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/f34b14eb-5591-5520-9b66-3b5be0b95f5c/13447_o_cung_ssd_agi_sata_ai238_512gb_1.png"
+      }
+    }
+  },
+  {
+    "id": "build-006",
+    "name": "PC CPU Intel Core i3 12100F - TRAY NEW · T400",
+    "tier": "tier1",
+    "goal": "office",
+    "subtitle": "Văn phòng & Đồ họa nhẹ",
+    "total_price": 29669000,
+    "fingerprint": "01a119fe-8df9-7ce6-bf0c-4ffdc81b8e90-01a119fe-8e00-746e-a452-ee737a0754e0-01a119fe-8e0e-7cfd-bd99-29ff0c906887-01a119fe-8e1f-74a3-a855-0947ca025095-01a119fe-8e24-7d4d-ab3f-94af42e7d383-01a119fe-8e29-7b02-93bb-38c96b879309-01a119fe-8e37-7960-9270-0c02a42e9e16-01a119fe-8e5c-7845-abc8-89aafd2adcd2",
+    "selection": {
+      "CPU": "01a119fe-8e00-746e-a452-ee737a0754e0",
+      "MAINBOARD": "01a119fe-8e0e-7cfd-bd99-29ff0c906887",
+      "RAM": "01a119fe-8e1f-74a3-a855-0947ca025095",
+      "GPU": "01a119fe-8df9-7ce6-bf0c-4ffdc81b8e90",
+      "PSU": "01a119fe-8e29-7b02-93bb-38c96b879309",
+      "CASE": "01a119fe-8e37-7960-9270-0c02a42e9e16",
+      "COOLER": "01a119fe-8e5c-7845-abc8-89aafd2adcd2",
+      "SSD": "01a119fe-8e24-7d4d-ab3f-94af42e7d383"
+    },
+    "components": {
+      "CPU": {
+        "id": "01a119fe-8e00-746e-a452-ee737a0754e0",
+        "product_id": "01a119fe-8e00-7e0b-b710-4be42034a620",
+        "name": "CPU Intel Core i3 12100F - TRAY NEW (3.3GHz Turbo 4.3GHz / 4 Nhân 8 Luồng / 12MB / LGA 1700)",
+        "price": 2990000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/f344aaef-0751-5481-928c-2e41cee7b9f0/12441_cpu_intel_core_i3_12100f___tray_new_pcm.jpg"
+      },
+      "MAINBOARD": {
+        "id": "01a119fe-8e0e-7cfd-bd99-29ff0c906887",
+        "product_id": "01a119fe-8e0e-7b19-8911-58589120bdd3",
+        "name": "Mainboard ASUS TUF GAMING B760M-PLUS D4",
+        "price": 3499000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/755fd391-405d-523c-b19b-bd47d3a11d6f/10328_1.jpg"
+      },
+      "RAM": {
+        "id": "01a119fe-8e1f-74a3-a855-0947ca025095",
+        "product_id": "01a119fe-8e1f-7e84-bf4b-ba9c35522ec0",
+        "name": "Ram GEIL ORION 16GB Bus 3200Mhz DDR4",
+        "price": 2890000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/26516d43-0d7e-532a-b27d-3a2523a79715/11040_ram_geil_orion_16gb_ddr4_3200mhz_01.png"
+      },
+      "GPU": {
+        "id": "01a119fe-8df9-7ce6-bf0c-4ffdc81b8e90",
+        "product_id": "01a119fe-8df9-7664-8854-7dce338dac45",
+        "name": "Card màn hình Nvidia Quadro LEADTEK T400 4GB GDDR6",
+        "price": 4470000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/845294e7-e366-583d-a307-9c9e7a1e1198/10497_1.jpg"
+      },
+      "PSU": {
+        "id": "01a119fe-8e29-7b02-93bb-38c96b879309",
+        "product_id": "01a119fe-8e29-7661-9ba6-2ddbdb5e7221",
+        "name": "Nguồn máy tính SuperFlower Leadex VII XG 1300W ATX3.1 80 Plus Gold SF-1300F14XG",
+        "price": 5690000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/69a26a3d-1e3c-5c3c-b037-8e27c56ee93d/12841_leadex_vii_xg_1300w_atx3_1_sf_1300f14xg_bk_2.jpg"
+      },
+      "CASE": {
+        "id": "01a119fe-8e37-7960-9270-0c02a42e9e16",
+        "product_id": "01a119fe-8e37-7550-81c8-d778f604df50",
+        "name": "CASE XIGMATEK AQUA ML Arctic",
+        "price": 790000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/06654c03-318d-5a8c-8b0f-d58136f7cc75/13432_case_xigmatek_aqua_ml_arctic_1.jpg"
+      },
+      "COOLER": {
+        "id": "01a119fe-8e5c-7845-abc8-89aafd2adcd2",
+        "product_id": "01a119fe-8e5c-7727-99c5-87a02676decd",
+        "name": "Quạt Tản Nhiệt CPU Cooler Master T400i",
+        "price": 350000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/ecdefd6b-1f51-5a44-8e2e-3acdc169ee58/8141_588b7b5a74be9a09049bbbbe3ba192a1.jpg"
+      },
+      "SSD": {
+        "id": "01a119fe-8e24-7d4d-ab3f-94af42e7d383",
+        "product_id": "01a119fe-8e24-7787-b44a-625c0072616f",
+        "name": "Ổ CỨNG SSD SAMSUNG 990 PRO 1TB PCIE NVME 4.0X4 (ĐỌC 7450MB/S - GHI 6900MB/S) - (MZ-V9P1T0BW)",
+        "price": 8990000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/319e310c-1d68-5fb0-b413-216add6b5bfd/11271_"
       }
     }
   },
@@ -1078,6 +1078,83 @@
     }
   },
   {
+    "id": "build-046",
+    "name": "PC CPU Intel Core i5-13600 · RTX 3050",
+    "tier": "tier2",
+    "goal": "gaming",
+    "subtitle": "Chiến mượt Game AAA 1080p",
+    "total_price": 32348000,
+    "fingerprint": "01a119fe-8df3-705c-b0e2-218625694f95-01a119fe-8e04-7ff5-a9cc-223f5358530e-01a119fe-8e18-71a1-afe6-acf72ba4f473-01a119fe-8e1f-7927-b6f3-9483476b4c7f-01a119fe-8e26-7442-b06f-8b33767e89ea-01a119fe-8e2b-7211-85ee-161833d22413-01a119fe-8e3e-7fd2-8c9d-a73bf54ecbe5-01a119fe-8e50-71bf-bbb8-1bf641ea330d",
+    "selection": {
+      "CPU": "01a119fe-8e04-7ff5-a9cc-223f5358530e",
+      "MAINBOARD": "01a119fe-8e18-71a1-afe6-acf72ba4f473",
+      "RAM": "01a119fe-8e1f-7927-b6f3-9483476b4c7f",
+      "GPU": "01a119fe-8df3-705c-b0e2-218625694f95",
+      "PSU": "01a119fe-8e2b-7211-85ee-161833d22413",
+      "CASE": "01a119fe-8e3e-7fd2-8c9d-a73bf54ecbe5",
+      "COOLER": "01a119fe-8e50-71bf-bbb8-1bf641ea330d",
+      "SSD": "01a119fe-8e26-7442-b06f-8b33767e89ea"
+    },
+    "components": {
+      "CPU": {
+        "id": "01a119fe-8e04-7ff5-a9cc-223f5358530e",
+        "product_id": "01a119fe-8e04-792a-a8e5-ff02e8bb9d3a",
+        "name": "CPU Intel Core i5-13600 (Up To 4.80GHz, 14 Nhân 20 Luồng,24MB Cache, Raptor Lake)",
+        "price": 8300000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/e59fea23-239a-56c4-8cfb-46e13f7e8799/10124_capture.PNG"
+      },
+      "MAINBOARD": {
+        "id": "01a119fe-8e18-71a1-afe6-acf72ba4f473",
+        "product_id": "01a119fe-8e18-7f45-a5be-cb0774558662",
+        "name": "Mainboard Gigabyte B760M Gaming X AX DDR4",
+        "price": 4199000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/e2ed2da9-a3da-5187-a981-9db5b044791d/11239_mainboard_gigabyte_b760m_gaming_x_ax_ddr4_2.jpg"
+      },
+      "RAM": {
+        "id": "01a119fe-8e1f-7927-b6f3-9483476b4c7f",
+        "product_id": "01a119fe-8e1f-7913-a308-af811bfe5606",
+        "name": "RAM TEAMGROUP T-Force Vulcan Z 8GB 3200Mhz DDR4",
+        "price": 1790000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/1210b10f-94f7-53bb-a084-545f56aa7280/9935_39097_ab83b9eabf5f291fdee24f0ab8ff6056.jpg"
+      },
+      "GPU": {
+        "id": "01a119fe-8df3-705c-b0e2-218625694f95",
+        "product_id": "01a119fe-8df2-7571-8eee-85820eea55ed",
+        "name": "Card màn hình Gigabyte GeForce RTX 3050 WINDFORCE OC V2 8GB (N3050WF2OCV2-8GD)",
+        "price": 7990000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/51b18430-a426-50de-b2d0-6cec66e1a637/12811_vga_gigabyte_geforce_rtx_3050_windforce_1.jpg"
+      },
+      "PSU": {
+        "id": "01a119fe-8e2b-7211-85ee-161833d22413",
+        "product_id": "01a119fe-8e2b-7e90-94ac-08c2d3bda036",
+        "name": "Nguồn Antec GSK850 850W (80 Plus Gold / Full-Modular / ATX 3.1 - PCIE 5.1)",
+        "price": 2190000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/8f6a4152-0cad-56b6-b568-16b86ace934c/13924_antec_gsk_850w_h1.jpg"
+      },
+      "CASE": {
+        "id": "01a119fe-8e3e-7fd2-8c9d-a73bf54ecbe5",
+        "product_id": "01a119fe-8e3e-77f7-bd7f-03abd67f908a",
+        "name": "VỎ CASE XIGMATEK ENDORPHIN M II ARCTIC 3F(MATX/MID TOWER/MÀU TRẮNG)",
+        "price": 699000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/8a29049e-31cc-59df-a09c-bcee1a02b8d8/11082_xigmatek_endorphin_m_ii_artic_3f_1.jpg"
+      },
+      "COOLER": {
+        "id": "01a119fe-8e50-71bf-bbb8-1bf641ea330d",
+        "product_id": "01a119fe-8e50-7089-8e66-b1db117abf15",
+        "name": "TẢN NHIỆT NƯỚC AIO JONSBO TX-360 BLACK",
+        "price": 3390000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/c5171acb-de42-5b7b-b5ef-71137dd628e5/13702_tan_nhiet_nuoc_aio_jonsbo_tx_360_black__3_.png"
+      },
+      "SSD": {
+        "id": "01a119fe-8e26-7442-b06f-8b33767e89ea",
+        "product_id": "01a119fe-8e26-7ef4-9d6e-a8c3eb2359d0",
+        "name": "Ổ cứng WD Caviar Blue 1TB 64MB Cache 5400 RPM (WD10EARZ)",
+        "price": 3790000,
+        "image_url": "https://pcmarket.vn/media/product/14031_o_cung_wd_caviar_blue_1tb_64mb_cache_5400_rpm_wd10earz_1.jpg"
+      }
+    }
+  },
+  {
     "id": "build-012",
     "name": "PC CPU Intel Core I3 14100 · GT 1030",
     "tier": "tier1",
@@ -1151,83 +1228,6 @@
         "name": "Ổ cứng Western Digital Red Plus 4TB 3.5 inch 128MB Cache 5400RPM WD40EFZZ",
         "price": 5890000,
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/9099dab1-85f0-514b-ade7-0a739930b632/14035__cung_western_digital_red_plus_4tb.png"
-      }
-    }
-  },
-  {
-    "id": "build-046",
-    "name": "PC CPU Intel Core i5-13600 · RTX 3050",
-    "tier": "tier2",
-    "goal": "gaming",
-    "subtitle": "Chiến mượt Game AAA 1080p",
-    "total_price": 33448000,
-    "fingerprint": "01a119fe-8df3-705c-b0e2-218625694f95-01a119fe-8e04-7ff5-a9cc-223f5358530e-01a119fe-8e18-71a1-afe6-acf72ba4f473-01a119fe-8e1f-77d4-b872-0697933ef4df-01a119fe-8e26-7442-b06f-8b33767e89ea-01a119fe-8e2b-7211-85ee-161833d22413-01a119fe-8e3e-7fd2-8c9d-a73bf54ecbe5-01a119fe-8e50-71bf-bbb8-1bf641ea330d",
-    "selection": {
-      "CPU": "01a119fe-8e04-7ff5-a9cc-223f5358530e",
-      "MAINBOARD": "01a119fe-8e18-71a1-afe6-acf72ba4f473",
-      "RAM": "01a119fe-8e1f-77d4-b872-0697933ef4df",
-      "GPU": "01a119fe-8df3-705c-b0e2-218625694f95",
-      "PSU": "01a119fe-8e2b-7211-85ee-161833d22413",
-      "CASE": "01a119fe-8e3e-7fd2-8c9d-a73bf54ecbe5",
-      "COOLER": "01a119fe-8e50-71bf-bbb8-1bf641ea330d",
-      "SSD": "01a119fe-8e26-7442-b06f-8b33767e89ea"
-    },
-    "components": {
-      "CPU": {
-        "id": "01a119fe-8e04-7ff5-a9cc-223f5358530e",
-        "product_id": "01a119fe-8e04-792a-a8e5-ff02e8bb9d3a",
-        "name": "CPU Intel Core i5-13600 (Up To 4.80GHz, 14 Nhân 20 Luồng,24MB Cache, Raptor Lake)",
-        "price": 8300000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/e59fea23-239a-56c4-8cfb-46e13f7e8799/10124_capture.PNG"
-      },
-      "MAINBOARD": {
-        "id": "01a119fe-8e18-71a1-afe6-acf72ba4f473",
-        "product_id": "01a119fe-8e18-7f45-a5be-cb0774558662",
-        "name": "Mainboard Gigabyte B760M Gaming X AX DDR4",
-        "price": 4199000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/e2ed2da9-a3da-5187-a981-9db5b044791d/11239_mainboard_gigabyte_b760m_gaming_x_ax_ddr4_2.jpg"
-      },
-      "RAM": {
-        "id": "01a119fe-8e1f-77d4-b872-0697933ef4df",
-        "product_id": "01a119fe-8e1f-7a2c-87ea-9454a78e9861",
-        "name": "RAM Kingspec 16GB Bus 3200MHz DDR4  Tản Nhiệt Đen",
-        "price": 2890000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/d8efc6c3-a335-552b-beb0-b750ed671e34/12970_ram_kingspec_16gb_bus_3200mhz_ddr4_tan_nhiet_den_3.png"
-      },
-      "GPU": {
-        "id": "01a119fe-8df3-705c-b0e2-218625694f95",
-        "product_id": "01a119fe-8df2-7571-8eee-85820eea55ed",
-        "name": "Card màn hình Gigabyte GeForce RTX 3050 WINDFORCE OC V2 8GB (N3050WF2OCV2-8GD)",
-        "price": 7990000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/51b18430-a426-50de-b2d0-6cec66e1a637/12811_vga_gigabyte_geforce_rtx_3050_windforce_1.jpg"
-      },
-      "PSU": {
-        "id": "01a119fe-8e2b-7211-85ee-161833d22413",
-        "product_id": "01a119fe-8e2b-7e90-94ac-08c2d3bda036",
-        "name": "Nguồn Antec GSK850 850W (80 Plus Gold / Full-Modular / ATX 3.1 - PCIE 5.1)",
-        "price": 2190000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/8f6a4152-0cad-56b6-b568-16b86ace934c/13924_antec_gsk_850w_h1.jpg"
-      },
-      "CASE": {
-        "id": "01a119fe-8e3e-7fd2-8c9d-a73bf54ecbe5",
-        "product_id": "01a119fe-8e3e-77f7-bd7f-03abd67f908a",
-        "name": "VỎ CASE XIGMATEK ENDORPHIN M II ARCTIC 3F(MATX/MID TOWER/MÀU TRẮNG)",
-        "price": 699000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/8a29049e-31cc-59df-a09c-bcee1a02b8d8/11082_xigmatek_endorphin_m_ii_artic_3f_1.jpg"
-      },
-      "COOLER": {
-        "id": "01a119fe-8e50-71bf-bbb8-1bf641ea330d",
-        "product_id": "01a119fe-8e50-7089-8e66-b1db117abf15",
-        "name": "TẢN NHIỆT NƯỚC AIO JONSBO TX-360 BLACK",
-        "price": 3390000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/c5171acb-de42-5b7b-b5ef-71137dd628e5/13702_tan_nhiet_nuoc_aio_jonsbo_tx_360_black__3_.png"
-      },
-      "SSD": {
-        "id": "01a119fe-8e26-7442-b06f-8b33767e89ea",
-        "product_id": "01a119fe-8e26-7ef4-9d6e-a8c3eb2359d0",
-        "name": "Ổ cứng WD Caviar Blue 1TB 64MB Cache 5400 RPM (WD10EARZ)",
-        "price": 3790000,
-        "image_url": "https://pcmarket.vn/media/product/14031_o_cung_wd_caviar_blue_1tb_64mb_cache_5400_rpm_wd10earz_1.jpg"
       }
     }
   },
@@ -2162,11 +2162,11 @@
     "goal": "gaming",
     "subtitle": "Chiến mượt Game AAA 1080p",
     "total_price": 40189000,
-    "fingerprint": "01a119fe-8dfa-74fa-856b-c5611112b6c0-01a119fe-8dff-7973-a65e-1648ca3b1b22-01a119fe-8e19-7f17-91c3-82c582cc0fa8-01a119fe-8e1f-7f6a-a4ae-a85eab9a2303-01a119fe-8e26-7dab-8b0e-a3186768f398-01a119fe-8e2c-73ba-9c00-0bbe4f812b08-01a119fe-8e3c-7f25-84b7-9b03cbbca7c7-01a119fe-8e54-7785-adff-263c4f5d0838",
+    "fingerprint": "01a119fe-8dfa-74fa-856b-c5611112b6c0-01a119fe-8dff-7973-a65e-1648ca3b1b22-01a119fe-8e19-7f17-91c3-82c582cc0fa8-01a119fe-8e1f-7d48-9458-a25397916170-01a119fe-8e26-7dab-8b0e-a3186768f398-01a119fe-8e2c-73ba-9c00-0bbe4f812b08-01a119fe-8e3c-7f25-84b7-9b03cbbca7c7-01a119fe-8e54-7785-adff-263c4f5d0838",
     "selection": {
       "CPU": "01a119fe-8dff-7973-a65e-1648ca3b1b22",
       "MAINBOARD": "01a119fe-8e19-7f17-91c3-82c582cc0fa8",
-      "RAM": "01a119fe-8e1f-7f6a-a4ae-a85eab9a2303",
+      "RAM": "01a119fe-8e1f-7d48-9458-a25397916170",
       "GPU": "01a119fe-8dfa-74fa-856b-c5611112b6c0",
       "PSU": "01a119fe-8e2c-73ba-9c00-0bbe4f812b08",
       "CASE": "01a119fe-8e3c-7f25-84b7-9b03cbbca7c7",
@@ -2189,11 +2189,11 @@
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/f189b042-3fe5-5d83-81ab-a3e912ac3f0d/11550_mainboard_asus_rog_strix_b760_a_gaming_wifi_d4_pcm_1.jpg"
       },
       "RAM": {
-        "id": "01a119fe-8e1f-7f6a-a4ae-a85eab9a2303",
-        "product_id": "01a119fe-8e1f-79af-974f-240933dfad33",
-        "name": "Ram PNY XLR8 Gaming 16GB (1x16GB) DDR4 3200MHz",
+        "id": "01a119fe-8e1f-7d48-9458-a25397916170",
+        "product_id": "01a119fe-8e1f-7829-8bef-e0b37ff3a5c1",
+        "name": "Ram GEIL Evo Spear 16GB DDR4 3200MHz",
         "price": 2890000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/2ba28bdd-42f4-53b5-92ee-a6c7daed2f0a/11882_ram_pny_xlr8_16gb_3200mhz_1.png"
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/55f8cff4-f881-5b1d-b369-276e8c2c3a2e/11055_ram_geil_evo_spear_16gb_ddr4_bus_3200_1.jpg"
       },
       "GPU": {
         "id": "01a119fe-8dfa-74fa-856b-c5611112b6c0",
@@ -2393,11 +2393,11 @@
     "goal": "gaming",
     "subtitle": "Chiến mượt Game AAA 1080p",
     "total_price": 42219000,
-    "fingerprint": "01a119fe-8df2-7581-800f-06d179055af8-01a119fe-8e01-78c6-9089-78e969da22db-01a119fe-8e18-74c1-b8f8-30cae1818934-01a119fe-8e1e-7911-b702-2c22fb2b7e78-01a119fe-8e26-72ae-8200-6a0fc275acec-01a119fe-8e29-7686-a502-35d0f306cb92-01a119fe-8e36-7d86-b518-9e0f4e025ee8-01a119fe-8e52-76a0-a432-c5cfe331e662",
+    "fingerprint": "01a119fe-8df2-7581-800f-06d179055af8-01a119fe-8e01-78c6-9089-78e969da22db-01a119fe-8e18-74c1-b8f8-30cae1818934-01a119fe-8e1f-7736-83f4-4a66125db738-01a119fe-8e26-72ae-8200-6a0fc275acec-01a119fe-8e29-7686-a502-35d0f306cb92-01a119fe-8e36-7d86-b518-9e0f4e025ee8-01a119fe-8e52-76a0-a432-c5cfe331e662",
     "selection": {
       "CPU": "01a119fe-8e01-78c6-9089-78e969da22db",
       "MAINBOARD": "01a119fe-8e18-74c1-b8f8-30cae1818934",
-      "RAM": "01a119fe-8e1e-7911-b702-2c22fb2b7e78",
+      "RAM": "01a119fe-8e1f-7736-83f4-4a66125db738",
       "GPU": "01a119fe-8df2-7581-800f-06d179055af8",
       "PSU": "01a119fe-8e29-7686-a502-35d0f306cb92",
       "CASE": "01a119fe-8e36-7d86-b518-9e0f4e025ee8",
@@ -2420,11 +2420,11 @@
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/b4cf045f-91b5-5032-ba4d-8b84f56e5e88/11235_b760_aorus_elite_ax_ddr4_01.png"
       },
       "RAM": {
-        "id": "01a119fe-8e1e-7911-b702-2c22fb2b7e78",
-        "product_id": "01a119fe-8e1e-78df-a0ed-09cbaf99c42e",
-        "name": "Ram SSTC 16GB DDR4 3200MHz AMD/Intel (U3200A-C22)",
+        "id": "01a119fe-8e1f-7736-83f4-4a66125db738",
+        "product_id": "01a119fe-8e1f-74f3-8498-93d34a3ee4ef",
+        "name": "Ram SSTC 16GB Bus 3200Mhz DDR4 BLACK TẢN NHIỆT\t(FOR INTEL)",
         "price": 2590000,
-        "image_url": "https://pcmarket.vn/media/product/13414_ram_sstc_16gb_ddr4_3200mhz_black_intel_amd.jpg"
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/e576437c-9b8b-56e6-942a-d3246c03c562/11447_ram_desktop_sstc_16gb_ddr4_3200mhz_black_chinh_hang.jpg"
       },
       "GPU": {
         "id": "01a119fe-8df2-7581-800f-06d179055af8",
@@ -2695,6 +2695,83 @@
     }
   },
   {
+    "id": "build-005",
+    "name": "PC CPU Intel Core i3 12100F - TRAY NEW · GTX 1650",
+    "tier": "tier1",
+    "goal": "office",
+    "subtitle": "Văn phòng & Đồ họa nhẹ",
+    "total_price": 43747000,
+    "fingerprint": "01a119fe-8df8-71c3-af50-2603172caf93-01a119fe-8e00-746e-a452-ee737a0754e0-01a119fe-8e1d-7a90-b7b5-28e8f8693eff-01a119fe-8e1e-7911-b702-2c22fb2b7e78-01a119fe-8e24-7637-ab0b-958d6c32e458-01a119fe-8e2d-7889-97fe-af0a0b4c1c95-01a119fe-8e48-7c2e-8bbb-c4c0dadbe799-01a119fe-8e5c-7845-abc8-89aafd2adcd2",
+    "selection": {
+      "CPU": "01a119fe-8e00-746e-a452-ee737a0754e0",
+      "MAINBOARD": "01a119fe-8e1d-7a90-b7b5-28e8f8693eff",
+      "RAM": "01a119fe-8e1e-7911-b702-2c22fb2b7e78",
+      "GPU": "01a119fe-8df8-71c3-af50-2603172caf93",
+      "PSU": "01a119fe-8e2d-7889-97fe-af0a0b4c1c95",
+      "CASE": "01a119fe-8e48-7c2e-8bbb-c4c0dadbe799",
+      "COOLER": "01a119fe-8e5c-7845-abc8-89aafd2adcd2",
+      "SSD": "01a119fe-8e24-7637-ab0b-958d6c32e458"
+    },
+    "components": {
+      "CPU": {
+        "id": "01a119fe-8e00-746e-a452-ee737a0754e0",
+        "product_id": "01a119fe-8e00-7e0b-b710-4be42034a620",
+        "name": "CPU Intel Core i3 12100F - TRAY NEW (3.3GHz Turbo 4.3GHz / 4 Nhân 8 Luồng / 12MB / LGA 1700)",
+        "price": 2990000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/f344aaef-0751-5481-928c-2e41cee7b9f0/12441_cpu_intel_core_i3_12100f___tray_new_pcm.jpg"
+      },
+      "MAINBOARD": {
+        "id": "01a119fe-8e1d-7a90-b7b5-28e8f8693eff",
+        "product_id": "01a119fe-8e1d-75f9-9a28-6b42b1b4a16b",
+        "name": "Mainboard ASUS ROG STRIX Z790-A GAMING WIFI D4",
+        "price": 9999000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/b9b388c9-f473-5273-8930-0d803c6469db/10148_68464_mainboard_asus_rog_strix_z790_a_gaming_wifi_d4__1_.jpg"
+      },
+      "RAM": {
+        "id": "01a119fe-8e1e-7911-b702-2c22fb2b7e78",
+        "product_id": "01a119fe-8e1e-78df-a0ed-09cbaf99c42e",
+        "name": "Ram SSTC 16GB DDR4 3200MHz AMD/Intel (U3200A-C22)",
+        "price": 2590000,
+        "image_url": "https://pcmarket.vn/media/product/13414_ram_sstc_16gb_ddr4_3200mhz_black_intel_amd.jpg"
+      },
+      "GPU": {
+        "id": "01a119fe-8df8-71c3-af50-2603172caf93",
+        "product_id": "01a119fe-8df8-72b5-a967-6dd1ea002b88",
+        "name": "Card màn hình MSI GTX 1650 D6 VENTUS XS OCV3",
+        "price": 3899000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/e9cf593e-363a-534d-a7fe-a9f03ed4d081/10688_card_man_hinh_msi_gtx_1650_d6_ventus_xs_ocv3_.jpg"
+      },
+      "PSU": {
+        "id": "01a119fe-8e2d-7889-97fe-af0a0b4c1c95",
+        "product_id": "01a119fe-8e2d-7dfb-b296-f57620ab6d8f",
+        "name": "Nguồn máy tính AIGO GB750 - 750W (80 Plus Bronze/Màu Đen)",
+        "price": 1390000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/9732f99d-6c1c-5ac7-a33e-fffe68e41050/12831_nguon_may_tinh_aigo_gb750_750w_80_plus_bronze_1.jpg"
+      },
+      "CASE": {
+        "id": "01a119fe-8e48-7c2e-8bbb-c4c0dadbe799",
+        "product_id": "01a119fe-8e48-7501-841c-e96767c4125a",
+        "name": "Vỏ Case NZXT H710i SMART Case (Mid Tower/Màu Trắng)",
+        "price": 4539000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/9368a6a5-55de-56de-8c3c-cf3db9ad948c/8733_47664_case_nzxt_h710i_smart_case_matte_white_0006_1__1_.jpg"
+      },
+      "COOLER": {
+        "id": "01a119fe-8e5c-7845-abc8-89aafd2adcd2",
+        "product_id": "01a119fe-8e5c-7727-99c5-87a02676decd",
+        "name": "Quạt Tản Nhiệt CPU Cooler Master T400i",
+        "price": 350000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/ecdefd6b-1f51-5a44-8e2e-3acdc169ee58/8141_588b7b5a74be9a09049bbbbe3ba192a1.jpg"
+      },
+      "SSD": {
+        "id": "01a119fe-8e24-7637-ab0b-958d6c32e458",
+        "product_id": "01a119fe-8e24-751e-b5fd-230295e8239d",
+        "name": "Ổ cứng SSD Samsung 990 Pro 2TB PCIe Gen 4.0 x4 NVMe V-NAND M.2 2280",
+        "price": 17990000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/6ebb0bb1-ce42-5c1a-90d9-0a02e7ac87b6/10938_o_cung_ssd_2tb_samsung_990_pro_nvme_m_2_mz_v9p2t0bw.jpg"
+      }
+    }
+  },
+  {
     "id": "build-030",
     "name": "PC CPU Intel Core i5-14600K · RTX 3050",
     "tier": "tier2",
@@ -2768,83 +2845,6 @@
         "name": "Ổ cứng Western Digital Caviar Blue 4TB 256MB Cache 5400RPM WD40EZZX",
         "price": 5290000,
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/ba472133-7ca5-5ea6-af91-95f9790360ee/14034_o_cung_western_digital_caviar_blue_4tb_1.png"
-      }
-    }
-  },
-  {
-    "id": "build-005",
-    "name": "PC CPU Intel Core i3 12100F - TRAY NEW · GTX 1650",
-    "tier": "tier1",
-    "goal": "office",
-    "subtitle": "Văn phòng & Đồ họa nhẹ",
-    "total_price": 44547000,
-    "fingerprint": "01a119fe-8df8-71c3-af50-2603172caf93-01a119fe-8e00-746e-a452-ee737a0754e0-01a119fe-8e1d-7a90-b7b5-28e8f8693eff-01a119fe-8e1e-7864-a4a7-3615c5d34756-01a119fe-8e24-7637-ab0b-958d6c32e458-01a119fe-8e2d-7889-97fe-af0a0b4c1c95-01a119fe-8e48-7c2e-8bbb-c4c0dadbe799-01a119fe-8e5c-7845-abc8-89aafd2adcd2",
-    "selection": {
-      "CPU": "01a119fe-8e00-746e-a452-ee737a0754e0",
-      "MAINBOARD": "01a119fe-8e1d-7a90-b7b5-28e8f8693eff",
-      "RAM": "01a119fe-8e1e-7864-a4a7-3615c5d34756",
-      "GPU": "01a119fe-8df8-71c3-af50-2603172caf93",
-      "PSU": "01a119fe-8e2d-7889-97fe-af0a0b4c1c95",
-      "CASE": "01a119fe-8e48-7c2e-8bbb-c4c0dadbe799",
-      "COOLER": "01a119fe-8e5c-7845-abc8-89aafd2adcd2",
-      "SSD": "01a119fe-8e24-7637-ab0b-958d6c32e458"
-    },
-    "components": {
-      "CPU": {
-        "id": "01a119fe-8e00-746e-a452-ee737a0754e0",
-        "product_id": "01a119fe-8e00-7e0b-b710-4be42034a620",
-        "name": "CPU Intel Core i3 12100F - TRAY NEW (3.3GHz Turbo 4.3GHz / 4 Nhân 8 Luồng / 12MB / LGA 1700)",
-        "price": 2990000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/f344aaef-0751-5481-928c-2e41cee7b9f0/12441_cpu_intel_core_i3_12100f___tray_new_pcm.jpg"
-      },
-      "MAINBOARD": {
-        "id": "01a119fe-8e1d-7a90-b7b5-28e8f8693eff",
-        "product_id": "01a119fe-8e1d-75f9-9a28-6b42b1b4a16b",
-        "name": "Mainboard ASUS ROG STRIX Z790-A GAMING WIFI D4",
-        "price": 9999000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/b9b388c9-f473-5273-8930-0d803c6469db/10148_68464_mainboard_asus_rog_strix_z790_a_gaming_wifi_d4__1_.jpg"
-      },
-      "RAM": {
-        "id": "01a119fe-8e1e-7864-a4a7-3615c5d34756",
-        "product_id": "01a119fe-8e1e-7fd2-8b12-7425f245acb1",
-        "name": "RAM TEAMGROUP T-Force Vulcan Z 16GB (1x16GB) DDR4 3200MHz",
-        "price": 3390000,
-        "image_url": "https://pcmarket.vn/media/product/9932_46124_ram_tea_tlzgd416g3200hc16f01_c.jpg"
-      },
-      "GPU": {
-        "id": "01a119fe-8df8-71c3-af50-2603172caf93",
-        "product_id": "01a119fe-8df8-72b5-a967-6dd1ea002b88",
-        "name": "Card màn hình MSI GTX 1650 D6 VENTUS XS OCV3",
-        "price": 3899000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/e9cf593e-363a-534d-a7fe-a9f03ed4d081/10688_card_man_hinh_msi_gtx_1650_d6_ventus_xs_ocv3_.jpg"
-      },
-      "PSU": {
-        "id": "01a119fe-8e2d-7889-97fe-af0a0b4c1c95",
-        "product_id": "01a119fe-8e2d-7dfb-b296-f57620ab6d8f",
-        "name": "Nguồn máy tính AIGO GB750 - 750W (80 Plus Bronze/Màu Đen)",
-        "price": 1390000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/9732f99d-6c1c-5ac7-a33e-fffe68e41050/12831_nguon_may_tinh_aigo_gb750_750w_80_plus_bronze_1.jpg"
-      },
-      "CASE": {
-        "id": "01a119fe-8e48-7c2e-8bbb-c4c0dadbe799",
-        "product_id": "01a119fe-8e48-7501-841c-e96767c4125a",
-        "name": "Vỏ Case NZXT H710i SMART Case (Mid Tower/Màu Trắng)",
-        "price": 4539000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/9368a6a5-55de-56de-8c3c-cf3db9ad948c/8733_47664_case_nzxt_h710i_smart_case_matte_white_0006_1__1_.jpg"
-      },
-      "COOLER": {
-        "id": "01a119fe-8e5c-7845-abc8-89aafd2adcd2",
-        "product_id": "01a119fe-8e5c-7727-99c5-87a02676decd",
-        "name": "Quạt Tản Nhiệt CPU Cooler Master T400i",
-        "price": 350000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/ecdefd6b-1f51-5a44-8e2e-3acdc169ee58/8141_588b7b5a74be9a09049bbbbe3ba192a1.jpg"
-      },
-      "SSD": {
-        "id": "01a119fe-8e24-7637-ab0b-958d6c32e458",
-        "product_id": "01a119fe-8e24-751e-b5fd-230295e8239d",
-        "name": "Ổ cứng SSD Samsung 990 Pro 2TB PCIe Gen 4.0 x4 NVMe V-NAND M.2 2280",
-        "price": 17990000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/6ebb0bb1-ce42-5c1a-90d9-0a02e7ac87b6/10938_o_cung_ssd_2tb_samsung_990_pro_nvme_m_2_mz_v9p2t0bw.jpg"
       }
     }
   },
@@ -2932,11 +2932,11 @@
     "goal": "gaming",
     "subtitle": "Chiến mượt Game AAA 1080p",
     "total_price": 46837000,
-    "fingerprint": "01a119fe-8de6-7d1b-8567-20afee191c03-01a119fe-8e01-7f8b-903b-cc18600315b1-01a119fe-8e1a-7373-ba6e-702b6bb41b69-01a119fe-8e1f-7f6a-a4ae-a85eab9a2303-01a119fe-8e26-7980-bea4-87d96a8560f1-01a119fe-8e31-7503-8603-b7ceeb9652c7-01a119fe-8e41-72fb-97d8-c23d6d4f7b31-01a119fe-8e5a-7c01-ba17-37eeef272081",
+    "fingerprint": "01a119fe-8de6-7d1b-8567-20afee191c03-01a119fe-8e01-7f8b-903b-cc18600315b1-01a119fe-8e1a-7373-ba6e-702b6bb41b69-01a119fe-8e1f-7d48-9458-a25397916170-01a119fe-8e26-7980-bea4-87d96a8560f1-01a119fe-8e31-7503-8603-b7ceeb9652c7-01a119fe-8e41-72fb-97d8-c23d6d4f7b31-01a119fe-8e5a-7c01-ba17-37eeef272081",
     "selection": {
       "CPU": "01a119fe-8e01-7f8b-903b-cc18600315b1",
       "MAINBOARD": "01a119fe-8e1a-7373-ba6e-702b6bb41b69",
-      "RAM": "01a119fe-8e1f-7f6a-a4ae-a85eab9a2303",
+      "RAM": "01a119fe-8e1f-7d48-9458-a25397916170",
       "GPU": "01a119fe-8de6-7d1b-8567-20afee191c03",
       "PSU": "01a119fe-8e31-7503-8603-b7ceeb9652c7",
       "CASE": "01a119fe-8e41-72fb-97d8-c23d6d4f7b31",
@@ -2959,11 +2959,11 @@
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/eacb5fd0-1f90-5b77-b9a2-6804c756bc72/11242_mainboard_b760m_k_ddr4_1.png"
       },
       "RAM": {
-        "id": "01a119fe-8e1f-7f6a-a4ae-a85eab9a2303",
-        "product_id": "01a119fe-8e1f-79af-974f-240933dfad33",
-        "name": "Ram PNY XLR8 Gaming 16GB (1x16GB) DDR4 3200MHz",
+        "id": "01a119fe-8e1f-7d48-9458-a25397916170",
+        "product_id": "01a119fe-8e1f-7829-8bef-e0b37ff3a5c1",
+        "name": "Ram GEIL Evo Spear 16GB DDR4 3200MHz",
         "price": 2890000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/2ba28bdd-42f4-53b5-92ee-a6c7daed2f0a/11882_ram_pny_xlr8_16gb_3200mhz_1.png"
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/55f8cff4-f881-5b1d-b369-276e8c2c3a2e/11055_ram_geil_evo_spear_16gb_ddr4_bus_3200_1.jpg"
       },
       "GPU": {
         "id": "01a119fe-8de6-7d1b-8567-20afee191c03",
@@ -3157,6 +3157,83 @@
     }
   },
   {
+    "id": "build-027",
+    "name": "PC CPU Intel Core I5 14400 · RTX 3060",
+    "tier": "tier2",
+    "goal": "gaming",
+    "subtitle": "Chiến mượt Game AAA 1080p",
+    "total_price": 48429000,
+    "fingerprint": "01a119fe-8de6-7502-9035-9d5e8d1f19cd-01a119fe-8e03-7069-a20b-c26f9166f9ad-01a119fe-8e1d-7532-8886-d1b0727c0c60-01a119fe-8e1f-77d4-b872-0697933ef4df-01a119fe-8e26-7225-a300-fe4f8a955e01-01a119fe-8e2f-7641-b98a-963c5a0aa6a4-01a119fe-8e39-7f7d-9b89-80d7af628fb6-01a119fe-8e5b-7920-acc3-6caaba941a50",
+    "selection": {
+      "CPU": "01a119fe-8e03-7069-a20b-c26f9166f9ad",
+      "MAINBOARD": "01a119fe-8e1d-7532-8886-d1b0727c0c60",
+      "RAM": "01a119fe-8e1f-77d4-b872-0697933ef4df",
+      "GPU": "01a119fe-8de6-7502-9035-9d5e8d1f19cd",
+      "PSU": "01a119fe-8e2f-7641-b98a-963c5a0aa6a4",
+      "CASE": "01a119fe-8e39-7f7d-9b89-80d7af628fb6",
+      "COOLER": "01a119fe-8e5b-7920-acc3-6caaba941a50",
+      "SSD": "01a119fe-8e26-7225-a300-fe4f8a955e01"
+    },
+    "components": {
+      "CPU": {
+        "id": "01a119fe-8e03-7069-a20b-c26f9166f9ad",
+        "product_id": "01a119fe-8e03-7259-9728-2e001e2fd8ca",
+        "name": "CPU Intel Core I5 14400 (Up To 4.70GHz, 10 Nhân 16 Luồng, 20MB Cache, LGA 1700)",
+        "price": 6299000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/5344838f-6668-5e27-950a-d4e7c447089f/10977_pcm_cpu_intel_core_i5_14400.jpg"
+      },
+      "MAINBOARD": {
+        "id": "01a119fe-8e1d-7532-8886-d1b0727c0c60",
+        "product_id": "01a119fe-8e1d-7316-a8b0-d91044fbe974",
+        "name": "Mainboard Gigabyte Z690M AORUS ELITE AX DDR4",
+        "price": 5190000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/a3d6d8cf-4214-5812-aa15-a8a60a5e9a70/10654_image.png"
+      },
+      "RAM": {
+        "id": "01a119fe-8e1f-77d4-b872-0697933ef4df",
+        "product_id": "01a119fe-8e1f-7a2c-87ea-9454a78e9861",
+        "name": "RAM Kingspec 16GB Bus 3200MHz DDR4  Tản Nhiệt Đen",
+        "price": 2890000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/d8efc6c3-a335-552b-beb0-b750ed671e34/12970_ram_kingspec_16gb_bus_3200mhz_ddr4_tan_nhiet_den_3.png"
+      },
+      "GPU": {
+        "id": "01a119fe-8de6-7502-9035-9d5e8d1f19cd",
+        "product_id": "01a119fe-8de6-7cf1-8190-b9179317a9ed",
+        "name": "CARD MÀN HÌNH COLORFUL RTX 3060 NB DUO 12G V3 L-V",
+        "price": 10990000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/ee12775f-8bd1-5145-b0e4-abef4adcec56/11104_card_man_hinh_colorful_rtx_3060_nb_duo_12g_v3_l_v_1.jpg"
+      },
+      "PSU": {
+        "id": "01a119fe-8e2f-7641-b98a-963c5a0aa6a4",
+        "product_id": "01a119fe-8e2f-778c-addf-33eb39c7a2f0",
+        "name": "Nguồn Máy Tính MSI MPG A850G PCIE 5.0 (850W, 80 PLUS GOLD, ATX 3.0)",
+        "price": 2990000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/af009755-b98e-5d06-8919-9c3a2c135c6d/10479_nguon_may_tinh_msi_mpg_a850g_5.jpg"
+      },
+      "CASE": {
+        "id": "01a119fe-8e39-7f7d-9b89-80d7af628fb6",
+        "product_id": "01a119fe-8e39-7c02-b35e-5d2a0acc74e3",
+        "name": "Vỏ case ANTEC C3 Basic (ATX/Màu đen)",
+        "price": 1090000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/dd3e7bf2-4665-55f4-80d9-c93916517a91/12832_vo_case_antec_c3_basic_1.jpg"
+      },
+      "COOLER": {
+        "id": "01a119fe-8e5b-7920-acc3-6caaba941a50",
+        "product_id": "01a119fe-8e5b-71b4-91ca-c7bcbc5e10c5",
+        "name": "TẢN NHIỆT NƯỚC ASUS ROG RYUJIN III 360 ARGB EVA-02 EDITION",
+        "price": 10990000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/843f1cfc-24a1-5749-a2f5-044eb5c921a7/10734_pcm_tan_nhiet_nuoc_asus_rog_ryujin_iii_360_argb_eva_02_edition_2.jpg"
+      },
+      "SSD": {
+        "id": "01a119fe-8e26-7225-a300-fe4f8a955e01",
+        "product_id": "01a119fe-8e26-70b6-9e3b-feeb73f1699c",
+        "name": "Ổ CỨNG HDD WD 4TB BLACK 3.5 INCH, 7200RPM, SATA, 256MB CACHE",
+        "price": 7990000,
+        "image_url": "https://pcmarket.vn/media/product/10867_hdd_wd_caviar_black_4tb7200_pcm_1.jpg"
+      }
+    }
+  },
+  {
     "id": "build-024",
     "name": "PC CPU Intel Core i5 14400F · RTX 3050",
     "tier": "tier2",
@@ -3230,83 +3307,6 @@
         "name": "Ổ cứng Western Digital Caviar Blue 4TB 256MB Cache 5400RPM WD40EZZX",
         "price": 5290000,
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/ba472133-7ca5-5ea6-af91-95f9790360ee/14034_o_cung_western_digital_caviar_blue_4tb_1.png"
-      }
-    }
-  },
-  {
-    "id": "build-027",
-    "name": "PC CPU Intel Core I5 14400 · RTX 3060",
-    "tier": "tier2",
-    "goal": "gaming",
-    "subtitle": "Chiến mượt Game AAA 1080p",
-    "total_price": 49529000,
-    "fingerprint": "01a119fe-8de6-7502-9035-9d5e8d1f19cd-01a119fe-8e03-7069-a20b-c26f9166f9ad-01a119fe-8e1d-7532-8886-d1b0727c0c60-01a119fe-8e1f-723c-b90a-9556ce640467-01a119fe-8e26-7225-a300-fe4f8a955e01-01a119fe-8e2f-7641-b98a-963c5a0aa6a4-01a119fe-8e39-7f7d-9b89-80d7af628fb6-01a119fe-8e5b-7920-acc3-6caaba941a50",
-    "selection": {
-      "CPU": "01a119fe-8e03-7069-a20b-c26f9166f9ad",
-      "MAINBOARD": "01a119fe-8e1d-7532-8886-d1b0727c0c60",
-      "RAM": "01a119fe-8e1f-723c-b90a-9556ce640467",
-      "GPU": "01a119fe-8de6-7502-9035-9d5e8d1f19cd",
-      "PSU": "01a119fe-8e2f-7641-b98a-963c5a0aa6a4",
-      "CASE": "01a119fe-8e39-7f7d-9b89-80d7af628fb6",
-      "COOLER": "01a119fe-8e5b-7920-acc3-6caaba941a50",
-      "SSD": "01a119fe-8e26-7225-a300-fe4f8a955e01"
-    },
-    "components": {
-      "CPU": {
-        "id": "01a119fe-8e03-7069-a20b-c26f9166f9ad",
-        "product_id": "01a119fe-8e03-7259-9728-2e001e2fd8ca",
-        "name": "CPU Intel Core I5 14400 (Up To 4.70GHz, 10 Nhân 16 Luồng, 20MB Cache, LGA 1700)",
-        "price": 6299000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/5344838f-6668-5e27-950a-d4e7c447089f/10977_pcm_cpu_intel_core_i5_14400.jpg"
-      },
-      "MAINBOARD": {
-        "id": "01a119fe-8e1d-7532-8886-d1b0727c0c60",
-        "product_id": "01a119fe-8e1d-7316-a8b0-d91044fbe974",
-        "name": "Mainboard Gigabyte Z690M AORUS ELITE AX DDR4",
-        "price": 5190000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/a3d6d8cf-4214-5812-aa15-a8a60a5e9a70/10654_image.png"
-      },
-      "RAM": {
-        "id": "01a119fe-8e1f-723c-b90a-9556ce640467",
-        "product_id": "01a119fe-8e1f-7c49-b6e9-d9fc1da7eadc",
-        "name": "Ram Desktop Adata XPG Spectrix D50 RGB White 16GB (1x16GB) DDR4 3200Mhz",
-        "price": 3990000,
-        "image_url": "https://pcmarket.vn/media/product/10232_67821_ram_desktop_adata_xpg_spectrix_d50_rgb_white_ax4u32008g16a_sw50_8gb_1x8gb_ddr4_3200mhz__2_.jpg"
-      },
-      "GPU": {
-        "id": "01a119fe-8de6-7502-9035-9d5e8d1f19cd",
-        "product_id": "01a119fe-8de6-7cf1-8190-b9179317a9ed",
-        "name": "CARD MÀN HÌNH COLORFUL RTX 3060 NB DUO 12G V3 L-V",
-        "price": 10990000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/ee12775f-8bd1-5145-b0e4-abef4adcec56/11104_card_man_hinh_colorful_rtx_3060_nb_duo_12g_v3_l_v_1.jpg"
-      },
-      "PSU": {
-        "id": "01a119fe-8e2f-7641-b98a-963c5a0aa6a4",
-        "product_id": "01a119fe-8e2f-778c-addf-33eb39c7a2f0",
-        "name": "Nguồn Máy Tính MSI MPG A850G PCIE 5.0 (850W, 80 PLUS GOLD, ATX 3.0)",
-        "price": 2990000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/af009755-b98e-5d06-8919-9c3a2c135c6d/10479_nguon_may_tinh_msi_mpg_a850g_5.jpg"
-      },
-      "CASE": {
-        "id": "01a119fe-8e39-7f7d-9b89-80d7af628fb6",
-        "product_id": "01a119fe-8e39-7c02-b35e-5d2a0acc74e3",
-        "name": "Vỏ case ANTEC C3 Basic (ATX/Màu đen)",
-        "price": 1090000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/dd3e7bf2-4665-55f4-80d9-c93916517a91/12832_vo_case_antec_c3_basic_1.jpg"
-      },
-      "COOLER": {
-        "id": "01a119fe-8e5b-7920-acc3-6caaba941a50",
-        "product_id": "01a119fe-8e5b-71b4-91ca-c7bcbc5e10c5",
-        "name": "TẢN NHIỆT NƯỚC ASUS ROG RYUJIN III 360 ARGB EVA-02 EDITION",
-        "price": 10990000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/843f1cfc-24a1-5749-a2f5-044eb5c921a7/10734_pcm_tan_nhiet_nuoc_asus_rog_ryujin_iii_360_argb_eva_02_edition_2.jpg"
-      },
-      "SSD": {
-        "id": "01a119fe-8e26-7225-a300-fe4f8a955e01",
-        "product_id": "01a119fe-8e26-70b6-9e3b-feeb73f1699c",
-        "name": "Ổ CỨNG HDD WD 4TB BLACK 3.5 INCH, 7200RPM, SATA, 256MB CACHE",
-        "price": 7990000,
-        "image_url": "https://pcmarket.vn/media/product/10867_hdd_wd_caviar_black_4tb7200_pcm_1.jpg"
       }
     }
   },
@@ -3465,83 +3465,6 @@
     }
   },
   {
-    "id": "build-051",
-    "name": "PC CPU Intel Core i5 14500 - TRAY NEW · RTX 5050",
-    "tier": "tier2",
-    "goal": "gaming",
-    "subtitle": "Chiến mượt Game AAA 1080p",
-    "total_price": 53480000,
-    "fingerprint": "01a119fe-8df2-7f72-a560-5548ad43092b-01a119fe-8e01-78c6-9089-78e969da22db-01a119fe-8e1b-7b59-87e6-10b6f2ab7d8a-01a119fe-8e1f-7d48-9458-a25397916170-01a119fe-8e26-72ae-8200-6a0fc275acec-01a119fe-8e29-77e4-a018-8a7e15c8e7a1-01a119fe-8e37-7678-9aba-75fb3e037f74-01a119fe-8e4e-7c25-8267-ddf12e98e77f",
-    "selection": {
-      "CPU": "01a119fe-8e01-78c6-9089-78e969da22db",
-      "MAINBOARD": "01a119fe-8e1b-7b59-87e6-10b6f2ab7d8a",
-      "RAM": "01a119fe-8e1f-7d48-9458-a25397916170",
-      "GPU": "01a119fe-8df2-7f72-a560-5548ad43092b",
-      "PSU": "01a119fe-8e29-77e4-a018-8a7e15c8e7a1",
-      "CASE": "01a119fe-8e37-7678-9aba-75fb3e037f74",
-      "COOLER": "01a119fe-8e4e-7c25-8267-ddf12e98e77f",
-      "SSD": "01a119fe-8e26-72ae-8200-6a0fc275acec"
-    },
-    "components": {
-      "CPU": {
-        "id": "01a119fe-8e01-78c6-9089-78e969da22db",
-        "product_id": "01a119fe-8e01-7fc5-92a2-0294233c05e1",
-        "name": "CPU Intel Core i5 14500 - TRAY NEW (Up To 5.0GHz, 14 Nhân 20 Luồng, 24MB Cache, LGA 1700)",
-        "price": 5980000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/55644d66-a742-59f2-890b-3f4064797368/12446_cpu_intel_core_i5_14500_tray.jpg"
-      },
-      "MAINBOARD": {
-        "id": "01a119fe-8e1b-7b59-87e6-10b6f2ab7d8a",
-        "product_id": "01a119fe-8e1b-7ece-bf0a-3699e74acd33",
-        "name": "MAINBOARD ASROCK Z690 EXTREME (INTEL Z690, SOCKET 1700, ATX, 4 KHE RAM DDR4)",
-        "price": 6500000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/797b85ec-057a-59ad-836f-4985da49174b/11034_mainboard_asrock_z690_extreme_1.jpg"
-      },
-      "RAM": {
-        "id": "01a119fe-8e1f-7d48-9458-a25397916170",
-        "product_id": "01a119fe-8e1f-7829-8bef-e0b37ff3a5c1",
-        "name": "Ram GEIL Evo Spear 16GB DDR4 3200MHz",
-        "price": 2890000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/55f8cff4-f881-5b1d-b369-276e8c2c3a2e/11055_ram_geil_evo_spear_16gb_ddr4_bus_3200_1.jpg"
-      },
-      "GPU": {
-        "id": "01a119fe-8df2-7f72-a560-5548ad43092b",
-        "product_id": "01a119fe-8df2-7db0-9e32-371aa90157ff",
-        "name": "Card màn hình ASUS Prime RTX 5050 8GB GDDR6 OC Edition (PRIME-RTX5050-O8G)",
-        "price": 10990000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/10154028-1c24-554b-b089-dae00e761e2e/13397_vga_prime_rtx5050_o8g_1.jpg"
-      },
-      "PSU": {
-        "id": "01a119fe-8e29-77e4-a018-8a7e15c8e7a1",
-        "product_id": "01a119fe-8e29-7f49-8494-93fbc2696246",
-        "name": "Nguồn máy tính Super Flower Leadex Titanium 2200W ATX 3.1 Black | Cybenetics Titanium (SF-2200F14HP)",
-        "price": 13690000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/1584a7f0-5ed4-5527-a227-585ae50c82fd/13945_super_flower_leadex_titanium_2200w_sf_2200f14hp_6.jpg"
-      },
-      "CASE": {
-        "id": "01a119fe-8e37-7678-9aba-75fb3e037f74",
-        "product_id": "01a119fe-8e37-7428-9dc5-bad7516eb5b0",
-        "name": "Vỏ Case ES Gaming Aircraft 007 Ultra-Cool Display Black (Sẵn 3 Fan + Hub ARGB)",
-        "price": 4590000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/ecab5bb4-8b28-5323-bcdd-7b4228a17a12/13174_vo_case_es_gaming_aircraft_007_ultra_cool_display_black_san_3_fan_hub_argb.png"
-      },
-      "COOLER": {
-        "id": "01a119fe-8e4e-7c25-8267-ddf12e98e77f",
-        "product_id": "01a119fe-8e4e-7ddf-a897-4d2c1f71c6d1",
-        "name": "TẢN NHIỆT NƯỚC JONSBO TM-360 BLACK",
-        "price": 2950000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/800800ab-1d13-5a4c-8064-c3a624917fd5/13701_an_nhiet_nuoc_aio_jonsbo_th_360_black__1_.png"
-      },
-      "SSD": {
-        "id": "01a119fe-8e26-72ae-8200-6a0fc275acec",
-        "product_id": "01a119fe-8e26-7712-851a-69cea14c0907",
-        "name": "Ổ cứng Western Digital Red Plus 4TB 3.5 inch 128MB Cache 5400RPM WD40EFZZ",
-        "price": 5890000,
-        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/9099dab1-85f0-514b-ade7-0a739930b632/14035__cung_western_digital_red_plus_4tb.png"
-      }
-    }
-  },
-  {
     "id": "build-076",
     "name": "PC CPU Intel Core i7-12700 - Tray · RTX 5060",
     "tier": "tier3",
@@ -3692,6 +3615,83 @@
         "name": "Ổ CỨNG SSD TEAMGROUP MP33 512GB M.2 2280 PCIE 3.0X4 (ĐỌC 1700MB/S, GHI 1400MB/S)",
         "price": 2390000,
         "image_url": "http://localhost:8333/pcshop-media/seed/catalog/93f91087-35eb-588c-bc60-1f577c386384/10853_____c___ng_ssd_teamgroup_mp33_512gb_m_2_2280_pcie_3_0x4.jpg"
+      }
+    }
+  },
+  {
+    "id": "build-051",
+    "name": "PC CPU Intel Core i5 14500 - TRAY NEW · RTX 5050",
+    "tier": "tier2",
+    "goal": "gaming",
+    "subtitle": "Chiến mượt Game AAA 1080p",
+    "total_price": 53980000,
+    "fingerprint": "01a119fe-8df2-7f72-a560-5548ad43092b-01a119fe-8e01-78c6-9089-78e969da22db-01a119fe-8e1b-7b59-87e6-10b6f2ab7d8a-01a119fe-8e1e-7864-a4a7-3615c5d34756-01a119fe-8e26-72ae-8200-6a0fc275acec-01a119fe-8e29-77e4-a018-8a7e15c8e7a1-01a119fe-8e37-7678-9aba-75fb3e037f74-01a119fe-8e4e-7c25-8267-ddf12e98e77f",
+    "selection": {
+      "CPU": "01a119fe-8e01-78c6-9089-78e969da22db",
+      "MAINBOARD": "01a119fe-8e1b-7b59-87e6-10b6f2ab7d8a",
+      "RAM": "01a119fe-8e1e-7864-a4a7-3615c5d34756",
+      "GPU": "01a119fe-8df2-7f72-a560-5548ad43092b",
+      "PSU": "01a119fe-8e29-77e4-a018-8a7e15c8e7a1",
+      "CASE": "01a119fe-8e37-7678-9aba-75fb3e037f74",
+      "COOLER": "01a119fe-8e4e-7c25-8267-ddf12e98e77f",
+      "SSD": "01a119fe-8e26-72ae-8200-6a0fc275acec"
+    },
+    "components": {
+      "CPU": {
+        "id": "01a119fe-8e01-78c6-9089-78e969da22db",
+        "product_id": "01a119fe-8e01-7fc5-92a2-0294233c05e1",
+        "name": "CPU Intel Core i5 14500 - TRAY NEW (Up To 5.0GHz, 14 Nhân 20 Luồng, 24MB Cache, LGA 1700)",
+        "price": 5980000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/55644d66-a742-59f2-890b-3f4064797368/12446_cpu_intel_core_i5_14500_tray.jpg"
+      },
+      "MAINBOARD": {
+        "id": "01a119fe-8e1b-7b59-87e6-10b6f2ab7d8a",
+        "product_id": "01a119fe-8e1b-7ece-bf0a-3699e74acd33",
+        "name": "MAINBOARD ASROCK Z690 EXTREME (INTEL Z690, SOCKET 1700, ATX, 4 KHE RAM DDR4)",
+        "price": 6500000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/797b85ec-057a-59ad-836f-4985da49174b/11034_mainboard_asrock_z690_extreme_1.jpg"
+      },
+      "RAM": {
+        "id": "01a119fe-8e1e-7864-a4a7-3615c5d34756",
+        "product_id": "01a119fe-8e1e-7fd2-8b12-7425f245acb1",
+        "name": "RAM TEAMGROUP T-Force Vulcan Z 16GB (1x16GB) DDR4 3200MHz",
+        "price": 3390000,
+        "image_url": "https://pcmarket.vn/media/product/9932_46124_ram_tea_tlzgd416g3200hc16f01_c.jpg"
+      },
+      "GPU": {
+        "id": "01a119fe-8df2-7f72-a560-5548ad43092b",
+        "product_id": "01a119fe-8df2-7db0-9e32-371aa90157ff",
+        "name": "Card màn hình ASUS Prime RTX 5050 8GB GDDR6 OC Edition (PRIME-RTX5050-O8G)",
+        "price": 10990000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/10154028-1c24-554b-b089-dae00e761e2e/13397_vga_prime_rtx5050_o8g_1.jpg"
+      },
+      "PSU": {
+        "id": "01a119fe-8e29-77e4-a018-8a7e15c8e7a1",
+        "product_id": "01a119fe-8e29-7f49-8494-93fbc2696246",
+        "name": "Nguồn máy tính Super Flower Leadex Titanium 2200W ATX 3.1 Black | Cybenetics Titanium (SF-2200F14HP)",
+        "price": 13690000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/1584a7f0-5ed4-5527-a227-585ae50c82fd/13945_super_flower_leadex_titanium_2200w_sf_2200f14hp_6.jpg"
+      },
+      "CASE": {
+        "id": "01a119fe-8e37-7678-9aba-75fb3e037f74",
+        "product_id": "01a119fe-8e37-7428-9dc5-bad7516eb5b0",
+        "name": "Vỏ Case ES Gaming Aircraft 007 Ultra-Cool Display Black (Sẵn 3 Fan + Hub ARGB)",
+        "price": 4590000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/ecab5bb4-8b28-5323-bcdd-7b4228a17a12/13174_vo_case_es_gaming_aircraft_007_ultra_cool_display_black_san_3_fan_hub_argb.png"
+      },
+      "COOLER": {
+        "id": "01a119fe-8e4e-7c25-8267-ddf12e98e77f",
+        "product_id": "01a119fe-8e4e-7ddf-a897-4d2c1f71c6d1",
+        "name": "TẢN NHIỆT NƯỚC JONSBO TM-360 BLACK",
+        "price": 2950000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/800800ab-1d13-5a4c-8064-c3a624917fd5/13701_an_nhiet_nuoc_aio_jonsbo_th_360_black__1_.png"
+      },
+      "SSD": {
+        "id": "01a119fe-8e26-72ae-8200-6a0fc275acec",
+        "product_id": "01a119fe-8e26-7712-851a-69cea14c0907",
+        "name": "Ổ cứng Western Digital Red Plus 4TB 3.5 inch 128MB Cache 5400RPM WD40EFZZ",
+        "price": 5890000,
+        "image_url": "http://localhost:8333/pcshop-media/seed/catalog/9099dab1-85f0-514b-ade7-0a739930b632/14035__cung_western_digital_red_plus_4tb.png"
       }
     }
   },

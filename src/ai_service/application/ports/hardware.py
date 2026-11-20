@@ -8,6 +8,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+EXTRA_HARDWARE_SPEC_FIELDS = frozenset(
+    {"radiator_mm", "max_radiator_mm", "m2_slots", "interface", "cooler_type"}
+)
+
 
 class ComponentCategory(StrEnum):
     CPU = "CPU"
@@ -30,6 +34,7 @@ class ComponentSpec(BaseModel):
     socket: str | None = None
     ram_type: str | None = None  # e.g., "DDR4", "DDR5"
     ram_slots: int | None = None
+    kit_modules: int | None = Field(default=None, gt=0)
     form_factor: str | None = None  # e.g., "ATX", "Micro-ATX", "Mini-ITX"
     supported_form_factors: list[str] = Field(default_factory=list)
     tdp_watts: int | None = None
@@ -60,7 +65,7 @@ class ComponentSpec(BaseModel):
     def _lift_extra_hardware_specs(cls, data: Any) -> Any:
         if isinstance(data, dict):
             extra = dict(data.get("extra_specs") or {})
-            for key in ("radiator_mm", "max_radiator_mm", "m2_slots", "interface"):
+            for key in EXTRA_HARDWARE_SPEC_FIELDS:
                 if key in data and data[key] is not None:
                     extra.setdefault(key, data[key])
             if extra:

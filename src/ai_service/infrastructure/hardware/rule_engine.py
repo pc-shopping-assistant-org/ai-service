@@ -101,6 +101,27 @@ class LocalHardwareRuleEngine(HardwareRuleEngine):
                         )
                     )
 
+            ram_slots = mb.ram_slots
+            known_module_counts = [ram.kit_modules for ram in rams if ram.kit_modules is not None]
+            if ram_slots is not None and len(known_module_counts) == len(rams):
+                total_modules = sum(known_module_counts)
+                if total_modules > ram_slots:
+                    issues.append(
+                        CompatibilityIssue(
+                            level="ERROR",
+                            category="RAM_SLOTS_EXCEEDED",
+                            components_involved=[mb.name, *(ram.name for ram in rams)],
+                            message=(
+                                f"Bộ RAM có tổng cộng {total_modules} thanh nhưng bo mạch chủ "
+                                f"chỉ có {ram_slots} khe RAM."
+                            ),
+                            suggestion=(
+                                f"Chọn bộ RAM có tối đa {ram_slots} thanh hoặc đổi sang bo mạch chủ "
+                                "có nhiều khe RAM hơn."
+                            ),
+                        )
+                    )
+
         # 3. Mainboard Form Factor vs Case Support
         if mainboards and cases:
             mb = mainboards[0]
