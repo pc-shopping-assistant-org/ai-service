@@ -145,6 +145,9 @@ def resolve_result_selection(
     """Resolve model-selected calls into canonical evidence for every answer lane."""
     by_id = {record.call.call_id: record for record in records}
     ids = selection.supporting_tool_call_ids
+    if selection.build_ref is not None:
+        # Auto-run build_result entries are matched by build_ref/refs; drop synthetic build call IDs.
+        ids = [cid for cid in ids if cid in by_id]
     if (
         len(by_id) != len(records)
         or len(ids) != len(set(ids))
@@ -182,7 +185,11 @@ def resolve_result_selection(
     ]
     # Selecting a canonical result by call ID/build ref also selects its evidence.
     # Do not require the model to copy the same reference into a second field.
-    resolved_selection = selection
+    resolved_selection = (
+        selection
+        if ids == selection.supporting_tool_call_ids
+        else selection.model_copy(update={"supporting_tool_call_ids": ids})
+    )
     if not selection.evidence_refs and any(
         record.result
         and isinstance(
@@ -191,7 +198,7 @@ def resolve_result_selection(
         )
         for record in selected
     ):
-        resolved_selection = selection.model_copy(
+        resolved_selection = resolved_selection.model_copy(
             update={
                 "evidence_refs": list(
                     dict.fromkeys(
@@ -223,7 +230,7 @@ def _derive_part(
     resolved_selection, selected = resolve_result_selection(selection, records)
     outcome: FinalOutcome = "ANSWERED"
     refs = set(resolved_selection.evidence_refs)
-    supporting = list(selection.supporting_tool_call_ids)
+    supporting = list(resolved_selection.supporting_tool_call_ids)
     build_ref = selection.build_ref
     for record in selected:
         result = record.result
