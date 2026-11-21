@@ -44,6 +44,56 @@ def test_ram_type_mismatch_fails(engine: LocalHardwareRuleEngine) -> None:
     assert any(i.category == "RAM_TYPE_MISMATCH" for i in report.issues)
 
 
+def test_ram_kit_with_more_modules_than_mainboard_slots_fails(
+    engine: LocalHardwareRuleEngine,
+) -> None:
+    components = [
+        ComponentSpec(
+            name="Two-slot board",
+            category=ComponentCategory.MAINBOARD,
+            ram_type="DDR5",
+            ram_slots=2,
+        ),
+        ComponentSpec(
+            name="Four-module kit",
+            category=ComponentCategory.RAM,
+            ram_type="DDR5",
+            kit_modules=4,
+        ),
+    ]
+
+    report = engine.check_compatibility(components)
+
+    assert report.is_compatible is False
+    issue = next(i for i in report.issues if i.category == "RAM_SLOTS_EXCEEDED")
+    assert "4 thanh" in issue.message
+    assert "2 khe" in issue.message
+
+
+def test_ram_kit_that_fits_mainboard_slots_succeeds(
+    engine: LocalHardwareRuleEngine,
+) -> None:
+    components = [
+        ComponentSpec(
+            name="Four-slot board",
+            category=ComponentCategory.MAINBOARD,
+            ram_type="DDR5",
+            ram_slots=4,
+        ),
+        ComponentSpec(
+            name="Two-module kit",
+            category=ComponentCategory.RAM,
+            ram_type="DDR5",
+            kit_modules=2,
+        ),
+    ]
+
+    report = engine.check_compatibility(components)
+
+    assert report.is_compatible is True
+    assert not any(i.category == "RAM_SLOTS_EXCEEDED" for i in report.issues)
+
+
 def test_form_factor_mismatch_fails(engine: LocalHardwareRuleEngine) -> None:
     components = [
         ComponentSpec(name="ASUS ROG MAXIMUS ATX", category=ComponentCategory.MAINBOARD, form_factor="ATX"),
@@ -72,6 +122,42 @@ def test_cooler_clearance_fails(engine: LocalHardwareRuleEngine) -> None:
     report = engine.check_compatibility(components)
     assert report.is_compatible is False
     assert any(i.category == "COOLER_CLEARANCE" for i in report.issues)
+
+
+def test_aio_radiator_clearance_fails(engine: LocalHardwareRuleEngine) -> None:
+    components = [
+        ComponentSpec(name="Thermalright Aqua Elite 360", category=ComponentCategory.COOLER, radiator_mm=360),
+        ComponentSpec(name="Compact Case", category=ComponentCategory.CASE, max_radiator_mm=240),
+    ]
+    report = engine.check_compatibility(components)
+    assert report.is_compatible is False
+    assert any(i.category == "COOLER_CLEARANCE" for i in report.issues)
+
+
+def test_aio_radiator_zero_support_fails(engine: LocalHardwareRuleEngine) -> None:
+    components = [
+        ComponentSpec(name="Thermalright Aqua Elite 240", category=ComponentCategory.COOLER, radiator_mm=240),
+        ComponentSpec(name="Office Case", category=ComponentCategory.CASE, max_radiator_mm=0),
+    ]
+    report = engine.check_compatibility(components)
+    assert report.is_compatible is False
+    assert any(i.category == "COOLER_CLEARANCE" for i in report.issues)
+
+
+def test_aio_radiator_fits_successfully(engine: LocalHardwareRuleEngine) -> None:
+    components = [
+        ComponentSpec(name="Intel Core i5-13600K", category=ComponentCategory.CPU, socket="LGA1700", tdp_watts=125),
+        ComponentSpec(
+            name="Thermalright Aqua Elite 360",
+            category=ComponentCategory.COOLER,
+            radiator_mm=360,
+            supported_sockets=["LGA1700", "AM5"],
+        ),
+        ComponentSpec(name="Montech King 95", category=ComponentCategory.CASE, max_radiator_mm=360),
+    ]
+    report = engine.check_compatibility(components)
+    assert report.is_compatible is True
+    assert not any(i.category == "COOLER_CLEARANCE" for i in report.issues)
 
 
 def test_wattage_calculation(engine: LocalHardwareRuleEngine) -> None:

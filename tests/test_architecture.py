@@ -84,7 +84,7 @@ async def test_langgraph_runner_supports_multiple_capability_graphs() -> None:
 
 
 def test_composition_root_wires_ports_without_external_io() -> None:
-    container = build_container(Settings())
+    container = build_container(Settings(_env_file=None, provider=AIProvider.FALLBACK))
 
     assert isinstance(container.assistant, AssistantService)
     assert container.assistant_service is container.assistant

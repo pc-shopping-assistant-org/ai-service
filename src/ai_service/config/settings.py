@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     qwen_api_key: SecretStr | None = None
     qwen_max_tokens: int = Field(default=2048, ge=1)
     qwen_request_timeout_seconds: float = Field(default=QWEN_REQUEST_TIMEOUT_SECONDS, gt=0)
+    openai_base_url: HttpUrl | None = Field(
+        default=None,
+        validation_alias=AliasChoices("AI_OPENAI_BASE_URL", "OPENAI_BASE_URL"),
+    )
     openai_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("AI_OPENAI_API_KEY", "OPENAI_API_KEY"),

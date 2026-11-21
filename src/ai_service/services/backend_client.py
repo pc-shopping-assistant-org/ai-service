@@ -60,11 +60,15 @@ class BackendClient:
         )
 
     async def get_product(self, product_id: UUID) -> dict[str, Any] | None:
+        return await self._get_object(f"/products/{product_id}")
+
+    async def get_variant(self, variant_id: UUID) -> dict[str, Any] | None:
+        return await self._get_object(f"/product-variants/{variant_id}")
+
+    async def _get_object(self, path: str) -> dict[str, Any] | None:
         try:
             async with httpx.AsyncClient(timeout=self.settings.request_timeout_seconds) as client:
-                response = await client.get(
-                    f"{self.settings.backend_api_url.rstrip('/')}/products/{product_id}"
-                )
+                response = await client.get(f"{self.settings.backend_api_url.rstrip('/')}{path}")
                 if response.status_code == httpx.codes.NOT_FOUND:
                     return None
                 response.raise_for_status()
