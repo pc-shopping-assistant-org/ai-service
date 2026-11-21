@@ -1,6 +1,7 @@
 """Owned public V2 projections, not serialized framework/application state."""
 
-from typing import Literal
+import re
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import Field
@@ -95,12 +96,51 @@ class TurnResultV2(TurnResultV1):
     )
 
 
+def _normalize_match_text(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", text.casefold()))
+
+
+def _is_product_mentioned(product_name: str, answer_text: str) -> bool:
+    norm_answer = _normalize_match_text(answer_text)
+    norm_name = _normalize_match_text(product_name)
+    if not norm_answer or not norm_name:
+        return False
+    if norm_name in norm_answer:
+        return True
+    tokens = [
+        tok
+        for tok in dict.fromkeys(norm_name.split())
+        if len(tok) >= 3 or any(ch.isdigit() for ch in tok)
+    ]
+    if len(tokens) < 2:
+        return False
+    answer_tokens = set(norm_answer.split())
+    matched = sum(1 for tok in tokens if tok in answer_tokens)
+    return matched >= 2 and (matched >= 3 or matched * 2 >= len(tokens))
+
+
 def public_tool_products(
-    records: list[ToolRecord], evidence_refs: list[str] | None
+    records: list[ToolRecord],
+    evidence_refs: list[str] | None,
+    *,
+    answer_text: str | None = None,
+    run_id: UUID | None = None,
 ) -> list[ProductCard]:
     """Cards are canonical read evidence, never IDs inferred from model prose."""
     selected = set(evidence_refs) if evidence_refs is not None else None
-    products = {}
+    products: dict[UUID, ProductCard] = {}
+
+    def _to_card(item: Any) -> ProductCard:
+        return ProductCard(
+            id=item.product_id,
+            name=item.name,
+            seo_name=item.seo_name,
+            image_url=item.image_url,
+            list_price=item.price_vnd,
+            specifications=item.specifications,
+            status="ACTIVE",
+        )
+
     for record in records:
         result = record.result
         if result is None or result.status != "COMPLETED":
@@ -113,17 +153,23 @@ def public_tool_products(
             if isinstance(payload, (CatalogResult, ComparisonResult))
             else []
         )
+        same_run = run_id is None or record.origin_run_id == run_id
         for item in items:
-            if selected is None or item.evidence_ref in selected:
-                products[item.product_id] = ProductCard(
-                    id=item.product_id,
-                    name=item.name,
-                    seo_name=item.seo_name,
-                    image_url=item.image_url,
-                    list_price=item.price_vnd,
-                    specifications=item.specifications,
-                    status="ACTIVE",
+            explicit = selected is None or item.evidence_ref in selected
+            inferred = (
+                same_run
+                and item.product_id not in products
+                and (
+                    isinstance(payload, (DetailsResult, ComparisonResult))
+                    or (
+                        isinstance(payload, CatalogResult)
+                        and bool(answer_text)
+                        and _is_product_mentioned(item.name, answer_text or "")
+                    )
                 )
+            )
+            if explicit or inferred:
+                products[item.product_id] = _to_card(item)
     return list(products.values())[:MAX_PUBLIC_PRODUCTS]
 
 
