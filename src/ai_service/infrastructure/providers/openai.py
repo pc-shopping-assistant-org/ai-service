@@ -14,6 +14,7 @@ class OpenAIModelProvider(ModelProvider):
 
     def __init__(self, settings: Settings) -> None:
         self._model_name = settings.model_name or settings.openai_model_name
+        self._base_url = str(settings.openai_base_url) if settings.openai_base_url else None
         self._api_key = settings.openai_api_key
         self._timeout = settings.request_timeout_seconds
         self._model: ChatOpenAI | None = None
@@ -35,12 +36,15 @@ class OpenAIModelProvider(ModelProvider):
 
         if not self._api_key:
             raise ValueError("AI_OPENAI_API_KEY is required")
-        self._model = ChatOpenAI(  # type: ignore[call-arg]
-            model=self._model_name,
-            api_key=self._api_key,
-            timeout=self._timeout,
-            max_retries=0,
-        )
+        kwargs: dict[str, object] = {
+            "model": self._model_name,
+            "api_key": self._api_key,
+            "timeout": self._timeout,
+            "max_retries": 0,
+        }
+        if self._base_url:
+            kwargs["base_url"] = self._base_url
+        self._model = ChatOpenAI(**kwargs)  # type: ignore[arg-type]
         return self._model
 
     async def aclose(self) -> None:

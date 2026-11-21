@@ -356,3 +356,34 @@ async def test_the_endpoint_rejects_a_slot_that_is_not_an_id(client_with: httpx.
     response = await client_with.post("/api/v1/compatibility/check", json={"slots": {"CPU": "not-an-id"}})
 
     assert response.status_code == 422
+
+
+def test_malformed_extra_hardware_specs_degrade_to_none_instead_of_crashing() -> None:
+    spec = ComponentSpec(
+        name="Dirty Catalog Part",
+        category=ComponentCategory.COOLER,
+        extra_specs={
+            "radiator_mm": "360mm",
+            "max_radiator_mm": "",
+            "m2_slots": True,
+            "kit_modules": "2 thanh",
+        },
+    )
+
+    assert (spec.radiator_mm, spec.max_radiator_mm, spec.m2_slots, spec.kit_modules) == (
+        None,
+        None,
+        None,
+        None,
+    )
+
+
+def test_component_model_copy_updates_all_extra_hardware_spec_fields() -> None:
+    base = part(ComponentCategory.COOLER, radiator_mm=240, m2_slots=1)
+    updated = base.model_copy(update={"radiator_mm": 360, "m2_slots": None, "interface": "NVMe"})
+
+    assert updated.radiator_mm == 360
+    assert updated.m2_slots is None
+    assert "m2_slots" not in updated.extra_specs
+    assert updated.interface == "NVMe"
+    assert base.radiator_mm == 240

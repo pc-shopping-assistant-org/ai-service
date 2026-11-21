@@ -1,3 +1,6 @@
+import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
@@ -61,27 +64,27 @@ async def check_candidates(
         return _not_found(missing.slot)
 
 
+@lru_cache(maxsize=1)
+def _load_prebuilt_builds() -> list[dict[str, Any]]:
+    candidates = (
+        Path("/app/data/prebuilt_pc_builds.json"),
+        Path.cwd() / "data" / "prebuilt_pc_builds.json",
+        Path(__file__).resolve().parents[4] / "data" / "prebuilt_pc_builds.json",
+        Path(__file__).resolve().parents[3] / "data" / "prebuilt_pc_builds.json",
+    )
+    data_file = next((p for p in candidates if p.exists()), None)
+    if not data_file:
+        return []
+    try:
+        with data_file.open(encoding="utf-8") as f:
+            builds = json.load(f)
+        return builds if isinstance(builds, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
 @router.get("/compatibility/prebuilt-builds", response_model=ApiResponse[list[dict[str, Any]]], tags=["compatibility"])
 def get_prebuilt_builds() -> ApiResponse[list[dict[str, Any]]]:
     """Returns prebuilt conflict-free PC configurations generated from catalog_db."""
-    import json
-    import os
-    from pathlib import Path
-
-    # Look in /app/data (container), ai-service/data, or current workdir
-    candidates = [
-        Path("/app/data/prebuilt_pc_builds.json"),
-        Path(os.getcwd()) / "data" / "prebuilt_pc_builds.json",
-        Path(__file__).resolve().parents[4] / "data" / "prebuilt_pc_builds.json",
-        Path(__file__).resolve().parents[3] / "data" / "prebuilt_pc_builds.json",
-    ]
-    data_file = next((p for p in candidates if p.exists()), None)
-    if not data_file:
-        return ApiResponse(data=[])
-    try:
-        with open(data_file, "r", encoding="utf-8") as f:
-            builds = json.load(f)
-        return ApiResponse(data=builds)
-    except (OSError, json.JSONDecodeError):
-        return ApiResponse(data=[])
+    return ApiResponse(data=_load_prebuilt_builds())
 

@@ -14,6 +14,15 @@ EXTRA_HARDWARE_SPEC_FIELDS = frozenset(
 )
 
 
+def _optional_int(val: Any) -> int | None:
+    if val is None or isinstance(val, bool):
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+
+
 class ComponentCategory(StrEnum):
     CPU = "CPU"
     MAINBOARD = "MAINBOARD"
@@ -74,32 +83,35 @@ class ComponentSpec(BaseModel):
         return data
 
     def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> ComponentSpec:
-        if update and "kit_modules" in update:
-            update = dict(update)
-            extra = dict(update.get("extra_specs") or self.extra_specs)
-            extra["kit_modules"] = update.pop("kit_modules")
-            update["extra_specs"] = extra
+        if update:
+            lifted = EXTRA_HARDWARE_SPEC_FIELDS.intersection(update.keys())
+            if lifted:
+                update = dict(update)
+                extra = dict(update.get("extra_specs") or self.extra_specs)
+                for key in lifted:
+                    value = update.pop(key)
+                    if value is None:
+                        extra.pop(key, None)
+                    else:
+                        extra[key] = value
+                update["extra_specs"] = extra
         return super().model_copy(update=update, deep=deep)
 
     @property
     def kit_modules(self) -> int | None:
-        val = self.extra_specs.get("kit_modules")
-        return int(val) if val is not None else None
+        return _optional_int(self.extra_specs.get("kit_modules"))
 
     @property
     def radiator_mm(self) -> int | None:
-        val = self.extra_specs.get("radiator_mm")
-        return int(val) if val is not None else None
+        return _optional_int(self.extra_specs.get("radiator_mm"))
 
     @property
     def max_radiator_mm(self) -> int | None:
-        val = self.extra_specs.get("max_radiator_mm")
-        return int(val) if val is not None else None
+        return _optional_int(self.extra_specs.get("max_radiator_mm"))
 
     @property
     def m2_slots(self) -> int | None:
-        val = self.extra_specs.get("m2_slots")
-        return int(val) if val is not None else None
+        return _optional_int(self.extra_specs.get("m2_slots"))
 
     @property
     def interface(self) -> str | None:
