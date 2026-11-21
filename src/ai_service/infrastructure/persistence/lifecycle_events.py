@@ -113,6 +113,8 @@ async def emit_terminal(
                 else selected.evidence_refs
                 if selected
                 else [],
+                answer_text=values["answer"],
+                run_id=run["id"],
             ),
         )
     else:

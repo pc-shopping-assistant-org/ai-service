@@ -33,6 +33,7 @@ from ai_service.capabilities.assistant.react.tools import (
     allowed_tools,
     project_current_tools,
 )
+from ai_service.capabilities.assistant.requirements.compiler import compile_requirements
 from ai_service.capabilities.assistant.requirements.contracts import QuantityValue
 from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
@@ -201,7 +202,17 @@ def validate_label(sample: TrainingSample, snapshot: DatasetSnapshot) -> None:
                     sample.review_status == "DRAFT"
                     and snapshot.context.execution_allowed
                     and snapshot.context.read_catalog_allowed
-                    and name in {ToolName.SEARCH_WEB, ToolName.READ_WEB_PAGE}
+                    and (
+                        name in {ToolName.SEARCH_WEB, ToolName.READ_WEB_PAGE}
+                        or (
+                            name == ToolName.BUILD_PC
+                            and not snapshot.context.read_only_turn
+                            and snapshot.context.catalog_ready
+                            and compile_requirements(
+                                snapshot.context.requirements, snapshot.context.catalog
+                            ).ready
+                        )
+                    )
                 ):
                     raise ValueError("TARGET_TOOL_NOT_ALLOWED")
                 TOOL_SCHEMAS[name].model_validate(call.arguments)
@@ -240,7 +251,10 @@ def load_dataset(directory: Path, *, require_approved: bool = False) -> LoadedDa
     manifest = DatasetManifest.model_validate_json(
         (directory / MANIFEST_FILE).read_bytes()
     )
-    files = {name: (directory / name).read_bytes() for name in manifest.files}
+    files = {
+        name: (directory / name).read_bytes().replace(b"\r\n", b"\n")
+        for name in manifest.files
+    }
     for name, content in files.items():
         if hashlib.sha256(content).hexdigest() != manifest.files[name]:
             raise ValueError(f"CONTENT_HASH_MISMATCH: {name}")

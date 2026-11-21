@@ -37,6 +37,22 @@ async def test_openai_provider_reuses_and_closes_owned_clients_without_network()
 
 
 @pytest.mark.asyncio
+async def test_openai_provider_supports_custom_openai_compatible_base_url():
+    provider = OpenAIModelProvider(
+        Settings(
+            _env_file=None,
+            openai_base_url="http://ollama.local:11434/v1",
+            openai_api_key="local-test-key",
+            model_name="qwen3.5:9b",
+        )
+    )
+    model = provider.create_model()
+    assert model.model_name == "qwen3.5:9b"
+    assert model.openai_api_base == "http://ollama.local:11434/v1"
+    await provider.aclose()
+
+
+@pytest.mark.asyncio
 async def test_gemini_provider_reuses_model_and_closes_on_current_loop(monkeypatch):
     provider = GeminiModelProvider(
         Settings(_env_file=None, gemini_api_key="local-test-key")

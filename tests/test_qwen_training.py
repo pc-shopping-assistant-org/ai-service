@@ -65,7 +65,7 @@ def test_only_final_completion_has_loss_and_schema_reaches_model():
         for token, label in zip(row["input_ids"], row["labels"], strict=True)
         if label == -100
     ).decode()
-    assert "Draft" in prompt and "RAM" in prompt
+    assert '{"type": "object"}' in prompt and "RAM" in prompt
 
 
 def test_requirement_training_prompt_uses_exact_runtime_qwen_projection():

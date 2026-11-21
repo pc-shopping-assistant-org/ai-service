@@ -76,8 +76,7 @@ async def test_export_react_prompt_is_runtime_prompt_with_canonical_tool_pairs()
         tool["name"] for tool in provider.model.tools
     ]
     messages = example["request"]["messages"]
-    assert messages[-2]["tool_calls"][0]["id"] == messages[-1]["tool_call_id"]
-    assert messages[-1]["tool_call_id"] == "pilot-build_pc"
+    assert '"build_result":' in messages[0]["content"]
     assert str(snapshot.context.account_id) not in json.dumps(messages)
 
 

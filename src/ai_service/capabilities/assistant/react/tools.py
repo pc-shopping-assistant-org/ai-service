@@ -22,9 +22,6 @@ from ai_service.capabilities.assistant.requirements.build import (
     optimize_requirements,
     verify_receipt,
 )
-from ai_service.capabilities.assistant.requirements.catalog_policy import (
-    build_needs_catalog,
-)
 from ai_service.capabilities.assistant.requirements.compiler import compile_requirements
 from ai_service.capabilities.assistant.requirements.search_report import search_report
 from ai_service.capabilities.pc_builder.application.service import (
@@ -107,14 +104,6 @@ def allowed_tools(
         for item in project_current_tools(records or [], context)
     ):
         names += (ToolName.RESEARCH_PC_BUILD,)
-    if not context.read_only_turn and (
-        (
-            context.catalog_ready
-            and compile_requirements(context.requirements, context.catalog).ready
-        )
-        or (not context.catalog_ready and build_needs_catalog(context.requirements))
-    ):
-        names += (ToolName.BUILD_PC,)
     return names
 
 
@@ -196,7 +185,14 @@ class ToolDispatcher:
             return rejected(ToolError.UNKNOWN_TOOL)
         if not context.execution_allowed or not context.read_catalog_allowed:
             return rejected(ToolError.PREREQUISITE_MISSING)
-        if name not in allowed_tools(context, records) and name not in {
+        if name == ToolName.BUILD_PC:
+            if not (
+                not context.read_only_turn
+                and context.catalog_ready
+                and compile_requirements(context.requirements, context.catalog).ready
+            ):
+                return rejected(ToolError.PREREQUISITE_MISSING)
+        elif name not in allowed_tools(context, records) and name not in {
             ToolName.SEARCH_WEB,
             ToolName.READ_WEB_PAGE,
         }:

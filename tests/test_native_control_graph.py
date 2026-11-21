@@ -130,10 +130,6 @@ async def test_started_build_requires_canonical_submission_instead_of_plain_fall
         nonlocal calls
         calls += 1
         if calls == 1:
-            return AIMessage(
-                content="", tool_calls=[{"id": "build", "name": "build_pc", "args": {}}]
-            )
-        if calls == 2:
             return AIMessage(content="Cấu hình giá 1 VND, chơi mọi game.")
         assert provider.model.options["tool_choice"] == "submit_result"
         return AIMessage(
@@ -166,7 +162,7 @@ async def test_started_build_requires_canonical_submission_instead_of_plain_fall
         ),
     )
     terminal = await graph.ainvoke({"message": "Build PC"})
-    assert calls == 3
+    assert calls == 2
     assert terminal["answer"]["outcome"] == "BUILT"
     assert "giá 1 VND" not in terminal["answer"]["text"]
     assert terminal["accepted_snapshot"]["public_build"] is not None
@@ -234,7 +230,10 @@ async def test_native_control_acknowledgement_precedes_later_tool_pairs(resume):
                 ],
             )
         assert [message.tool_call_id for message in paired] == ["proposal", "search"]
-        refs = json.loads(paired[-1].content)["evidence_refs"]
+        refs = [
+            item["evidence_ref"]
+            for item in json.loads(paired[-1].content)["result"]["products"]
+        ]
         return AIMessage(
             content="",
             tool_calls=[

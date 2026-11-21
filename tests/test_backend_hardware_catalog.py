@@ -79,6 +79,58 @@ def test_catalog_gpu_preserves_fractional_millimetres_without_rounding():
     assert catalog._map(detail)[0].component.gpu_length_mm == 333.5
 
 
+def test_catalog_snapshot_keeps_extra_hardware_specs():
+    product = uuid4()
+    detail = HardwareDetail.model_validate(
+        {
+            "id": str(product),
+            "name": "AIO Cooler",
+            "categoryId": str(uuid4()),
+            "hardwareType": "COOLER",
+            "status": "ACTIVE",
+            "specifications": {
+                "radiator_mm": 360,
+                "max_radiator_mm": 420,
+                "m2_slots": 3,
+                "interface": "NVMe",
+                "cooler_type": "aio",
+                "kit_modules": 2,
+            },
+            "variants": [
+                {
+                    "id": str(uuid4()),
+                    "productId": str(product),
+                    "sku": "AIO-360",
+                    "price": 2_000_000,
+                    "quantity": 10,
+                    "status": "ACTIVE",
+                }
+            ],
+        }
+    )
+    catalog = BackendRequirementCatalog(
+        None, "https://catalog.test", Budget(), HardwareCatalogMapping()
+    )
+
+    component = catalog._map(detail)[0].component
+
+    assert component.extra_specs == {
+        "radiator_mm": 360,
+        "max_radiator_mm": 420,
+        "m2_slots": 3,
+        "interface": "NVMe",
+        "cooler_type": "aio",
+        "kit_modules": 2,
+    }
+    assert (
+        component.radiator_mm,
+        component.max_radiator_mm,
+        component.m2_slots,
+        component.interface,
+    ) == (360, 420, 3, "NVMe")
+    assert component.kit_modules == 2
+
+
 @pytest.mark.asyncio
 async def test_hardware_type_is_loaded_from_each_snapshot_without_category_env():
     product, category = uuid4(), uuid4()

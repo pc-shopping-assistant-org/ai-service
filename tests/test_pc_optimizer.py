@@ -352,6 +352,31 @@ def test_unknown_critical_specs_rejected() -> None:
     assert check_compatibility(parts_3, 500) is False
 
 
+def test_ram_kit_module_count_is_a_hard_compatibility_constraint() -> None:
+    board = ComponentSpec(
+        name="Two-slot board",
+        category=ComponentCategory.MAINBOARD,
+        ram_type="DDR5",
+        ram_slots=2,
+    )
+    fitting_ram = ComponentSpec(
+        name="2x16GB kit",
+        category=ComponentCategory.RAM,
+        ram_type="DDR5",
+        kit_modules=2,
+    )
+    oversized_kit = fitting_ram.model_copy(
+        update={"name": "4x8GB kit", "kit_modules": 4}
+    )
+
+    assert check_compatibility_status(
+        {ComponentCategory.MAINBOARD: board, ComponentCategory.RAM: fitting_ram}, 0
+    ) == CompatibilityStatus.COMPATIBLE
+    assert check_compatibility_status(
+        {ComponentCategory.MAINBOARD: board, ComponentCategory.RAM: oversized_kit}, 0
+    ) == CompatibilityStatus.INCOMPATIBLE
+
+
 def test_missing_tdp_raises_error() -> None:
     """Property 16: Missing TDP on CPU or GPU must strictly raise ValueError (no fake 65W/160W guessing)."""
     cpu_no_tdp = ComponentSpec(name="CPU No TDP", category=ComponentCategory.CPU, price=3_000_000, socket="AM5", tdp_watts=None)

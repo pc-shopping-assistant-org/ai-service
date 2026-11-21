@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-import resource
 import sys
 import threading
 import time
@@ -63,6 +62,10 @@ def current_rss_mb() -> float:
                         return round(int(parts[1]) / 1024.0, 2)
         except (OSError, ValueError):
             pass
+    try:
+        import resource
+    except ImportError:  # Windows has no resource module; the figure is only logged
+        return 0.0
     usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     if sys.platform == "darwin":
         return round(usage / (1024.0 * 1024.0), 2)

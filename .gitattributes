@@ -1,0 +1,4 @@
+# Enforce LF endings on dataset and json files to prevent CRLF hash mismatch on Windows
+training/** text eol=lf
+*.jsonl text eol=lf
+*.json text eol=lf

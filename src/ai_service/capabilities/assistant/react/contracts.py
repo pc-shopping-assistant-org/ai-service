@@ -105,14 +105,44 @@ class ToolName(StrEnum):
 class SearchCatalogArgs(Contract):
     """Search store products by concise keyword, semantic need, and optional filters."""
 
-    query: Text | None = Field(default=None, max_length=MAX_CATALOG_KEYWORD_CHARS)
-    semantic_query: Text | None = Field(default=None, max_length=1000)
-    brand: Text | None = Field(default=None, max_length=100)
-    category: Text | None = Field(default=None, max_length=100)
-    min_price: NonNegativeInt | None = None
-    max_price: NonNegativeInt | None = None
-    in_stock_only: StrictBool = False
-    limit: StrictInt = Field(default=10, ge=1, le=20)
+    query: Text | None = Field(
+        default=None,
+        max_length=MAX_CATALOG_KEYWORD_CHARS,
+        description="Concise product keyword, model name, or '*' for general catalog listing.",
+    )
+    semantic_query: Text | None = Field(
+        default=None,
+        max_length=1000,
+        description="Natural-language usage description, aesthetic, or feature preferences.",
+    )
+    brand: Text | None = Field(
+        default=None,
+        max_length=100,
+        description="Manufacturer or brand filter.",
+    )
+    category: Text | None = Field(
+        default=None,
+        max_length=100,
+        description="Optional component category: CPU, MAINBOARD, RAM, GPU, PSU, CASE, COOLER, STORAGE, MONITOR, KEYBOARD, MOUSE, HEADSET.",
+    )
+    min_price: NonNegativeInt | None = Field(
+        default=None,
+        description="Minimum price in VND.",
+    )
+    max_price: NonNegativeInt | None = Field(
+        default=None,
+        description="Maximum price in VND.",
+    )
+    in_stock_only: StrictBool = Field(
+        default=False,
+        description="Filter only products currently available in stock.",
+    )
+    limit: StrictInt = Field(
+        default=10,
+        ge=1,
+        le=20,
+        description="Maximum number of products to return (1-20).",
+    )
 
     @model_validator(mode="after")
     def validate_search_args(self) -> "SearchCatalogArgs":
@@ -140,7 +170,7 @@ class SearchCatalogArgs(Contract):
 class ProductDetailsArgs(Contract):
     """Get full store catalog details, current price, stock status, and specifications for a known store product_id."""
 
-    product_id: UUID
+    product_id: UUID = Field(description="Store product UUID in catalog.")
 
 
 class CompareProductsArgs(Contract):
@@ -154,9 +184,13 @@ class CompareProductsArgs(Contract):
     queries: list[Text] = Field(
         default_factory=list,
         max_length=MAX_SELECTED_PRODUCTS,
-        description="Concise product names or keywords to look up and compare directly.",
+        description="Concise product names or keywords to look up and compare directly (2 to 5 items).",
     )
-    question: Text | None = Field(default=None, max_length=1000)
+    question: Text | None = Field(
+        default=None,
+        max_length=1000,
+        description="Specific comparison aspect or evaluation criterion.",
+    )
 
     @model_validator(mode="after")
     def distinct_products(self) -> "CompareProductsArgs":
@@ -217,6 +251,12 @@ class ProductEvidence(Contract):
     name: Text = Field(max_length=500)
     status: Literal["ACTIVE"] = "ACTIVE"
     price_vnd: NonNegativeInt | None = None
+    seo_name: Text | None = Field(
+        default=None, max_length=500, exclude_if=lambda value: value is None
+    )
+    image_url: Text | None = Field(
+        default=None, max_length=2000, exclude_if=lambda value: value is None
+    )
     specifications: dict[str, JsonValue] = Field(default_factory=dict, max_length=100)
     evidence_ref: Text
     retrieved_at: AwareDatetime

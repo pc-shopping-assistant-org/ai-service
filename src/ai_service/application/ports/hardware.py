@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+EXTRA_HARDWARE_SPEC_FIELDS = frozenset(
+    {"radiator_mm", "max_radiator_mm", "m2_slots", "interface", "cooler_type", "kit_modules"}
+)
+
+
+def _optional_int(val: Any) -> int | None:
+    if val is None or isinstance(val, bool):
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
 
 
 class ComponentCategory(StrEnum):
@@ -54,6 +68,55 @@ class ComponentSpec(BaseModel):
     is_integrated: bool = False
     supported_sockets: list[str] = Field(default_factory=list)
     extra_specs: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_extra_hardware_specs(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            extra = dict(data.get("extra_specs") or {})
+            for key in EXTRA_HARDWARE_SPEC_FIELDS:
+                if key in data and data[key] is not None:
+                    extra.setdefault(key, data[key])
+            if extra:
+                data = dict(data)
+                data["extra_specs"] = extra
+        return data
+
+    def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> ComponentSpec:
+        if update:
+            lifted = EXTRA_HARDWARE_SPEC_FIELDS.intersection(update.keys())
+            if lifted:
+                update = dict(update)
+                extra = dict(update.get("extra_specs") or self.extra_specs)
+                for key in lifted:
+                    value = update.pop(key)
+                    if value is None:
+                        extra.pop(key, None)
+                    else:
+                        extra[key] = value
+                update["extra_specs"] = extra
+        return super().model_copy(update=update, deep=deep)
+
+    @property
+    def kit_modules(self) -> int | None:
+        return _optional_int(self.extra_specs.get("kit_modules"))
+
+    @property
+    def radiator_mm(self) -> int | None:
+        return _optional_int(self.extra_specs.get("radiator_mm"))
+
+    @property
+    def max_radiator_mm(self) -> int | None:
+        return _optional_int(self.extra_specs.get("max_radiator_mm"))
+
+    @property
+    def m2_slots(self) -> int | None:
+        return _optional_int(self.extra_specs.get("m2_slots"))
+
+    @property
+    def interface(self) -> str | None:
+        val = self.extra_specs.get("interface")
+        return str(val) if val is not None else None
 
 
 class CompatibilityIssue(BaseModel):
@@ -196,3 +259,10 @@ class HardwareRuleEngine(Protocol):
         target_use_case: str = "Gaming",
     ) -> PeripheralRecommendation:
         """Recommend matching monitor specifications and peripherals."""
+
+
+class ComponentSource(Protocol):
+    """Where the specs of a chosen part come from: the catalog that owns the product."""
+
+    async def component(self, variant_id: UUID, category: ComponentCategory) -> ComponentSpec | None:
+        """The spec of one variant read as the given category; None when the catalog has no such variant."""

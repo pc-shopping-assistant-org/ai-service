@@ -90,3 +90,37 @@ def test_missing_fact_outcome_is_derived_without_a_model_claim(status):
     action = derive_final_action(submission, [ToolRecord(call=call, result=result)])
     assert action.outcome == "INSUFFICIENT_EVIDENCE"
     assert action.supporting_tool_call_ids == ["page"]
+
+
+@pytest.mark.asyncio
+async def test_build_submission_drops_unknown_synthetic_call_ids_and_keeps_valid_ones():
+    trusted = context()
+    call = ToolCall(
+        call_id="catalog", name="search_catalog", arguments={"query": "GPU"}
+    )
+    result = await ToolDispatcher(Catalog(), PCBuildApplicationService()).execute(
+        call, trusted
+    )
+    record = ToolRecord(call=call, result=result)
+
+    resolved, selected = resolve_result_selection(
+        ResultSelection(
+            text="Cấu hình 20 triệu đã sẵn sàng",
+            build_ref="a1111111-1111-4111-8111-111111111109",
+            evidence_refs=result.evidence_refs,
+            supporting_tool_call_ids=["catalog", "build-1080p-20m"],
+        ),
+        [record],
+    )
+    assert resolved.supporting_tool_call_ids == ["catalog"]
+    assert selected == [record]
+
+    with pytest.raises(ValueError, match="canonical unique tool selections"):
+        resolve_result_selection(
+            ResultSelection(
+                text="Không có build_ref",
+                evidence_refs=result.evidence_refs,
+                supporting_tool_call_ids=["build-1080p-20m"],
+            ),
+            [record],
+        )

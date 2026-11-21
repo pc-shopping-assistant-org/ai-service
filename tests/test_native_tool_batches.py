@@ -99,7 +99,11 @@ async def test_search_batch_runs_together_and_retains_partial_results(fail_secon
         assert [m.tool_call_id for m in replies] == ["search-a", "search-b"]
         payloads = [json.loads(m.content) for m in replies]
         assert payloads[1]["status"] == ("FAILED" if fail_second else "COMPLETED")
-        refs = [ref for payload in payloads for ref in payload["evidence_refs"]]
+        refs = [
+            item["evidence_ref"]
+            for payload in payloads
+            for item in (payload.get("result") or {}).get("products", [])
+        ]
         return native_result(AnswerCandidate(text="Catalog", evidence_refs=refs))
 
     provider.model.ainvoke = invoke
@@ -146,7 +150,12 @@ async def test_invalid_call_does_not_drop_valid_calls_or_break_provider_pairs():
             "UNKNOWN_TOOL",
         ]
         return native_result(
-            AnswerCandidate(text="Found", evidence_refs=values[0]["evidence_refs"])
+            AnswerCandidate(
+                text="Found",
+                evidence_refs=[
+                    item["evidence_ref"] for item in values[0]["result"]["products"]
+                ],
+            )
         )
 
     provider.model.ainvoke = invoke
@@ -280,7 +289,11 @@ async def exercise_batch_recovery(open_saver):
             AnswerCandidate(
                 text="Results",
                 evidence_refs=list(
-                    {ref for item in results for ref in item["evidence_refs"]}
+                    {
+                        prod["evidence_ref"]
+                        for item in results
+                        for prod in (item.get("result") or {}).get("products", [])
+                    }
                 ),
             )
         )
