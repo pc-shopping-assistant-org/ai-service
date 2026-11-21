@@ -118,6 +118,8 @@ def public_tool_products(
                 products[item.product_id] = ProductCard(
                     id=item.product_id,
                     name=item.name,
+                    seo_name=item.seo_name,
+                    image_url=item.image_url,
                     list_price=item.price_vnd,
                     specifications=item.specifications,
                     status="ACTIVE",

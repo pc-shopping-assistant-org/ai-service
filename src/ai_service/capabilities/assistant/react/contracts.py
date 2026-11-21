@@ -217,6 +217,12 @@ class ProductEvidence(Contract):
     name: Text = Field(max_length=500)
     status: Literal["ACTIVE"] = "ACTIVE"
     price_vnd: NonNegativeInt | None = None
+    seo_name: Text | None = Field(
+        default=None, max_length=500, exclude_if=lambda value: value is None
+    )
+    image_url: Text | None = Field(
+        default=None, max_length=2000, exclude_if=lambda value: value is None
+    )
     specifications: dict[str, JsonValue] = Field(default_factory=dict, max_length=100)
     evidence_ref: Text
     retrieved_at: AwareDatetime

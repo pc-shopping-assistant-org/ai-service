@@ -62,6 +62,8 @@ class Summary(BaseModel):
     id: UUID
     name: str = Field(min_length=1)
     status: Status
+    seo_name: str | None = Field(default=None, alias="seoName")
+    main_image_url: str | None = Field(default=None, alias="mainImageUrl")
     brand_name: str | None = Field(default=None, alias="brandName")
     category_name: str | None = Field(default=None, alias="categoryName")
     min_price: Money | None = Field(default=None, alias="minPrice", ge=0)
@@ -93,14 +95,40 @@ class ResolutionPage(BaseModel):
     next_cursor: str | None = Field(default=None, alias="nextCursor", max_length=2000)
 
 
+class ProductImage(BaseModel):
+    url: str | None = None
+    image_url: str | None = Field(default=None, alias="imageUrl")
+    main: bool = False
+
+    def resolved_url(self) -> str | None:
+        raw = self.url or self.image_url
+        return raw.strip() if isinstance(raw, str) and raw.strip() else None
+
+
 class Detail(BaseModel):
     id: UUID
     name: str = Field(min_length=1)
     status: Status
+    seo_name: str | None = Field(default=None, alias="seoName")
+    main_image_url: str | None = Field(default=None, alias="mainImageUrl")
+    image_url: str | None = Field(default=None, alias="imageUrl")
+    images: list[ProductImage] = Field(default_factory=list)
     brand_name: str | None = Field(default=None, alias="brandName")
     category_name: str | None = Field(default=None, alias="categoryName")
     specifications: dict[str, JsonValue] = Field(default_factory=dict)
     variants: list[Variant] = Field(default_factory=list)
+
+    def resolved_image_url(self) -> str | None:
+        for candidate in (self.main_image_url, self.image_url):
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+        for image in self.images:
+            if image.main and (url := image.resolved_url()):
+                return url
+        for image in self.images:
+            if url := image.resolved_url():
+                return url
+        return None
 
 
 class BackendProductCatalog:
@@ -442,6 +470,8 @@ class BackendProductCatalog:
             price,
             row.specifications,
             row.model_dump(mode="json"),
+            seo_name=row.seo_name,
+            image_url=row.resolved_image_url(),
         )
 
     def _parse_catalog_summary_page(
@@ -500,6 +530,8 @@ class BackendProductCatalog:
                         row.min_price if row.min_price == row.max_price else None,
                         {},
                         row.model_dump(mode="json"),
+                        seo_name=row.seo_name,
+                        image_url=row.main_image_url,
                     )
                 )
             return results
@@ -543,6 +575,8 @@ class BackendProductCatalog:
                                 else None,
                                 {},
                                 row.model_dump(mode="json"),
+                                seo_name=row.seo_name,
+                                image_url=row.main_image_url,
                             )
                         )
                 if not page.has_next:
@@ -573,11 +607,16 @@ class BackendProductCatalog:
         price: int | None,
         specifications: dict[str, JsonValue],
         snapshot: dict[str, Any],
+        *,
+        seo_name: str | None = None,
+        image_url: str | None = None,
     ) -> ProductEvidence:
         return ProductEvidence(
             product_id=identifier,
             name=name,
             price_vnd=price,
+            seo_name=seo_name.strip() if isinstance(seo_name, str) and seo_name.strip() else None,
+            image_url=image_url.strip() if isinstance(image_url, str) and image_url.strip() else None,
             specifications=specifications,
             evidence_ref=f"catalog:product:{identifier}:{canonical_hash(snapshot)}",
             retrieved_at=datetime.now(UTC),
