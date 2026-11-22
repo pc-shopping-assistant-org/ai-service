@@ -8,7 +8,12 @@ from pydantic import ValidationError
 
 from ai_service.application.cpu_work import run_cpu
 from ai_service.application.errors import BackendUnavailableError
-from ai_service.application.ports.hardware import ComponentCategory
+from ai_service.application.ports.hardware import (
+    EXTRA_HARDWARE_SPEC_FIELDS,
+    ComponentCategory,
+    ComponentSpec,
+    HardwareRuleEngine,
+)
 from ai_service.application.ports.web_search import (
     WebFactStatus,
     WebPageReader,
@@ -24,6 +29,10 @@ from ai_service.capabilities.assistant.requirements.build import (
 )
 from ai_service.capabilities.assistant.requirements.compiler import compile_requirements
 from ai_service.capabilities.assistant.requirements.search_report import search_report
+from ai_service.capabilities.pc_builder.application.build_check import (
+    SLOT_CATEGORIES,
+    check_build,
+)
 from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
 )
@@ -42,8 +51,12 @@ from .contracts import (
     AnswerCandidate,
     BuildResult,
     CatalogResult,
+    CheckBuildCompatibilityArgs,
     CompareProductsArgs,
     ComparisonResult,
+    CompatibilityCheckResult,
+    CompatibilityPairVerdict,
+    CompatibilityPowerSummary,
     CompletionRequirement,
     DetailsResult,
     ProductCatalog,
@@ -92,6 +105,7 @@ def allowed_tools(
         ToolName.SEARCH_CATALOG,
         ToolName.GET_PRODUCT_DETAILS,
         ToolName.COMPARE_PRODUCTS,
+        ToolName.CHECK_BUILD_COMPATIBILITY,
         ToolName.RESEARCH_HARDWARE,
         ToolName.RESEARCH_COMPATIBILITY,
         ToolName.RESEARCH_WORKLOAD,
@@ -133,6 +147,35 @@ def project_current_tools(
     ]
 
 
+_COMPONENT_SPEC_FIELDS = (
+    set(ComponentSpec.model_fields) - {"id", "name", "category", "price", "extra_specs"}
+) | EXTRA_HARDWARE_SPEC_FIELDS | {"storage_media"}
+
+
+def _component_from_evidence(
+    product: ProductEvidence, category: ComponentCategory
+) -> ComponentSpec:
+    fields = {
+        key: value
+        for key, value in product.specifications.items()
+        if key in _COMPONENT_SPEC_FIELDS
+    }
+    raw: dict[str, object] = {
+        **fields,
+        "id": product.product_id,
+        "name": product.name,
+        "category": category,
+        "price": product.price_vnd or 0,
+    }
+    try:
+        return ComponentSpec.model_validate(raw)
+    except ValidationError as error:
+        unreadable = {str(problem["loc"][0]) for problem in error.errors() if problem["loc"]}
+        return ComponentSpec.model_validate(
+            {k: v for k, v in raw.items() if k not in unreadable - {"id", "name", "category"}}
+        )
+
+
 class ToolDispatcher:
     def __init__(
         self,
@@ -141,12 +184,18 @@ class ToolDispatcher:
         search_client: WebSearchClient | None = None,
         reader: WebPageReader | None = None,
         source_policy: ResearchSourcePolicy | None = None,
+        rule_engine: HardwareRuleEngine | None = None,
     ):
         self.catalog = catalog
         self.service = service
         self._search_client = search_client
         self._reader = reader
         self.source_policy = source_policy or ResearchSourcePolicy()
+        if rule_engine is None:
+            from ai_service.infrastructure.hardware import LocalHardwareRuleEngine
+
+            rule_engine = LocalHardwareRuleEngine()
+        self.rule_engine = rule_engine
 
     @property
     def search_client(self) -> WebSearchClient:
@@ -206,6 +255,7 @@ class ToolDispatcher:
                 CatalogResult
                 | DetailsResult
                 | ComparisonResult
+                | CompatibilityCheckResult
                 | BuildResult
                 | SearchWebResult
                 | ReadWebPageResult
@@ -284,6 +334,49 @@ class ToolDispatcher:
                     products.append(chosen)
                     seen_ids.add(chosen.product_id)
                 payload = ComparisonResult(products=products)
+            elif isinstance(args, CheckBuildCompatibilityArgs):
+                products = []
+                checked_parts: dict[str, ComponentSpec] = {}
+                for slot, identifier in args.slots.items():
+                    found = await self.catalog.get(identifier)
+                    if found is None:
+                        return rejected(ToolError.PRODUCT_NOT_FOUND)
+                    found = ProductEvidence.model_validate(found.model_dump())
+                    if found.product_id != identifier:
+                        raise ValueError("Canonical product identity mismatch")
+                    products.append(found)
+                    checked_parts[slot] = _component_from_evidence(
+                        found, SLOT_CATEGORIES[slot]
+                    )
+                verdict = check_build(self.rule_engine, checked_parts)
+                payload = CompatibilityCheckResult(
+                    overall=verdict.overall.value,
+                    products=products,
+                    results=[
+                        CompatibilityPairVerdict(
+                            rule=item.rule,
+                            status=item.status.value,
+                            slot_a=item.slot_a,
+                            slot_b=item.slot_b,
+                            message=item.message[:500] if item.message else None,
+                            suggestion=item.suggestion[:500] if item.suggestion else None,
+                            missing_attributes=list(item.missing_attributes)[:16],
+                        )
+                        for item in verdict.results[:16]
+                    ],
+                    power=(
+                        CompatibilityPowerSummary(
+                            estimated_tdp_watts=verdict.power.estimated_tdp_watts,
+                            recommended_psu_watts=verdict.power.recommended_psu_watts,
+                            selected_psu_watts=verdict.power.selected_psu_watts,
+                            is_sufficient=verdict.power.is_sufficient,
+                            headroom_watts=verdict.power.headroom_watts,
+                            note=verdict.power.note[:500],
+                        )
+                        if verdict.power is not None
+                        else None
+                    ),
+                )
             elif isinstance(args, SearchWebArgs):
                 raw = await self.search_client.search(
                     WebSearchQuery(query=args.query, limit=args.limit)
@@ -480,7 +573,10 @@ def validate_answer(
                     [payload.product]
                     if isinstance(payload, DetailsResult)
                     else payload.products
-                    if isinstance(payload, (CatalogResult, ComparisonResult))
+                    if isinstance(
+                        payload,
+                        (CatalogResult, ComparisonResult, CompatibilityCheckResult),
+                    )
                     else []
                 )
                 if product.evidence_ref in selected
@@ -592,7 +688,10 @@ def validate_answer(
             if key not in rendered:
                 lines.append(grounded_summary(payload.receipt, report))
                 rendered.add(key)
-        elif isinstance(payload, (DetailsResult, CatalogResult, ComparisonResult)):
+        elif isinstance(
+            payload,
+            (DetailsResult, CatalogResult, ComparisonResult, CompatibilityCheckResult),
+        ):
             products = (
                 [payload.product]
                 if isinstance(payload, DetailsResult)

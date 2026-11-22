@@ -92,6 +92,7 @@ class ToolName(StrEnum):
     SEARCH_CATALOG = "search_catalog"
     GET_PRODUCT_DETAILS = "get_product_details"
     COMPARE_PRODUCTS = "compare_products"
+    CHECK_BUILD_COMPATIBILITY = "check_build_compatibility"
     BUILD_PC = "build_pc"
     SEARCH_WEB = "search_web"
     READ_WEB_PAGE = "read_web_page"
@@ -212,6 +213,21 @@ class CompareProductsArgs(Contract):
         return self
 
 
+CompatibilitySlot = Literal[
+    "CPU", "MAINBOARD", "RAM", "GPU", "PSU", "CASE", "COOLER", "SSD"
+]
+
+
+class CheckBuildCompatibilityArgs(Contract):
+    """Check hardware compatibility and PSU wattage for catalog PC parts using the deterministic rule engine."""
+
+    slots: dict[CompatibilitySlot, UUID] = Field(
+        min_length=2,
+        max_length=8,
+        description="Map of hardware slot (CPU, MAINBOARD, RAM, GPU, PSU, CASE, COOLER, SSD) to catalog product_id.",
+    )
+
+
 class BuildPCArgs(Contract):
     """Build from admitted requirements using the full canonical hardware catalog.
 
@@ -235,6 +251,7 @@ TOOL_SCHEMAS: dict[ToolName, type[Contract]] = {
     ToolName.SEARCH_CATALOG: SearchCatalogArgs,
     ToolName.GET_PRODUCT_DETAILS: ProductDetailsArgs,
     ToolName.COMPARE_PRODUCTS: CompareProductsArgs,
+    ToolName.CHECK_BUILD_COMPATIBILITY: CheckBuildCompatibilityArgs,
     ToolName.BUILD_PC: BuildPCArgs,
     ToolName.SEARCH_WEB: SearchWebArgs,
     ToolName.READ_WEB_PAGE: ReadWebPageArgs,
@@ -447,10 +464,38 @@ class ResearchResult(Contract):
         return self
 
 
+class CompatibilityPairVerdict(Contract):
+    rule: Text = Field(max_length=64)
+    status: Literal["OK", "WARNING", "UNKNOWN", "INCOMPATIBLE"]
+    slot_a: Text = Field(max_length=32)
+    slot_b: Text | None = Field(default=None, max_length=32)
+    message: Text | None = Field(default=None, max_length=500)
+    suggestion: Text | None = Field(default=None, max_length=500)
+    missing_attributes: list[Text] = Field(default_factory=list, max_length=16)
+
+
+class CompatibilityPowerSummary(Contract):
+    estimated_tdp_watts: NonNegativeInt
+    recommended_psu_watts: NonNegativeInt
+    selected_psu_watts: NonNegativeInt | None = None
+    is_sufficient: bool | None = None
+    headroom_watts: StrictInt | None = None
+    note: Text = Field(max_length=500)
+
+
+class CompatibilityCheckResult(Contract):
+    tool: Literal["check_build_compatibility"] = "check_build_compatibility"
+    overall: Literal["OK", "WARNING", "UNKNOWN", "INCOMPATIBLE"]
+    products: list[ProductEvidence] = Field(min_length=2, max_length=8)
+    results: list[CompatibilityPairVerdict] = Field(default_factory=list, max_length=16)
+    power: CompatibilityPowerSummary | None = None
+
+
 ToolPayload = Annotated[
     CatalogResult
     | DetailsResult
     | ComparisonResult
+    | CompatibilityCheckResult
     | BuildResult
     | SearchWebResult
     | ReadWebPageResult
