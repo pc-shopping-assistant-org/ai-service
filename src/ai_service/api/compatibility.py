@@ -156,7 +156,16 @@ async def _load_live_candidates() -> list[ComponentSpec]:
                 params: dict[str, str | int] = {"limit": HARDWARE_CATALOG_PAGE_SIZE}
                 if cursor is not None:
                     params["cursor"] = str(cursor)
-                response = await client.get(f"{base_url}/products/snapshot", params=params)
+                from ai_service.infrastructure.observability import trace_headers
+
+                headers = trace_headers()
+                response = (
+                    await client.get(
+                        f"{base_url}/products/snapshot", params=params, headers=headers
+                    )
+                    if headers
+                    else await client.get(f"{base_url}/products/snapshot", params=params)
+                )
                 response.raise_for_status()
                 body = response.json()
                 page = HardwarePage.model_validate(body.get("data") if isinstance(body, dict) else body)

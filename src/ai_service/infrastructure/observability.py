@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import sys
+import traceback
 from collections.abc import Awaitable, Callable, Coroutine, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -11,7 +12,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from functools import wraps
+from pathlib import Path
 from time import perf_counter
+from types import TracebackType
 from typing import Any
 
 from opentelemetry.context import Context
@@ -25,6 +28,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.id_generator import RandomIdGenerator
 from opentelemetry.trace import Span, StatusCode, Tracer, get_current_span, get_tracer
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 from ai_service.application.call_attempts import ExecutionClaim
 from ai_service.config.settings import Settings
@@ -32,7 +36,16 @@ from ai_service.config.settings import Settings
 SERVICE_NAME = "ai-service"
 EXPORT_TIMEOUT_SECONDS = 5
 EXPORT_INTERVAL_MS = 1000
-LOG_FIELDS = ("event", "step", "duration_ms", "outcome", "result_status", "error_type")
+LOG_FIELDS = (
+    "event",
+    "step",
+    "duration_ms",
+    "outcome",
+    "result_status",
+    "error_type",
+    "error_location",
+)
+_PROPAGATOR = TraceContextTextMapPropagator()
 logger = logging.getLogger(__name__)
 _run: ContextVar[dict[str, str] | None] = ContextVar("ai_run_telemetry", default=None)
 _tracer: ContextVar[Tracer | None] = ContextVar("ai_tracer", default=None)
@@ -48,6 +61,41 @@ class RunIdGenerator(RandomIdGenerator):
     def generate_trace_id(self) -> int:
         run_id = (_run.get() or {}).get("trace_id")
         return int(run_id, 16) if run_id else super().generate_trace_id()
+
+
+def _extract_error_location(tb: TracebackType | None) -> str | None:
+    """Return a PII-safe 'file:line:func' location from a traceback without exception text or locals."""
+    if tb is None:
+        return None
+    frames = traceback.extract_tb(tb)
+    if not frames:
+        return None
+    chosen = next(
+        (
+            frame
+            for frame in reversed(frames)
+            if "ai_service" in frame.filename and frame.filename != __file__
+        ),
+        frames[-1],
+    )
+    normalized = chosen.filename.replace("\\", "/")
+    marker = "/ai_service/"
+    short_path = (
+        normalized.split(marker, 1)[1]
+        if marker in normalized
+        else Path(normalized).name
+    )
+    return f"{short_path}:{chosen.lineno}:{chosen.name}"
+
+
+def trace_headers() -> dict[str, str]:
+    """Build W3C traceparent/tracestate headers for outbound HTTP calls when a span is active."""
+    span = get_current_span().get_span_context()
+    if not span.is_valid:
+        return {}
+    headers: dict[str, str] = {}
+    _PROPAGATOR.inject(headers)
+    return headers
 
 
 def correlation() -> dict[str, str]:
@@ -66,6 +114,9 @@ class CorrelationFilter(logging.Filter):
             error_type = record.exc_info[0]
             if error_type:
                 record.error_type = error_type.__name__
+            error_location = _extract_error_location(record.exc_info[2])
+            if error_location:
+                record.error_location = error_location
             record.exc_info = None
             record.exc_text = None
         record.stack_info = None
@@ -97,6 +148,7 @@ class StepObservation:
     span: Span
     outcome: StepOutcome = StepOutcome.SUCCEEDED
     error_type: str | None = None
+    error_location: str | None = None
     result_status: str | None = None
 
 
@@ -123,6 +175,7 @@ def step(name: str, *, root: bool = False) -> Iterator[StepObservation]:
         except BaseException as error:
             observation.outcome = StepOutcome.FAILED
             observation.error_type = type(error).__name__
+            observation.error_location = _extract_error_location(error.__traceback__)
             raise
         finally:
             if observation.outcome == StepOutcome.FAILED:
@@ -137,6 +190,9 @@ def step(name: str, *, root: bool = False) -> Iterator[StepObservation]:
             if observation.error_type:
                 span.set_attribute("error.type", observation.error_type)
                 extra["error_type"] = observation.error_type
+            if observation.error_location:
+                span.set_attribute("error.location", observation.error_location)
+                extra["error_location"] = observation.error_location
             if observation.result_status:
                 span.set_attribute("ai.result_status", observation.result_status)
                 extra["result_status"] = observation.result_status

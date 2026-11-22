@@ -261,3 +261,35 @@ async def test_managed_execution_includes_finalize_and_records_actual_outcome(
         "FAILED" if fail else "SUCCEEDED"
     )
     assert "PRIVATE_MESSAGE" not in output.getvalue()
+
+
+def test_error_location_and_w3c_trace_headers(telemetry):
+    from ai_service.infrastructure.observability import trace_headers
+
+    exporter, output = telemetry
+    assert trace_headers() == {}
+
+    execution = claim()
+    with execution_trace(execution), step("agent"):
+        headers = trace_headers()
+        assert "traceparent" in headers
+        parts = headers["traceparent"].split("-")
+        assert len(parts) == 4
+        assert parts[0] == "00"
+        assert parts[1] == execution.run_id.hex
+
+    with execution_trace(execution), pytest.raises(RuntimeError), step("tool.catalog"):
+        raise RuntimeError("SECRET_TOKEN_XYZ")
+
+    spans = {s.name: s for s in exporter.get_finished_spans()}
+    failed_span = spans["tool.catalog"]
+    assert failed_span.attributes["error.type"] == "RuntimeError"
+    assert "test_observability.py:" in str(failed_span.attributes["error.location"])
+    assert "SECRET_TOKEN_XYZ" not in output.getvalue()
+    records = [json.loads(line) for line in output.getvalue().splitlines()]
+    failed_log = next(
+        r
+        for r in records
+        if r.get("event") == "step.finished" and r.get("step") == "tool.catalog"
+    )
+    assert "test_observability.py:" in failed_log["error_location"]
