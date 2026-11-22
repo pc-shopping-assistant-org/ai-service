@@ -19,15 +19,13 @@ from typing import Any
 
 from ai_service.application.ports.hardware import ComponentCategory, ComponentSpec
 from ai_service.capabilities.pc_builder.compatibility import case_supported_form_factors
+from ai_service.capabilities.pc_builder.profiles import (
+    DEFAULT_ENVELOPES,
+    EnvelopeRange,
+    ProfileSpec,
+    get_profile_spec,
+)
 from ai_service.capabilities.pc_builder.schemas import BuildObjective, UseCaseProfile
-
-
-@dataclass(frozen=True, slots=True)
-class EnvelopeRange:
-    preferred_min: float
-    preferred_max: float
-    absolute_min: float
-    absolute_max: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,77 +37,13 @@ class CandidatePool:
     all_affordable: list[ComponentSpec]
 
 
-# Configured allocation envelopes per use-case profile
-DEFAULT_ENVELOPES: dict[UseCaseProfile, dict[ComponentCategory, EnvelopeRange]] = {
-    UseCaseProfile.GAMING_1080P: {
-        ComponentCategory.GPU: EnvelopeRange(0.30, 0.48, 0.18, 0.60),
-        ComponentCategory.CPU: EnvelopeRange(0.18, 0.28, 0.10, 0.38),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.08, 0.16, 0.05, 0.22),
-        ComponentCategory.RAM: EnvelopeRange(0.05, 0.12, 0.03, 0.18),
-        ComponentCategory.STORAGE: EnvelopeRange(0.04, 0.10, 0.03, 0.15),
-        ComponentCategory.PSU: EnvelopeRange(0.05, 0.10, 0.03, 0.15),
-        ComponentCategory.CASE: EnvelopeRange(0.03, 0.08, 0.02, 0.12),
-        ComponentCategory.COOLER: EnvelopeRange(0.02, 0.06, 0.00, 0.10),
-    },
-    UseCaseProfile.GAMING_1440P: {
-        ComponentCategory.GPU: EnvelopeRange(0.35, 0.55, 0.22, 0.65),
-        ComponentCategory.CPU: EnvelopeRange(0.15, 0.25, 0.10, 0.35),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.08, 0.16, 0.05, 0.22),
-        ComponentCategory.RAM: EnvelopeRange(0.05, 0.12, 0.03, 0.18),
-        ComponentCategory.STORAGE: EnvelopeRange(0.04, 0.10, 0.03, 0.15),
-        ComponentCategory.PSU: EnvelopeRange(0.05, 0.10, 0.03, 0.15),
-        ComponentCategory.CASE: EnvelopeRange(0.03, 0.08, 0.02, 0.12),
-        ComponentCategory.COOLER: EnvelopeRange(0.02, 0.07, 0.00, 0.12),
-    },
-    UseCaseProfile.GAMING_4K: {
-        ComponentCategory.GPU: EnvelopeRange(0.42, 0.62, 0.30, 0.72),
-        ComponentCategory.CPU: EnvelopeRange(0.14, 0.22, 0.08, 0.30),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.08, 0.15, 0.05, 0.20),
-        ComponentCategory.RAM: EnvelopeRange(0.05, 0.12, 0.03, 0.18),
-        ComponentCategory.STORAGE: EnvelopeRange(0.04, 0.10, 0.03, 0.15),
-        ComponentCategory.PSU: EnvelopeRange(0.06, 0.12, 0.04, 0.18),
-        ComponentCategory.CASE: EnvelopeRange(0.04, 0.09, 0.02, 0.14),
-        ComponentCategory.COOLER: EnvelopeRange(0.03, 0.08, 0.01, 0.14),
-    },
-    UseCaseProfile.CONTENT_CREATION_3D: {
-        ComponentCategory.CPU: EnvelopeRange(0.22, 0.35, 0.15, 0.45),
-        ComponentCategory.GPU: EnvelopeRange(0.28, 0.45, 0.18, 0.55),
-        ComponentCategory.RAM: EnvelopeRange(0.08, 0.18, 0.05, 0.25),
-        ComponentCategory.STORAGE: EnvelopeRange(0.06, 0.14, 0.04, 0.20),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.08, 0.16, 0.05, 0.22),
-        ComponentCategory.PSU: EnvelopeRange(0.05, 0.11, 0.03, 0.16),
-        ComponentCategory.COOLER: EnvelopeRange(0.03, 0.09, 0.01, 0.15),
-        ComponentCategory.CASE: EnvelopeRange(0.03, 0.08, 0.02, 0.12),
-    },
-    UseCaseProfile.AI_DATA_SCIENCE: {
-        ComponentCategory.GPU: EnvelopeRange(0.40, 0.65, 0.25, 0.75),
-        ComponentCategory.CPU: EnvelopeRange(0.12, 0.22, 0.08, 0.30),
-        ComponentCategory.RAM: EnvelopeRange(0.08, 0.18, 0.05, 0.25),
-        ComponentCategory.STORAGE: EnvelopeRange(0.05, 0.12, 0.03, 0.18),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.07, 0.15, 0.04, 0.20),
-        ComponentCategory.PSU: EnvelopeRange(0.06, 0.12, 0.04, 0.18),
-        ComponentCategory.COOLER: EnvelopeRange(0.02, 0.07, 0.01, 0.12),
-        ComponentCategory.CASE: EnvelopeRange(0.03, 0.08, 0.02, 0.12),
-    },
-    UseCaseProfile.OFFICE_BUDGET: {
-        ComponentCategory.CPU: EnvelopeRange(0.22, 0.38, 0.12, 0.50),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.12, 0.24, 0.08, 0.32),
-        ComponentCategory.RAM: EnvelopeRange(0.08, 0.18, 0.05, 0.25),
-        ComponentCategory.STORAGE: EnvelopeRange(0.08, 0.18, 0.04, 0.25),
-        ComponentCategory.PSU: EnvelopeRange(0.08, 0.16, 0.04, 0.22),
-        ComponentCategory.CASE: EnvelopeRange(0.05, 0.14, 0.03, 0.20),
-        ComponentCategory.COOLER: EnvelopeRange(0.00, 0.08, 0.00, 0.12),
-        ComponentCategory.GPU: EnvelopeRange(0.00, 0.25, 0.00, 0.40),
-    },
-}
-
-
 def get_candidate_pool(
     candidates: list[ComponentSpec],
     budget: int,
     category: ComponentCategory,
     profile: UseCaseProfile,
     min_viable_preferred: int = 2,
+    profile_spec: ProfileSpec | None = None,
 ) -> CandidatePool:
     """Partition candidates into preferred envelope (for prioritized exploration) and all affordable.
 
@@ -120,7 +54,11 @@ def get_candidate_pool(
     if not affordable:
         return CandidatePool(category=category, preferred=[], all_affordable=[])
 
-    profile_envelopes = DEFAULT_ENVELOPES.get(profile, DEFAULT_ENVELOPES[UseCaseProfile.GAMING_1080P])
+    profile_envelopes = (
+        profile_spec.envelopes
+        if profile_spec is not None
+        else DEFAULT_ENVELOPES.get(profile, DEFAULT_ENVELOPES[UseCaseProfile.GAMING_1080P])
+    )
     envelope = profile_envelopes.get(category, EnvelopeRange(0.0, 1.0, 0.0, 1.0))
 
     pref_min = int(budget * envelope.preferred_min)
@@ -228,8 +166,22 @@ def stable_component_key(c: ComponentSpec) -> tuple[Any, ...]:
     )
 
 
+_NVIDIA_MARKERS = ("NVIDIA", "GEFORCE", "RTX", "GTX", "QUADRO")
+
+
+def is_nvidia_gpu(comp: ComponentSpec | None) -> bool:
+    """Detect whether a GPU belongs to the NVIDIA CUDA ecosystem from brand or model name."""
+    if comp is None or comp.category != ComponentCategory.GPU:
+        return False
+    haystack = f"{comp.brand or ''} {comp.name}".upper()
+    return any(marker in haystack for marker in _NVIDIA_MARKERS)
+
+
 def resolve_component_metric(comp: ComponentSpec, key: str) -> float | None:
     """Resolve metric value for Pareto dominance and scoring using canonical definitions."""
+    if key == "nvidia_cuda":
+        return 1.0 if is_nvidia_gpu(comp) else 0.0
+
     if key == "psu_quality":
         if comp.psu_tier:
             tier_map = {"A": 100.0, "B": 85.0, "C": 70.0, "D": 50.0}
@@ -257,20 +209,28 @@ def get_dominance_dimensions(
     category: ComponentCategory,
     profile: UseCaseProfile,
     objective: BuildObjective,
+    profile_spec: ProfileSpec | None = None,
 ) -> list[str]:
     """Return relevant comparison dimensions for a category under specific profile and objective.
 
     Prefix with '-' indicates lower-is-better (e.g. '-tdp_watts', '-gpu_length_mm').
     Positive indicates higher-is-better (e.g. 'performance_score', 'vram_gb').
     """
+    spec = profile_spec if profile_spec is not None else get_profile_spec(profile)
+
     if category == ComponentCategory.GPU:
         dims = ["performance_score", "-tdp_watts", "-gpu_length_mm"]
-        if profile in {UseCaseProfile.AI_DATA_SCIENCE, UseCaseProfile.CONTENT_CREATION_3D, UseCaseProfile.GAMING_4K}:
+        if spec.uses_vram:
             dims.append("vram_gb")
+        if spec.cuda_bonus > 0:
+            dims.append("nvidia_cuda")
         return dims
 
     if category == ComponentCategory.CPU:
-        return ["performance_score", "-tdp_watts"]
+        dims = ["performance_score", "-tdp_watts"]
+        if spec.multicore_max_bonus > 0:
+            dims.append("core_count")
+        return dims
 
     if category == ComponentCategory.MAINBOARD:
         # Conservative policy: do not prune motherboards purely on price without comprehensive
@@ -307,6 +267,7 @@ def dominates(
     worse: ComponentSpec,
     profile: UseCaseProfile,
     objective: BuildObjective,
+    profile_spec: ProfileSpec | None = None,
 ) -> bool:
     """Check if component 'better' Pareto-dominates 'worse' under a specific profile and objective.
 
@@ -333,8 +294,14 @@ def dominates(
     if better.category == ComponentCategory.CPU and not preserves_cpu_optional_capabilities(better, worse):
         return False
 
-    # RAM standard matching
+    # RAM standard & module-count matching (more modules restricts 2-slot mainboards)
     if _norm_str(better.ram_type) != _norm_str(worse.ram_type):
+        return False
+    if (
+        better.category == ComponentCategory.RAM
+        and worse.kit_modules is not None
+        and (better.kit_modules is None or better.kit_modules > worse.kit_modules)
+    ):
         return False
 
     # Mainboard form factor matching
@@ -345,22 +312,50 @@ def dominates(
     if better.category == ComponentCategory.GPU and better.is_integrated != worse.is_integrated:
         return False
 
-    # Cooler supported sockets matching: better must support at least all sockets that worse supports
-    if better.category == ComponentCategory.COOLER and worse.supported_sockets:
-        w_sockets = {_norm_str(s) for s in worse.supported_sockets}
-        b_sockets = {_norm_str(s) for s in better.supported_sockets}
-        if not w_sockets.issubset(b_sockets):
+    # Cooler compatibility preservation: AIO vs Air, radiator size, TDP rating, and supported sockets
+    if better.category == ComponentCategory.COOLER:
+        if (better.radiator_mm is not None) != (worse.radiator_mm is not None):
             return False
+        if worse.radiator_mm is not None and (
+            better.radiator_mm is None or better.radiator_mm > worse.radiator_mm
+        ):
+            return False
+        if worse.tdp_watts is not None and (
+            better.tdp_watts is None or better.tdp_watts < worse.tdp_watts
+        ):
+            return False
+        if worse.supported_sockets:
+            w_sockets = {_norm_str(s) for s in worse.supported_sockets}
+            b_sockets = {_norm_str(s) for s in better.supported_sockets}
+            if not w_sockets.issubset(b_sockets):
+                return False
 
-    # Case supported form factors: better must support at least all form factors that worse supports
+    # Case compatibility preservation: supported form factors & max radiator support
     if better.category == ComponentCategory.CASE:
         w_supported = case_supported_form_factors(worse)
         b_supported = case_supported_form_factors(better)
         if w_supported is None or b_supported is None or not w_supported.issubset(b_supported):
             return False
+        if worse.max_radiator_mm is not None and (
+            better.max_radiator_mm is None or better.max_radiator_mm < worse.max_radiator_mm
+        ):
+            return False
+
+    # Storage interface preservation: M.2/NVMe cannot dominate non-M.2 (e.g. SATA on boards with 0 M.2 slots)
+    if better.category == ComponentCategory.STORAGE:
+        b_is_m2 = bool(
+            (better.interface and "NVME" in _norm_str(better.interface))
+            or (better.form_factor and "M.2" in str(better.form_factor).upper())
+        )
+        w_is_m2 = bool(
+            (worse.interface and "NVME" in _norm_str(worse.interface))
+            or (worse.form_factor and "M.2" in str(worse.form_factor).upper())
+        )
+        if b_is_m2 and not w_is_m2:
+            return False
 
     # 3. Dimensions evaluation
-    dimensions = get_dominance_dimensions(better.category, profile, objective)
+    dimensions = get_dominance_dimensions(better.category, profile, objective, profile_spec=profile_spec)
     if not dimensions:
         # Conservative fail-safe: cannot assert dominance without quality dimensions
         return False
@@ -400,6 +395,7 @@ def pareto_prune(
     candidates: list[ComponentSpec],
     profile: UseCaseProfile,
     objective: BuildObjective,
+    profile_spec: ProfileSpec | None = None,
 ) -> list[ComponentSpec]:
     """Prune dominated candidates for a specific objective.
 
@@ -417,7 +413,7 @@ def pareto_prune(
             if candidate is other or stable_component_key(candidate) == stable_component_key(other):
                 continue
 
-            if dominates(other, candidate, profile, objective):
+            if dominates(other, candidate, profile, objective, profile_spec=profile_spec):
                 is_dominated = True
                 break
 
@@ -430,6 +426,7 @@ def pareto_prune(
 def pareto_prune_all_objectives(
     candidates: list[ComponentSpec],
     profile: UseCaseProfile,
+    profile_spec: ProfileSpec | None = None,
 ) -> list[ComponentSpec]:
     """Retain candidates that are non-dominated under AT LEAST ONE objective.
 
@@ -442,7 +439,7 @@ def pareto_prune_all_objectives(
     retained_candidates: list[ComponentSpec] = []
 
     for obj in BuildObjective:
-        pruned = pareto_prune(candidates, profile, obj)
+        pruned = pareto_prune(candidates, profile, obj, profile_spec=profile_spec)
         for c in pruned:
             c_key = stable_component_key(c)
             if c_key not in retained_keys:

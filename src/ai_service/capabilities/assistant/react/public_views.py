@@ -33,7 +33,13 @@ from ai_service.capabilities.assistant.stateful_contracts import (
 )
 
 from .actions import FinalOutcome
-from .contracts import CatalogResult, ComparisonResult, DetailsResult, ToolRecord
+from .contracts import (
+    CatalogResult,
+    ComparisonResult,
+    CompatibilityCheckResult,
+    DetailsResult,
+    ToolRecord,
+)
 from .outcomes import AnswerReason
 from .published_state import FlexiblePublishedState
 from .task_resolution import public_task_options
@@ -150,7 +156,9 @@ def public_tool_products(
             [payload.product]
             if isinstance(payload, DetailsResult)
             else payload.products
-            if isinstance(payload, (CatalogResult, ComparisonResult))
+            if isinstance(
+                payload, (CatalogResult, ComparisonResult, CompatibilityCheckResult)
+            )
             else []
         )
         same_run = run_id is None or record.origin_run_id == run_id
@@ -160,7 +168,10 @@ def public_tool_products(
                 same_run
                 and item.product_id not in products
                 and (
-                    isinstance(payload, (DetailsResult, ComparisonResult))
+                    isinstance(
+                        payload,
+                        (DetailsResult, ComparisonResult, CompatibilityCheckResult),
+                    )
                     or (
                         isinstance(payload, CatalogResult)
                         and bool(answer_text)

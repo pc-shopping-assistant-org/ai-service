@@ -12,7 +12,6 @@ from ai_service.capabilities.pc_builder.schemas import (
     BuildObjective,
     OptimizationResult,
     SelectedBuild,
-    UseCaseProfile,
 )
 
 RECOMMENDATION_POLICY_VERSION = "v2"
@@ -41,21 +40,13 @@ class RecommendationDecision:
     policy_version: str
 
 
+from ai_service.capabilities.pc_builder.profiles import DEFAULT_OBJECTIVE_BY_PROFILE
+
 FALLBACK_OBJECTIVE_ORDER: tuple[BuildObjective, ...] = (
     BuildObjective.BALANCED,
     BuildObjective.PERFORMANCE,
     BuildObjective.UPGRADE_FRIENDLY,
 )
-
-
-DEFAULT_OBJECTIVE_BY_PROFILE: dict[UseCaseProfile, BuildObjective] = {
-    UseCaseProfile.GAMING_1080P: BuildObjective.BALANCED,
-    UseCaseProfile.GAMING_1440P: BuildObjective.BALANCED,
-    UseCaseProfile.GAMING_4K: BuildObjective.PERFORMANCE,
-    UseCaseProfile.CONTENT_CREATION_3D: BuildObjective.BALANCED,
-    UseCaseProfile.AI_DATA_SCIENCE: BuildObjective.PERFORMANCE,
-    UseCaseProfile.OFFICE_BUDGET: BuildObjective.BALANCED,
-}
 
 
 def choose_recommended_build(

@@ -19,6 +19,7 @@ from .contracts import (
     BuildResult,
     CatalogResult,
     ComparisonResult,
+    CompatibilityCheckResult,
     CompletionRequirement,
     ConsultationExplanation,
     DetailsResult,
@@ -165,7 +166,13 @@ def resolve_result_selection(
             and record.result.status == "COMPLETED"
             and isinstance(
                 record.result.result,
-                (BuildResult, CatalogResult, DetailsResult, ComparisonResult),
+                (
+                    BuildResult,
+                    CatalogResult,
+                    DetailsResult,
+                    ComparisonResult,
+                    CompatibilityCheckResult,
+                ),
             )
         ]
         if len(candidates) == 1:
@@ -194,7 +201,13 @@ def resolve_result_selection(
         record.result
         and isinstance(
             record.result.result,
-            (BuildResult, CatalogResult, DetailsResult, ComparisonResult),
+            (
+                BuildResult,
+                CatalogResult,
+                DetailsResult,
+                ComparisonResult,
+                CompatibilityCheckResult,
+            ),
         )
         for record in selected
     ):
@@ -212,6 +225,7 @@ def resolve_result_selection(
                                 CatalogResult,
                                 DetailsResult,
                                 ComparisonResult,
+                                CompatibilityCheckResult,
                             ),
                         )
                         for ref in record.result.evidence_refs

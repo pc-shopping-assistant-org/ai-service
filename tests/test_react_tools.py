@@ -126,6 +126,7 @@ def test_state_aware_exposure_keeps_reads_and_requires_compiled_build(
         ToolName.SEARCH_CATALOG,
         ToolName.GET_PRODUCT_DETAILS,
         ToolName.COMPARE_PRODUCTS,
+        ToolName.CHECK_BUILD_COMPATIBILITY,
         ToolName.RESEARCH_HARDWARE,
         ToolName.RESEARCH_COMPATIBILITY,
         ToolName.RESEARCH_WORKLOAD,
@@ -394,4 +395,97 @@ async def test_compare_products_resolves_keywords_in_single_turn_without_prior_s
     )
     assert not_found.status == "REJECTED"
     assert not_found.error == "PRODUCT_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_check_build_compatibility_evaluates_catalog_parts_and_rejects_missing():
+    now = datetime.now(UTC)
+    cpu_am5 = ProductEvidence(
+        product_id=uuid4(),
+        name="AMD Ryzen 5 7600",
+        price_vnd=5_200_000,
+        specifications={"socket": "AM5", "tdp_watts": 65},
+        evidence_ref="catalog:cpu:am5",
+        retrieved_at=now,
+    )
+    mb_am5 = ProductEvidence(
+        product_id=uuid4(),
+        name="MSI B650M Gaming",
+        price_vnd=3_800_000,
+        specifications={"socket": "AM5", "ram_type": "DDR5", "ram_slots": 4},
+        evidence_ref="catalog:mb:am5",
+        retrieved_at=now,
+    )
+    mb_lga = ProductEvidence(
+        product_id=uuid4(),
+        name="ASUS B760M-A",
+        price_vnd=3_400_000,
+        specifications={"socket": "LGA1700", "ram_type": "DDR5", "ram_slots": 4},
+        evidence_ref="catalog:mb:lga",
+        retrieved_at=now,
+    )
+    by_id = {p.product_id: p for p in (cpu_am5, mb_am5, mb_lga)}
+
+    class CompatCatalog:
+        async def get(self, product_id):
+            return by_id.get(product_id)
+
+        async def search(self, query, limit):
+            return list(by_id.values())[:limit]
+
+    from ai_service.infrastructure.hardware import LocalHardwareRuleEngine
+
+    dispatcher = ToolDispatcher(
+        CompatCatalog(),
+        PCBuildApplicationService(),
+        rule_engine=LocalHardwareRuleEngine(),
+    )
+    trusted = context()
+
+    ok = await dispatcher.execute(
+        ToolCall(
+            call_id="compat-ok",
+            name="check_build_compatibility",
+            arguments={
+                "slots": {
+                    "CPU": str(cpu_am5.product_id),
+                    "MAINBOARD": str(mb_am5.product_id),
+                }
+            },
+        ),
+        trusted,
+    )
+    assert ok.status == "COMPLETED"
+    assert ok.result.overall == "OK"
+    assert ok.result.power is not None
+    assert set(ok.evidence_refs) == {cpu_am5.evidence_ref, mb_am5.evidence_ref}
+
+    mismatch = await dispatcher.execute(
+        ToolCall(
+            call_id="compat-bad",
+            name="check_build_compatibility",
+            arguments={
+                "slots": {
+                    "CPU": str(cpu_am5.product_id),
+                    "MAINBOARD": str(mb_lga.product_id),
+                }
+            },
+        ),
+        trusted,
+    )
+    assert mismatch.status == "COMPLETED"
+    assert mismatch.result.overall == "INCOMPATIBLE"
+    assert any(r.rule == "SOCKET" and r.status == "INCOMPATIBLE" for r in mismatch.result.results)
+
+    missing = await dispatcher.execute(
+        ToolCall(
+            call_id="compat-missing",
+            name="check_build_compatibility",
+            arguments={"slots": {"CPU": str(cpu_am5.product_id), "MAINBOARD": str(uuid4())}},
+        ),
+        trusted,
+    )
+    assert missing.status == "REJECTED"
+    assert missing.error == "PRODUCT_NOT_FOUND"
+
 
