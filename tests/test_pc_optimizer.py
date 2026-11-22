@@ -1108,3 +1108,69 @@ def test_pruning_on_vs_off_same_optimum_diverse_catalog(optimizer: Deterministic
         assert b.objective_score > 0
         assert len(b.evidence) > 0
 
+
+def test_profile_specific_saturation_bottleneck_cuda_and_office_igpu() -> None:
+    """Verify Mức 1 profile-specific scoring rules."""
+    power = PowerEstimate(
+        cpu_estimated_peak_watts=65.0,
+        gpu_estimated_peak_watts=150.0,
+        platform_estimated_watts=60.0,
+        estimated_sustained_peak_watts=275.0,
+        transient_allowance_watts=40.0,
+        minimum_capacity_watts=550,
+        recommended_capacity_watts=650,
+        sizing_rationale="Test power",
+    )
+    base_parts = {
+        ComponentCategory.CPU: ComponentSpec(name="Ryzen 9 7900X", category=ComponentCategory.CPU, price=8_000_000, performance_score=85, socket="AM5", tdp_watts=120, extra_specs={"core_count": 12}),
+        ComponentCategory.MAINBOARD: ComponentSpec(name="B650", category=ComponentCategory.MAINBOARD, price=3_500_000, socket="AM5", ram_type="DDR5", form_factor="ATX", ram_slots=4),
+        ComponentCategory.RAM: ComponentSpec(name="RAM 32GB", category=ComponentCategory.RAM, price=2_500_000, capacity_gb=32, performance_score=80, ram_type="DDR5"),
+        ComponentCategory.GPU: ComponentSpec(name="RTX 4070 Super", brand="NVIDIA", category=ComponentCategory.GPU, price=15_000_000, performance_score=88, vram_gb=12, tdp_watts=220),
+        ComponentCategory.CASE: ComponentSpec(name="Case", category=ComponentCategory.CASE, price=1_500_000, form_factor="ATX"),
+        ComponentCategory.COOLER: ComponentSpec(name="Cooler", category=ComponentCategory.COOLER, price=900_000, performance_score=80),
+        ComponentCategory.STORAGE: ComponentSpec(name="SSD 1TB", category=ComponentCategory.STORAGE, price=1_600_000, capacity_gb=1000, performance_score=80),
+        ComponentCategory.PSU: ComponentSpec(name="PSU 750W", category=ComponentCategory.PSU, price=2_000_000, wattage=750, psu_tier="A", performance_score=90),
+    }
+
+    # 1. Gaming 1440p RAM saturates at 32GB (64GB does not beat 32GB on ram_capacity)
+    gaming_32 = score_build(base_parts, BuildObjective.BALANCED, UseCaseProfile.GAMING_1440P, 40_000_000, power)
+    parts_64 = {**base_parts, ComponentCategory.RAM: base_parts[ComponentCategory.RAM].model_copy(update={"capacity_gb": 64})}
+    gaming_64 = score_build(parts_64, BuildObjective.BALANCED, UseCaseProfile.GAMING_1440P, 40_000_000, power)
+    assert gaming_32.total_score == gaming_64.total_score
+
+    # 2. Gaming bottleneck penalty applies when |gpu_perf - cpu_perf| > 25
+    bottlenecked = {**base_parts, ComponentCategory.CPU: base_parts[ComponentCategory.CPU].model_copy(update={"performance_score": 45})}
+    gaming_unbalanced = score_build(bottlenecked, BuildObjective.PERFORMANCE, UseCaseProfile.GAMING_1440P, 40_000_000, power)
+    assert any(d.name == "balance_penalty" and d.contribution < 0 for d in gaming_unbalanced.dimensions)
+
+    # 3. AI_DATA_SCIENCE favors NVIDIA CUDA GPU over same-score AMD GPU and rewards multi-core CPU
+    amd_gpu_parts = {
+        **base_parts,
+        ComponentCategory.GPU: ComponentSpec(name="Radeon RX 7800 XT", brand="AMD", category=ComponentCategory.GPU, price=15_000_000, performance_score=88, vram_gb=12, tdp_watts=220),
+    }
+    ai_nvidia = score_build(base_parts, BuildObjective.PERFORMANCE, UseCaseProfile.AI_DATA_SCIENCE, 40_000_000, power)
+    ai_amd = score_build(amd_gpu_parts, BuildObjective.PERFORMANCE, UseCaseProfile.AI_DATA_SCIENCE, 40_000_000, power)
+    assert ai_nvidia.total_score > ai_amd.total_score
+    assert any(d.name == "cuda_ecosystem" for d in ai_nvidia.dimensions)
+    assert any(d.name == "cpu_multicore" for d in ai_nvidia.dimensions)
+
+    # 4. OFFICE_BUDGET scores iGPU builds cleanly (no -1.0 rejection) and awards igpu_office_fit
+    office_igpu_parts = {
+        k: v for k, v in base_parts.items() if k != ComponentCategory.GPU
+    }
+    office_igpu_parts[ComponentCategory.CPU] = ComponentSpec(
+        name="Ryzen 5 8600G",
+        category=ComponentCategory.CPU,
+        price=4_500_000,
+        performance_score=72,
+        socket="AM5",
+        tdp_watts=65,
+        has_integrated_graphics=True,
+        integrated_graphics_score=35.0,
+    )
+    office_igpu_parts[ComponentCategory.RAM] = base_parts[ComponentCategory.RAM].model_copy(update={"capacity_gb": 16})
+    office_score = score_build(office_igpu_parts, BuildObjective.BALANCED, UseCaseProfile.OFFICE_BUDGET, 20_000_000, power)
+    assert office_score.total_score > 0
+    assert any(d.name == "igpu_office_fit" for d in office_score.dimensions)
+
+

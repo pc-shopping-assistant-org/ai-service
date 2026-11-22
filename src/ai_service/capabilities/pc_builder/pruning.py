@@ -228,8 +228,22 @@ def stable_component_key(c: ComponentSpec) -> tuple[Any, ...]:
     )
 
 
+_NVIDIA_MARKERS = ("NVIDIA", "GEFORCE", "RTX", "GTX", "QUADRO")
+
+
+def is_nvidia_gpu(comp: ComponentSpec | None) -> bool:
+    """Detect whether a GPU belongs to the NVIDIA CUDA ecosystem from brand or model name."""
+    if comp is None or comp.category != ComponentCategory.GPU:
+        return False
+    haystack = f"{comp.brand or ''} {comp.name}".upper()
+    return any(marker in haystack for marker in _NVIDIA_MARKERS)
+
+
 def resolve_component_metric(comp: ComponentSpec, key: str) -> float | None:
     """Resolve metric value for Pareto dominance and scoring using canonical definitions."""
+    if key == "nvidia_cuda":
+        return 1.0 if is_nvidia_gpu(comp) else 0.0
+
     if key == "psu_quality":
         if comp.psu_tier:
             tier_map = {"A": 100.0, "B": 85.0, "C": 70.0, "D": 50.0}
@@ -267,10 +281,15 @@ def get_dominance_dimensions(
         dims = ["performance_score", "-tdp_watts", "-gpu_length_mm"]
         if profile in {UseCaseProfile.AI_DATA_SCIENCE, UseCaseProfile.CONTENT_CREATION_3D, UseCaseProfile.GAMING_4K}:
             dims.append("vram_gb")
+        if profile in {UseCaseProfile.AI_DATA_SCIENCE, UseCaseProfile.CONTENT_CREATION_3D}:
+            dims.append("nvidia_cuda")
         return dims
 
     if category == ComponentCategory.CPU:
-        return ["performance_score", "-tdp_watts"]
+        dims = ["performance_score", "-tdp_watts"]
+        if profile in {UseCaseProfile.CONTENT_CREATION_3D, UseCaseProfile.AI_DATA_SCIENCE}:
+            dims.append("core_count")
+        return dims
 
     if category == ComponentCategory.MAINBOARD:
         # Conservative policy: do not prune motherboards purely on price without comprehensive

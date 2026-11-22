@@ -10,7 +10,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 EXTRA_HARDWARE_SPEC_FIELDS = frozenset(
-    {"radiator_mm", "max_radiator_mm", "m2_slots", "interface", "cooler_type", "kit_modules"}
+    {"radiator_mm", "max_radiator_mm", "m2_slots", "interface", "cooler_type", "kit_modules", "core_count"}
 )
 
 
