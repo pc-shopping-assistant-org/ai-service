@@ -22,6 +22,7 @@ from ai_service.capabilities.pc_builder.compatibility import case_supported_form
 from ai_service.capabilities.pc_builder.profiles import (
     DEFAULT_ENVELOPES,
     EnvelopeRange,
+    ProfileSpec,
     get_profile_spec,
 )
 from ai_service.capabilities.pc_builder.schemas import BuildObjective, UseCaseProfile
@@ -42,6 +43,7 @@ def get_candidate_pool(
     category: ComponentCategory,
     profile: UseCaseProfile,
     min_viable_preferred: int = 2,
+    profile_spec: ProfileSpec | None = None,
 ) -> CandidatePool:
     """Partition candidates into preferred envelope (for prioritized exploration) and all affordable.
 
@@ -52,7 +54,11 @@ def get_candidate_pool(
     if not affordable:
         return CandidatePool(category=category, preferred=[], all_affordable=[])
 
-    profile_envelopes = DEFAULT_ENVELOPES.get(profile, DEFAULT_ENVELOPES[UseCaseProfile.GAMING_1080P])
+    profile_envelopes = (
+        profile_spec.envelopes
+        if profile_spec is not None
+        else DEFAULT_ENVELOPES.get(profile, DEFAULT_ENVELOPES[UseCaseProfile.GAMING_1080P])
+    )
     envelope = profile_envelopes.get(category, EnvelopeRange(0.0, 1.0, 0.0, 1.0))
 
     pref_min = int(budget * envelope.preferred_min)
@@ -203,13 +209,14 @@ def get_dominance_dimensions(
     category: ComponentCategory,
     profile: UseCaseProfile,
     objective: BuildObjective,
+    profile_spec: ProfileSpec | None = None,
 ) -> list[str]:
     """Return relevant comparison dimensions for a category under specific profile and objective.
 
     Prefix with '-' indicates lower-is-better (e.g. '-tdp_watts', '-gpu_length_mm').
     Positive indicates higher-is-better (e.g. 'performance_score', 'vram_gb').
     """
-    spec = get_profile_spec(profile)
+    spec = profile_spec if profile_spec is not None else get_profile_spec(profile)
 
     if category == ComponentCategory.GPU:
         dims = ["performance_score", "-tdp_watts", "-gpu_length_mm"]
@@ -260,6 +267,7 @@ def dominates(
     worse: ComponentSpec,
     profile: UseCaseProfile,
     objective: BuildObjective,
+    profile_spec: ProfileSpec | None = None,
 ) -> bool:
     """Check if component 'better' Pareto-dominates 'worse' under a specific profile and objective.
 
@@ -347,7 +355,7 @@ def dominates(
             return False
 
     # 3. Dimensions evaluation
-    dimensions = get_dominance_dimensions(better.category, profile, objective)
+    dimensions = get_dominance_dimensions(better.category, profile, objective, profile_spec=profile_spec)
     if not dimensions:
         # Conservative fail-safe: cannot assert dominance without quality dimensions
         return False
@@ -387,6 +395,7 @@ def pareto_prune(
     candidates: list[ComponentSpec],
     profile: UseCaseProfile,
     objective: BuildObjective,
+    profile_spec: ProfileSpec | None = None,
 ) -> list[ComponentSpec]:
     """Prune dominated candidates for a specific objective.
 
@@ -404,7 +413,7 @@ def pareto_prune(
             if candidate is other or stable_component_key(candidate) == stable_component_key(other):
                 continue
 
-            if dominates(other, candidate, profile, objective):
+            if dominates(other, candidate, profile, objective, profile_spec=profile_spec):
                 is_dominated = True
                 break
 
@@ -417,6 +426,7 @@ def pareto_prune(
 def pareto_prune_all_objectives(
     candidates: list[ComponentSpec],
     profile: UseCaseProfile,
+    profile_spec: ProfileSpec | None = None,
 ) -> list[ComponentSpec]:
     """Retain candidates that are non-dominated under AT LEAST ONE objective.
 
@@ -429,7 +439,7 @@ def pareto_prune_all_objectives(
     retained_candidates: list[ComponentSpec] = []
 
     for obj in BuildObjective:
-        pruned = pareto_prune(candidates, profile, obj)
+        pruned = pareto_prune(candidates, profile, obj, profile_spec=profile_spec)
         for c in pruned:
             c_key = stable_component_key(c)
             if c_key not in retained_keys:

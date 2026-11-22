@@ -1291,4 +1291,80 @@ def test_audit_fixes_igpu_cooler_tdp_and_pareto_safety(optimizer: DeterministicP
     assert dominates(nvme_ssd, sata_ssd, UseCaseProfile.GAMING_1440P, BuildObjective.BALANCED) is False
 
 
+def test_soft_preferences_boost_matching_parts_without_hard_filtering(optimizer: DeterministicPCOptimizer) -> None:
+    """Unlocked brand/form-factor preferences award soft bonuses and fall back gracefully if unavailable."""
+    catalog = [
+        ComponentSpec(name="Ryzen 5 7600", brand="AMD", category=ComponentCategory.CPU, price=5_000_000, socket="AM5", tdp_watts=65, performance_score=85),
+        ComponentSpec(name="B650M mATX", category=ComponentCategory.MAINBOARD, price=3_200_000, socket="AM5", ram_type="DDR5", form_factor="Micro-ATX", ram_slots=4),
+        ComponentSpec(name="B650 ATX", category=ComponentCategory.MAINBOARD, price=3_200_000, socket="AM5", ram_type="DDR5", form_factor="ATX", ram_slots=4),
+        ComponentSpec(name="32GB DDR5", category=ComponentCategory.RAM, price=2_600_000, ram_type="DDR5", capacity_gb=32, performance_score=80),
+        ComponentSpec(name="Radeon RX 7700 XT", brand="AMD", category=ComponentCategory.GPU, price=11_000_000, tdp_watts=220, gpu_length_mm=280, vram_gb=12, performance_score=84),
+        ComponentSpec(name="GeForce RTX 4060 Ti", brand="NVIDIA", category=ComponentCategory.GPU, price=11_200_000, tdp_watts=165, gpu_length_mm=260, vram_gb=8, performance_score=83),
+        ComponentSpec(name="Mid Tower", category=ComponentCategory.CASE, price=1_200_000, form_factor="ATX", supported_form_factors=["ATX", "Micro-ATX"], max_gpu_length_mm=340, max_cooler_height_mm=165),
+        ComponentSpec(name="Air Cooler", category=ComponentCategory.COOLER, price=600_000, cooler_height_mm=150, tdp_watts=150, supported_sockets=["AM5"], performance_score=75),
+        ComponentSpec(name="1TB NVMe", category=ComponentCategory.STORAGE, price=1_600_000, capacity_gb=1000, performance_score=80),
+        ComponentSpec(name="750W Gold", category=ComponentCategory.PSU, price=2_200_000, wattage=750, psu_tier="A", performance_score=95),
+    ]
+
+    # Soft NVIDIA + Micro-ATX preference picks RTX 4060 Ti & B650M mATX
+    soft_res = optimizer.optimize(
+        PCBuildConstraints(
+            target_budget_vnd=ConstraintValue[int](value=35_000_000, source=ConstraintSource.USER),
+            use_case=ConstraintValue[UseCaseProfile](value=UseCaseProfile.GAMING_1440P),
+            preferred_gpu_brand=ConstraintValue[str | None](value="NVIDIA", source=ConstraintSource.USER, locked=False),
+            form_factor_preference=ConstraintValue[str | None](value="Micro-ATX", source=ConstraintSource.USER, locked=False),
+        ),
+        catalog,
+    )
+    chosen = soft_res.builds[BuildObjective.BALANCED]
+    assert chosen.parts[ComponentCategory.GPU].brand == "NVIDIA"
+    assert chosen.parts[ComponentCategory.MAINBOARD].form_factor == "Micro-ATX"
+    assert any(ev.metric == "score_dim_soft_pref_gpu_brand" for ev in chosen.evidence)
+    assert any(ev.metric == "score_dim_soft_pref_form_factor" for ev in chosen.evidence)
+
+    # Soft preference for unavailable brand ("INTEL") does NOT fail (unlike locked=True)
+    fallback_res = optimizer.optimize(
+        PCBuildConstraints(
+            target_budget_vnd=ConstraintValue[int](value=35_000_000, source=ConstraintSource.USER),
+            use_case=ConstraintValue[UseCaseProfile](value=UseCaseProfile.GAMING_1440P),
+            preferred_cpu_brand=ConstraintValue[str | None](value="Intel", source=ConstraintSource.USER, locked=False),
+        ),
+        catalog,
+    )
+    assert BuildObjective.BALANCED in fallback_res.builds
+
+
+def test_multi_profile_blending_merges_weights_and_bonuses(optimizer: DeterministicPCOptimizer, realistic_catalog: list[ComponentSpec]) -> None:
+    """Blending two profiles produces valid normalized weights and flows through optimize()."""
+    from ai_service.capabilities.pc_builder.profiles import (
+        blend_profile_specs,
+        get_profile_spec,
+    )
+
+    blended = blend_profile_specs(
+        get_profile_spec(UseCaseProfile.GAMING_1440P),
+        get_profile_spec(UseCaseProfile.SOFTWARE_DEV),
+        secondary_weight=0.30,
+    )
+    for obj in BuildObjective:
+        assert sum(blended.scoring_weights[obj].values()) == pytest.approx(1.0, rel=1e-6)
+    # RAM saturation is interpolated between 32GB (Gaming) and 64GB (Software Dev) -> 41.6GB
+    assert blended.ram_saturation_gb == pytest.approx(41.6, rel=1e-3)
+    # Multi-core bonus from Software Dev carries over proportionally (0.3 * 5.0 = 1.5)
+    assert blended.multicore_max_bonus == pytest.approx(1.5, rel=1e-3)
+    # Conservative iGPU policy: False because Gaming requires dedicated GPU
+    assert blended.allow_igpu_only is False
+
+    res = optimizer.optimize(
+        PCBuildConstraints(
+            target_budget_vnd=ConstraintValue[int](value=30_000_000, source=ConstraintSource.USER),
+            use_case=ConstraintValue[UseCaseProfile](value=UseCaseProfile.GAMING_1440P),
+            secondary_use_case=UseCaseProfile.SOFTWARE_DEV,
+            secondary_use_case_weight=0.30,
+        ),
+        realistic_catalog,
+    )
+    assert BuildObjective.BALANCED in res.builds
+
+
 

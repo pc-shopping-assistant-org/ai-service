@@ -131,6 +131,101 @@ def get_profile_spec(profile: UseCaseProfile) -> ProfileSpec:
     return spec
 
 
+def blend_profile_specs(
+    primary: ProfileSpec,
+    secondary: ProfileSpec,
+    secondary_weight: float = 0.30,
+) -> ProfileSpec:
+    """Linearly blend two ProfileSpecs (e.g. 70% Gaming + 30% Software Dev).
+
+    Preserves weight sum == 1.0 for every BuildObjective and conservatively
+    requires both profiles to allow iGPU-only builds before enabling allow_igpu_only.
+    """
+    if not (0.0 <= secondary_weight <= 0.5):
+        raise ValueError("secondary_weight must be between 0.0 and 0.5")
+    if secondary_weight == 0.0 or primary.profile == secondary.profile:
+        return primary
+
+    w1 = 1.0 - secondary_weight
+    w2 = secondary_weight
+
+    # Blend envelopes
+    envelopes: dict[ComponentCategory, EnvelopeRange] = {}
+    all_cats = set(primary.envelopes) | set(secondary.envelopes)
+    default_env = EnvelopeRange(0.0, 1.0, 0.0, 1.0)
+    for cat in all_cats:
+        e1 = primary.envelopes.get(cat, default_env)
+        e2 = secondary.envelopes.get(cat, default_env)
+        envelopes[cat] = EnvelopeRange(
+            preferred_min=round(e1.preferred_min * w1 + e2.preferred_min * w2, 4),
+            preferred_max=round(e1.preferred_max * w1 + e2.preferred_max * w2, 4),
+            absolute_min=round(e1.absolute_min * w1 + e2.absolute_min * w2, 4),
+            absolute_max=round(e1.absolute_max * w1 + e2.absolute_max * w2, 4),
+        )
+
+    # Blend scoring weights per objective and normalize strictly to 1.0
+    scoring_weights: dict[BuildObjective, dict[str, float]] = {}
+    for obj in BuildObjective:
+        m1 = primary.scoring_weights[obj]
+        m2 = secondary.scoring_weights[obj]
+        merged = {
+            key: m1.get(key, 0.0) * w1 + m2.get(key, 0.0) * w2
+            for key in (set(m1) | set(m2))
+        }
+        total = sum(merged.values())
+        scoring_weights[obj] = {
+            key: val / total for key, val in merged.items() if val > 0.0
+        }
+
+    # Blend bottleneck guardrail
+    if primary.bottleneck_threshold is not None and secondary.bottleneck_threshold is not None:
+        bn_threshold: float | None = round(primary.bottleneck_threshold * w1 + secondary.bottleneck_threshold * w2, 4)
+        bn_slope = round(primary.bottleneck_slope * w1 + secondary.bottleneck_slope * w2, 4)
+        bn_max = round(primary.bottleneck_max_penalty * w1 + secondary.bottleneck_max_penalty * w2, 4)
+    elif primary.bottleneck_threshold is not None:
+        bn_threshold = primary.bottleneck_threshold
+        bn_slope = primary.bottleneck_slope
+        bn_max = round(primary.bottleneck_max_penalty * w1, 4)
+    elif secondary.bottleneck_threshold is not None:
+        bn_threshold = secondary.bottleneck_threshold
+        bn_slope = secondary.bottleneck_slope
+        bn_max = round(secondary.bottleneck_max_penalty * w2, 4)
+    else:
+        bn_threshold = None
+        bn_slope = primary.bottleneck_slope
+        bn_max = primary.bottleneck_max_penalty
+
+    allow_igpu = primary.allow_igpu_only and secondary.allow_igpu_only
+
+    return ProfileSpec(
+        profile=primary.profile,
+        default_objective=primary.default_objective,
+        envelopes=envelopes,
+        scoring_weights=scoring_weights,
+        ram_saturation_gb=round(primary.ram_saturation_gb * w1 + secondary.ram_saturation_gb * w2, 2),
+        storage_saturation_gb=round(primary.storage_saturation_gb * w1 + secondary.storage_saturation_gb * w2, 2),
+        allow_igpu_only=allow_igpu,
+        igpu_bonus=round(primary.igpu_bonus * w1 + secondary.igpu_bonus * w2, 4) if allow_igpu else 0.0,
+        bottleneck_threshold=bn_threshold,
+        bottleneck_slope=bn_slope,
+        bottleneck_max_penalty=bn_max,
+        cuda_bonus=round(primary.cuda_bonus * w1 + secondary.cuda_bonus * w2, 4),
+        multicore_max_bonus=round(primary.multicore_max_bonus * w1 + secondary.multicore_max_bonus * w2, 4),
+    )
+
+
+def resolve_effective_profile_spec(
+    primary: UseCaseProfile,
+    secondary: UseCaseProfile | None = None,
+    secondary_weight: float = 0.30,
+) -> ProfileSpec:
+    """Resolve a single or blended ProfileSpec for optimization."""
+    primary_spec = get_profile_spec(primary)
+    if secondary is None or secondary == primary or secondary_weight <= 0.0:
+        return primary_spec
+    return blend_profile_specs(primary_spec, get_profile_spec(secondary), secondary_weight)
+
+
 # Backwards-compatible derived views
 DEFAULT_ENVELOPES: dict[UseCaseProfile, dict[ComponentCategory, EnvelopeRange]] = {
     profile: spec.envelopes for profile, spec in PROFILE_REGISTRY.items()
@@ -155,6 +250,8 @@ __all__ = [
     "SCORING_POLICIES",
     "EnvelopeRange",
     "ProfileSpec",
+    "blend_profile_specs",
     "get_profile_spec",
     "load_profile_registry",
+    "resolve_effective_profile_spec",
 ]

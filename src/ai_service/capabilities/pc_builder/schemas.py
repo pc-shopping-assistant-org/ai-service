@@ -406,6 +406,16 @@ class PCBuildConstraints(BaseModel):
     use_case: ConstraintValue[UseCaseProfile] = Field(
         default_factory=lambda: ConstraintValue[UseCaseProfile](value=UseCaseProfile.GAMING_1080P, source=ConstraintSource.DEFAULT, confidence=1.0)
     )
+    secondary_use_case: UseCaseProfile | None = Field(
+        default=None,
+        description="Optional secondary workload profile blended with primary use_case.",
+    )
+    secondary_use_case_weight: float = Field(
+        default=0.30,
+        ge=0.0,
+        le=0.5,
+        description="Blend weight for secondary_use_case (0.0 to 0.5).",
+    )
     target_resolution: ConstraintValue[ResolutionTier | None] = Field(
         default_factory=lambda: ConstraintValue[ResolutionTier | None](value=None, source=ConstraintSource.DEFAULT)
     )

@@ -118,6 +118,8 @@ def get_prebuilt_builds() -> ApiResponse[list[dict[str, Any]]]:
 class OptimizeBuildRequest(BaseModel):
     budget_vnd: int = Field(ge=5_000_000, le=500_000_000)
     use_case: UseCaseProfile = UseCaseProfile.GAMING_1440P
+    secondary_use_case: UseCaseProfile | None = None
+    secondary_use_case_weight: float = Field(default=0.30, ge=0.0, le=0.5)
     objective: BuildObjective = BuildObjective.BALANCED
     pinned_slots: dict[str, UUID] = Field(default_factory=dict, max_length=8)
 
@@ -223,6 +225,8 @@ async def optimize_build(
         use_case=ConstraintValue[UseCaseProfile](
             value=request.use_case, source=ConstraintSource.USER, locked=True
         ),
+        secondary_use_case=request.secondary_use_case,
+        secondary_use_case_weight=request.secondary_use_case_weight,
         pinned_parts=pinned_parts,
     )
     try:

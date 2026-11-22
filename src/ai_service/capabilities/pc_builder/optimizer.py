@@ -21,7 +21,9 @@ from ai_service.capabilities.pc_builder.errors import (
 from ai_service.capabilities.pc_builder.preferences import apply_preferences
 from ai_service.capabilities.pc_builder.profiles import (
     SCORING_POLICIES,
+    ProfileSpec,
     get_profile_spec,
+    resolve_effective_profile_spec,
 )
 from ai_service.capabilities.pc_builder.pruning import (
     get_candidate_pool,
@@ -45,6 +47,7 @@ from ai_service.capabilities.pc_builder.schemas import (
 )
 
 SYNTHETIC_NAMESPACE = UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+SOFT_PREFERENCE_BONUS = 3.0
 
 STANDARD_PSU_SIZES = [450, 500, 550, 600, 650, 750, 850, 1000, 1200]
 POWER_SIZING_POLICY_VERSION = "eng-power-sizing-v1"
@@ -330,6 +333,7 @@ def score_build(
     power: PowerEstimate,
     platform_policy: dict[str, float] | None = None,
     total_spending: int | None = None,
+    profile_spec: ProfileSpec | None = None,
 ) -> ScoreBreakdown:
     """Multi-attribute utility scoring strictly normalized to [0.0, 100.0] under (profile, objective).
 
@@ -340,9 +344,9 @@ def score_build(
         return ScoreBreakdown(total_score=-1.0, dimensions=[])
 
     policy_map = platform_policy or DEFAULT_PLATFORM_POLICY
-    if (profile, objective) not in SCORING_POLICIES:
+    if profile_spec is None and (profile, objective) not in SCORING_POLICIES:
         raise ValueError(f"No scoring policy registered for ({profile}, {objective}).")
-    spec = get_profile_spec(profile)
+    spec = profile_spec if profile_spec is not None else get_profile_spec(profile)
     weights = spec.scoring_weights[objective]
 
     gpu = parts.get(ComponentCategory.GPU)
@@ -527,6 +531,78 @@ def score_build(
     )
 
 
+def apply_soft_preferences(
+    breakdown: ScoreBreakdown,
+    parts: dict[ComponentCategory, ComponentSpec],
+    constraints: PCBuildConstraints,
+) -> ScoreBreakdown:
+    """Award bounded soft preference bonuses when brand or form-factor preferences are unlocked."""
+    if breakdown.total_score < 0.0:
+        return breakdown
+
+    extra_dims: list[ScoreDimension] = []
+    score = breakdown.total_score
+
+    gpu_pref = constraints.preferred_gpu_brand
+    gpu = parts.get(ComponentCategory.GPU)
+    if not gpu_pref.locked and gpu_pref.value and gpu is not None and not gpu.is_integrated:
+        pref_b = gpu_pref.value.upper()
+        if pref_b in (gpu.brand or "").upper() or pref_b in gpu.name.upper():
+            score = min(100.0, score + SOFT_PREFERENCE_BONUS)
+            extra_dims.append(
+                ScoreDimension(
+                    name="soft_pref_gpu_brand",
+                    raw_value=gpu_pref.value,
+                    normalized_score=100.0,
+                    weight=round(SOFT_PREFERENCE_BONUS / 100.0, 4),
+                    contribution=SOFT_PREFERENCE_BONUS,
+                )
+            )
+
+    cpu_pref = constraints.preferred_cpu_brand
+    cpu = parts.get(ComponentCategory.CPU)
+    if not cpu_pref.locked and cpu_pref.value and cpu is not None:
+        pref_c = cpu_pref.value.upper()
+        if pref_c in (cpu.brand or "").upper() or pref_c in cpu.name.upper():
+            score = min(100.0, score + SOFT_PREFERENCE_BONUS)
+            extra_dims.append(
+                ScoreDimension(
+                    name="soft_pref_cpu_brand",
+                    raw_value=cpu_pref.value,
+                    normalized_score=100.0,
+                    weight=round(SOFT_PREFERENCE_BONUS / 100.0, 4),
+                    contribution=SOFT_PREFERENCE_BONUS,
+                )
+            )
+
+    ff_pref = constraints.form_factor_preference
+    mb = parts.get(ComponentCategory.MAINBOARD)
+    if (
+        not ff_pref.locked
+        and ff_pref.value
+        and mb is not None
+        and mb.form_factor
+        and _norm(mb.form_factor) == _norm(ff_pref.value)
+    ):
+            score = min(100.0, score + SOFT_PREFERENCE_BONUS)
+            extra_dims.append(
+                ScoreDimension(
+                    name="soft_pref_form_factor",
+                    raw_value=ff_pref.value,
+                    normalized_score=100.0,
+                    weight=round(SOFT_PREFERENCE_BONUS / 100.0, 4),
+                    contribution=SOFT_PREFERENCE_BONUS,
+                )
+            )
+
+    if not extra_dims:
+        return breakdown
+    return ScoreBreakdown(
+        total_score=round(score, 4),
+        dimensions=[*breakdown.dimensions, *extra_dims],
+    )
+
+
 def _generate_factual_evidence(
     parts: dict[ComponentCategory, ComponentSpec],
     objective: BuildObjective | None,
@@ -623,6 +699,11 @@ class DeterministicPCOptimizer:
         """Run deterministic constrained enumeration with early feasibility pruning."""
         budget = constraints.target_budget_vnd.value
         profile = constraints.use_case.value
+        effective_spec = resolve_effective_profile_spec(
+            profile,
+            constraints.secondary_use_case,
+            constraints.secondary_use_case_weight,
+        )
         rejected_candidates: list[str] = []
         missing_case_support = False
         metadata_rejections = 0
@@ -707,12 +788,19 @@ class DeterministicPCOptimizer:
                     rejected_candidates.append(f"{cat}: pinned variant unavailable or over budget")
                 continue
 
-            pool = get_candidate_pool(items, budget, cat, profile)
+            pool = get_candidate_pool(items, budget, cat, profile, profile_spec=effective_spec)
             has_pref_scores = any(
                 constraints.preference_scores.get(part.id, 0) if part.id else 0 for part in pool.all_affordable
             )
-            if self.enable_pruning and not has_pref_scores:
-                non_dominated = pareto_prune_all_objectives(pool.all_affordable, profile)
+            has_soft_pref = (
+                (cat == ComponentCategory.GPU and not constraints.preferred_gpu_brand.locked and bool(constraints.preferred_gpu_brand.value))
+                or (cat == ComponentCategory.CPU and not constraints.preferred_cpu_brand.locked and bool(constraints.preferred_cpu_brand.value))
+                or (cat in {ComponentCategory.MAINBOARD, ComponentCategory.CASE} and not constraints.form_factor_preference.locked and bool(constraints.form_factor_preference.value))
+            )
+            if self.enable_pruning and not has_pref_scores and not has_soft_pref:
+                non_dominated = pareto_prune_all_objectives(
+                    pool.all_affordable, profile, profile_spec=effective_spec
+                )
                 total_pruned_candidates += len(pool.all_affordable) - len(non_dominated)
                 preferred_set = {stable_component_id(p) for p in pool.preferred}
                 preferred_non_dominated = [c for c in non_dominated if stable_component_id(c) in preferred_set] or non_dominated
@@ -1090,12 +1178,14 @@ class DeterministicPCOptimizer:
                                                 power,
                                                 self.platform_policy,
                                                 total_spending=total_spending,
+                                                profile_spec=effective_spec,
                                             )
                                             if breakdown.total_score < 0.0:
                                                 scoring_rejections += 1
                                                 continue
 
                                             breakdown = apply_preferences(breakdown, full_parts, constraints.preference_scores)
+                                            breakdown = apply_soft_preferences(breakdown, full_parts, constraints)
                                             score_val = breakdown.total_score
                                             current_record = best_builds[obj]
                                             if (
