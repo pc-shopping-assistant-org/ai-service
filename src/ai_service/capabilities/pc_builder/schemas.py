@@ -61,8 +61,14 @@ class UseCaseProfile(StrEnum):
     GAMING_1080P = "GAMING_1080P"
     GAMING_1440P = "GAMING_1440P"
     GAMING_4K = "GAMING_4K"
+    GAMING_ESPORTS = "GAMING_ESPORTS"
+    STREAMING_GAMING = "STREAMING_GAMING"
     CONTENT_CREATION_3D = "CONTENT_CREATION_3D"
+    VIDEO_EDITING = "VIDEO_EDITING"
+    GRAPHIC_DESIGN_2D = "GRAPHIC_DESIGN_2D"
     AI_DATA_SCIENCE = "AI_DATA_SCIENCE"
+    SOFTWARE_DEV = "SOFTWARE_DEV"
+    WORKSTATION_SILENT = "WORKSTATION_SILENT"
     OFFICE_BUDGET = "OFFICE_BUDGET"
 
 
@@ -93,7 +99,7 @@ class RecommendBuildArgs(BaseModel):
     )
     use_case: UseCaseProfile = Field(
         default=UseCaseProfile.GAMING_1440P,
-        description="Primary use-case profile (GAMING_1080P, GAMING_1440P, GAMING_4K, CONTENT_CREATION_3D, AI_DATA_SCIENCE, OFFICE_BUDGET).",
+        description="Primary use-case profile (GAMING_1080P, GAMING_1440P, GAMING_4K, GAMING_ESPORTS, STREAMING_GAMING, CONTENT_CREATION_3D, VIDEO_EDITING, GRAPHIC_DESIGN_2D, AI_DATA_SCIENCE, SOFTWARE_DEV, WORKSTATION_SILENT, OFFICE_BUDGET).",
     )
     resolution: ResolutionTier | None = Field(
         default=None,
@@ -112,11 +118,15 @@ class RecommendBuildArgs(BaseModel):
             if "." in p:
                 p = p.split(".")[-1]
             mapping = {
-                "GAMING_ESPORTS": UseCaseProfile.GAMING_1080P,
+                "GAMING_ESPORTS": UseCaseProfile.GAMING_ESPORTS,
                 "GAMING_AAA": UseCaseProfile.GAMING_1440P,
-                "GRAPHIC_DESIGN": UseCaseProfile.CONTENT_CREATION_3D,
+                "GRAPHIC_DESIGN": UseCaseProfile.GRAPHIC_DESIGN_2D,
                 "AI_DEEP_LEARNING": UseCaseProfile.AI_DATA_SCIENCE,
                 "OFFICE": UseCaseProfile.OFFICE_BUDGET,
+                "PROGRAMMING": UseCaseProfile.SOFTWARE_DEV,
+                "STREAMING": UseCaseProfile.STREAMING_GAMING,
+                "VIDEO_EDIT": UseCaseProfile.VIDEO_EDITING,
+                "WORKSTATION": UseCaseProfile.WORKSTATION_SILENT,
             }
             if p in mapping:
                 data["use_case"] = mapping[p]

@@ -19,6 +19,10 @@ from ai_service.capabilities.pc_builder.errors import (
     NoFeasibleBuildError,
 )
 from ai_service.capabilities.pc_builder.preferences import apply_preferences
+from ai_service.capabilities.pc_builder.profiles import (
+    SCORING_POLICIES,
+    get_profile_spec,
+)
 from ai_service.capabilities.pc_builder.pruning import (
     get_candidate_pool,
     is_nvidia_gpu,
@@ -74,187 +78,6 @@ FIXED_CATEGORY_ORDER = (
     ComponentCategory.STORAGE,
     ComponentCategory.PSU,
 )
-
-# Configured scoring policies: (UseCaseProfile, BuildObjective) -> dict[metric_name, weight]
-# Sum of weights strictly equals 1.0 for each policy
-SCORING_POLICIES: dict[tuple[UseCaseProfile, BuildObjective], dict[str, float]] = {
-    # GAMING 1440P
-    (UseCaseProfile.GAMING_1440P, BuildObjective.PERFORMANCE): {
-        "gpu_perf": 0.50,
-        "cpu_perf": 0.25,
-        "cost_efficiency": 0.15,
-        "ram_capacity": 0.10,
-    },
-    (UseCaseProfile.GAMING_1440P, BuildObjective.BALANCED): {
-        "gpu_perf": 0.35,
-        "cpu_perf": 0.20,
-        "psu_quality": 0.15,
-        "platform_longevity": 0.15,
-        "ram_capacity": 0.10,
-        "psu_headroom": 0.05,
-    },
-    (UseCaseProfile.GAMING_1440P, BuildObjective.UPGRADE_FRIENDLY): {
-        "platform_longevity": 0.35,
-        "ram_slots": 0.20,
-        "psu_headroom": 0.20,
-        "gpu_perf": 0.15,
-        "cpu_perf": 0.10,
-    },
-    # GAMING 1080P
-    (UseCaseProfile.GAMING_1080P, BuildObjective.PERFORMANCE): {
-        "gpu_perf": 0.42,
-        "cpu_perf": 0.30,
-        "cost_efficiency": 0.18,
-        "ram_capacity": 0.10,
-    },
-    (UseCaseProfile.GAMING_1080P, BuildObjective.BALANCED): {
-        "gpu_perf": 0.32,
-        "cpu_perf": 0.24,
-        "psu_quality": 0.15,
-        "platform_longevity": 0.15,
-        "ram_capacity": 0.10,
-        "psu_headroom": 0.04,
-    },
-    (UseCaseProfile.GAMING_1080P, BuildObjective.UPGRADE_FRIENDLY): {
-        "platform_longevity": 0.35,
-        "ram_slots": 0.20,
-        "psu_headroom": 0.20,
-        "cpu_perf": 0.15,
-        "gpu_perf": 0.10,
-    },
-    # GAMING 4K
-    (UseCaseProfile.GAMING_4K, BuildObjective.PERFORMANCE): {
-        "gpu_perf": 0.55,
-        "gpu_vram": 0.15,
-        "cpu_perf": 0.15,
-        "cost_efficiency": 0.10,
-        "ram_capacity": 0.05,
-    },
-    (UseCaseProfile.GAMING_4K, BuildObjective.BALANCED): {
-        "gpu_perf": 0.40,
-        "gpu_vram": 0.15,
-        "cpu_perf": 0.15,
-        "psu_quality": 0.15,
-        "platform_longevity": 0.10,
-        "psu_headroom": 0.05,
-    },
-    (UseCaseProfile.GAMING_4K, BuildObjective.UPGRADE_FRIENDLY): {
-        "platform_longevity": 0.30,
-        "psu_headroom": 0.25,
-        "gpu_vram": 0.15,
-        "ram_slots": 0.15,
-        "gpu_perf": 0.15,
-    },
-    # AI & DATA SCIENCE
-    (UseCaseProfile.AI_DATA_SCIENCE, BuildObjective.PERFORMANCE): {
-        "gpu_vram": 0.38,
-        "gpu_perf": 0.28,
-        "cpu_perf": 0.14,
-        "ram_capacity": 0.10,
-        "cost_efficiency": 0.10,
-    },
-    (UseCaseProfile.AI_DATA_SCIENCE, BuildObjective.BALANCED): {
-        "gpu_vram": 0.30,
-        "gpu_perf": 0.25,
-        "ram_capacity": 0.15,
-        "psu_quality": 0.15,
-        "cpu_perf": 0.10,
-        "psu_headroom": 0.05,
-    },
-    (UseCaseProfile.AI_DATA_SCIENCE, BuildObjective.UPGRADE_FRIENDLY): {
-        "platform_longevity": 0.30,
-        "psu_headroom": 0.25,
-        "ram_slots": 0.20,
-        "gpu_vram": 0.15,
-        "gpu_perf": 0.10,
-    },
-    # CONTENT CREATION 3D
-    (UseCaseProfile.CONTENT_CREATION_3D, BuildObjective.PERFORMANCE): {
-        "cpu_perf": 0.35,
-        "gpu_perf": 0.30,
-        "ram_capacity": 0.15,
-        "storage_capacity": 0.10,
-        "cost_efficiency": 0.10,
-    },
-    (UseCaseProfile.CONTENT_CREATION_3D, BuildObjective.BALANCED): {
-        "cpu_perf": 0.28,
-        "gpu_perf": 0.24,
-        "ram_capacity": 0.16,
-        "psu_quality": 0.12,
-        "platform_longevity": 0.10,
-        "storage_capacity": 0.10,
-    },
-    (UseCaseProfile.CONTENT_CREATION_3D, BuildObjective.UPGRADE_FRIENDLY): {
-        "platform_longevity": 0.30,
-        "ram_slots": 0.25,
-        "psu_headroom": 0.20,
-        "cpu_perf": 0.15,
-        "gpu_perf": 0.10,
-    },
-    # OFFICE BUDGET
-    (UseCaseProfile.OFFICE_BUDGET, BuildObjective.PERFORMANCE): {
-        "cpu_perf": 0.45,
-        "cost_efficiency": 0.30,
-        "ram_capacity": 0.15,
-        "storage_capacity": 0.10,
-    },
-    (UseCaseProfile.OFFICE_BUDGET, BuildObjective.BALANCED): {
-        "cpu_perf": 0.35,
-        "cost_efficiency": 0.25,
-        "psu_quality": 0.15,
-        "platform_longevity": 0.15,
-        "ram_capacity": 0.10,
-    },
-    (UseCaseProfile.OFFICE_BUDGET, BuildObjective.UPGRADE_FRIENDLY): {
-        "platform_longevity": 0.35,
-        "ram_slots": 0.25,
-        "psu_headroom": 0.20,
-        "cpu_perf": 0.20,
-    },
-}
-
-# Startup assertion: Every (UseCaseProfile, BuildObjective) pair must be defined,
-# and each policy's weights must sum to 1.0 within floating point tolerance.
-for _prof in UseCaseProfile:
-    for _obj in BuildObjective:
-        if (_prof, _obj) not in SCORING_POLICIES:
-            raise AssertionError(f"Missing scoring policy for ({_prof}, {_obj})")
-        _policy_sum = sum(SCORING_POLICIES[(_prof, _obj)].values())
-        if abs(_policy_sum - 1.0) > 1e-6:
-            raise AssertionError(
-                f"Scoring policy ({_prof}, {_obj}) weights sum to {_policy_sum}, must equal 1.0"
-            )
-
-
-PROFILE_RAM_SATURATION_GB: dict[UseCaseProfile, float] = {
-    UseCaseProfile.OFFICE_BUDGET: 16.0,
-    UseCaseProfile.GAMING_1080P: 32.0,
-    UseCaseProfile.GAMING_1440P: 32.0,
-    UseCaseProfile.GAMING_4K: 32.0,
-    UseCaseProfile.CONTENT_CREATION_3D: 64.0,
-    UseCaseProfile.AI_DATA_SCIENCE: 64.0,
-}
-
-PROFILE_STORAGE_SATURATION_GB: dict[UseCaseProfile, float] = {
-    UseCaseProfile.OFFICE_BUDGET: 512.0,
-    UseCaseProfile.GAMING_1080P: 1000.0,
-    UseCaseProfile.GAMING_1440P: 1000.0,
-    UseCaseProfile.GAMING_4K: 2000.0,
-    UseCaseProfile.CONTENT_CREATION_3D: 2000.0,
-    UseCaseProfile.AI_DATA_SCIENCE: 2000.0,
-}
-
-GAMING_PROFILES = frozenset(
-    {
-        UseCaseProfile.GAMING_1080P,
-        UseCaseProfile.GAMING_1440P,
-        UseCaseProfile.GAMING_4K,
-    }
-)
-GAMING_BOTTLENECK_THRESHOLD = 25.0
-GAMING_BOTTLENECK_SLOPE = 0.4
-GAMING_BOTTLENECK_MAX_PENALTY = 12.0
-
 
 def _norm(val: str | None) -> str:
     return (val or "").strip().upper().replace(" ", "").replace("-", "")
@@ -512,7 +335,8 @@ def score_build(
     policy_map = platform_policy or DEFAULT_PLATFORM_POLICY
     if (profile, objective) not in SCORING_POLICIES:
         raise ValueError(f"No scoring policy registered for ({profile}, {objective}).")
-    weights = SCORING_POLICIES[(profile, objective)]
+    spec = get_profile_spec(profile)
+    weights = spec.scoring_weights[objective]
 
     gpu = parts.get(ComponentCategory.GPU)
     cpu = parts.get(ComponentCategory.CPU)
@@ -544,15 +368,15 @@ def score_build(
         if dim == "psu_headroom" and (psu is None or psu.wattage is None):
             return ScoreBreakdown(total_score=-1.0, dimensions=[])
         if dim == "cost_efficiency":
-            office_igpu_ok = (
-                profile == UseCaseProfile.OFFICE_BUDGET
+            igpu_only_ok = (
+                spec.allow_igpu_only
                 and gpu is None
                 and cpu is not None
                 and cpu.has_integrated_graphics
             )
             if cpu is None or cpu.performance_score is None:
                 return ScoreBreakdown(total_score=-1.0, dimensions=[])
-            if not office_igpu_ok and (gpu is None or gpu.performance_score is None):
+            if not igpu_only_ok and (gpu is None or gpu.performance_score is None):
                 return ScoreBreakdown(total_score=-1.0, dimensions=[])
 
     # 2. Compute exact normalized dimension scores [0.0, 100.0]
@@ -572,13 +396,11 @@ def score_build(
         raw_values["cpu_perf"] = float(cpu.performance_score)
 
     if ram and ram.capacity_gb is not None:
-        ram_cap = PROFILE_RAM_SATURATION_GB.get(profile, 64.0)
-        dimension_scores["ram_capacity"] = max(0.0, min(100.0, (float(ram.capacity_gb) / ram_cap) * 100.0))
+        dimension_scores["ram_capacity"] = max(0.0, min(100.0, (float(ram.capacity_gb) / spec.ram_saturation_gb) * 100.0))
         raw_values["ram_capacity"] = int(ram.capacity_gb)
 
     if storage and storage.capacity_gb is not None:
-        storage_cap = PROFILE_STORAGE_SATURATION_GB.get(profile, 2000.0)
-        dimension_scores["storage_capacity"] = max(0.0, min(100.0, (float(storage.capacity_gb) / storage_cap) * 100.0))
+        dimension_scores["storage_capacity"] = max(0.0, min(100.0, (float(storage.capacity_gb) / spec.storage_saturation_gb) * 100.0))
         raw_values["storage_capacity"] = int(storage.capacity_gb)
 
     if mb and mb.socket:
@@ -602,7 +424,7 @@ def score_build(
 
     if "cpu_perf" in dimension_scores and (
         "gpu_perf" in dimension_scores
-        or (profile == UseCaseProfile.OFFICE_BUDGET and gpu is None and cpu is not None and cpu.has_integrated_graphics)
+        or (spec.allow_igpu_only and gpu is None and cpu is not None and cpu.has_integrated_graphics)
     ):
         price_millions = max(1.0, spending / 1_000_000.0)
         gpu_contrib = (
@@ -634,11 +456,11 @@ def score_build(
             )
             total_score += contrib
 
-    # 4. Profile-specific guardrails & bonuses (bounded within [0.0, 100.0])
-    if profile in GAMING_PROFILES and "gpu_perf" in dimension_scores and "cpu_perf" in dimension_scores:
+    # 4. Data-driven profile guardrails & bonuses (bounded within [0.0, 100.0])
+    if spec.bottleneck_threshold is not None and "gpu_perf" in dimension_scores and "cpu_perf" in dimension_scores:
         gap = abs(dimension_scores["gpu_perf"] - dimension_scores["cpu_perf"])
-        if gap > GAMING_BOTTLENECK_THRESHOLD:
-            penalty = round(min(GAMING_BOTTLENECK_MAX_PENALTY, (gap - GAMING_BOTTLENECK_THRESHOLD) * GAMING_BOTTLENECK_SLOPE), 4)
+        if gap > spec.bottleneck_threshold:
+            penalty = round(min(spec.bottleneck_max_penalty, (gap - spec.bottleneck_threshold) * spec.bottleneck_slope), 4)
             total_score = max(0.0, total_score - penalty)
             dimensions.append(
                 ScoreDimension(
@@ -650,45 +472,43 @@ def score_build(
                 )
             )
 
-    if profile in {UseCaseProfile.AI_DATA_SCIENCE, UseCaseProfile.CONTENT_CREATION_3D}:
-        if is_nvidia_gpu(gpu):
-            cuda_bonus = 6.0 if profile == UseCaseProfile.AI_DATA_SCIENCE else 3.0
-            total_score = min(100.0, total_score + cuda_bonus)
-            dimensions.append(
-                ScoreDimension(
-                    name="cuda_ecosystem",
-                    raw_value="NVIDIA",
-                    normalized_score=100.0,
-                    weight=round(cuda_bonus / 100.0, 4),
-                    contribution=cuda_bonus,
-                )
+    if spec.cuda_bonus > 0 and is_nvidia_gpu(gpu):
+        total_score = min(100.0, total_score + spec.cuda_bonus)
+        dimensions.append(
+            ScoreDimension(
+                name="cuda_ecosystem",
+                raw_value="NVIDIA",
+                normalized_score=100.0,
+                weight=round(spec.cuda_bonus / 100.0, 4),
+                contribution=spec.cuda_bonus,
             )
+        )
+
+    if spec.multicore_max_bonus > 0:
         cpu_cores = resolve_component_metric(cpu, "core_count") if cpu is not None else None
         if cpu_cores is not None and cpu_cores >= 8:
-            max_mc_bonus = 4.0 if profile == UseCaseProfile.CONTENT_CREATION_3D else 2.0
             mc_ratio = min(1.0, (cpu_cores - 6.0) / 10.0)
-            mc_bonus = round(max_mc_bonus * mc_ratio, 4)
+            mc_bonus = round(spec.multicore_max_bonus * mc_ratio, 4)
             total_score = min(100.0, total_score + mc_bonus)
             dimensions.append(
                 ScoreDimension(
                     name="cpu_multicore",
                     raw_value=int(cpu_cores),
                     normalized_score=round(mc_ratio * 100.0, 4),
-                    weight=round(max_mc_bonus / 100.0, 4),
+                    weight=round(spec.multicore_max_bonus / 100.0, 4),
                     contribution=mc_bonus,
                 )
             )
 
-    if profile == UseCaseProfile.OFFICE_BUDGET and gpu is None and cpu is not None and cpu.has_integrated_graphics:
-        igpu_bonus = 4.0
-        total_score = min(100.0, total_score + igpu_bonus)
+    if spec.igpu_bonus > 0 and gpu is None and cpu is not None and cpu.has_integrated_graphics:
+        total_score = min(100.0, total_score + spec.igpu_bonus)
         dimensions.append(
             ScoreDimension(
                 name="igpu_office_fit",
                 raw_value="iGPU",
                 normalized_score=100.0,
-                weight=0.04,
-                contribution=igpu_bonus,
+                weight=round(spec.igpu_bonus / 100.0, 4),
+                contribution=spec.igpu_bonus,
             )
         )
 

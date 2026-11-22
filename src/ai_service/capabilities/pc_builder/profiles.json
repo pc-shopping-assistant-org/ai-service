@@ -1,0 +1,547 @@
+{
+  "GAMING_1080P": {
+    "default_objective": "BALANCED",
+    "ram_saturation_gb": 32.0,
+    "storage_saturation_gb": 1000.0,
+    "allow_igpu_only": false,
+    "igpu_bonus": 0.0,
+    "bottleneck_threshold": 25.0,
+    "bottleneck_slope": 0.4,
+    "bottleneck_max_penalty": 12.0,
+    "cuda_bonus": 0.0,
+    "multicore_max_bonus": 0.0,
+    "envelopes": {
+      "GPU": [0.30, 0.48, 0.18, 0.60],
+      "CPU": [0.18, 0.28, 0.10, 0.38],
+      "MAINBOARD": [0.08, 0.16, 0.05, 0.22],
+      "RAM": [0.05, 0.12, 0.03, 0.18],
+      "STORAGE": [0.04, 0.10, 0.03, 0.15],
+      "PSU": [0.05, 0.10, 0.03, 0.15],
+      "CASE": [0.03, 0.08, 0.02, 0.12],
+      "COOLER": [0.02, 0.06, 0.00, 0.10]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "gpu_perf": 0.42,
+        "cpu_perf": 0.30,
+        "cost_efficiency": 0.18,
+        "ram_capacity": 0.10
+      },
+      "BALANCED": {
+        "gpu_perf": 0.32,
+        "cpu_perf": 0.24,
+        "psu_quality": 0.15,
+        "platform_longevity": 0.15,
+        "ram_capacity": 0.10,
+        "psu_headroom": 0.04
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.35,
+        "ram_slots": 0.20,
+        "psu_headroom": 0.20,
+        "cpu_perf": 0.15,
+        "gpu_perf": 0.10
+      }
+    }
+  },
+  "GAMING_1440P": {
+    "default_objective": "BALANCED",
+    "ram_saturation_gb": 32.0,
+    "storage_saturation_gb": 1000.0,
+    "allow_igpu_only": false,
+    "igpu_bonus": 0.0,
+    "bottleneck_threshold": 25.0,
+    "bottleneck_slope": 0.4,
+    "bottleneck_max_penalty": 12.0,
+    "cuda_bonus": 0.0,
+    "multicore_max_bonus": 0.0,
+    "envelopes": {
+      "GPU": [0.35, 0.55, 0.22, 0.65],
+      "CPU": [0.15, 0.25, 0.10, 0.35],
+      "MAINBOARD": [0.08, 0.16, 0.05, 0.22],
+      "RAM": [0.05, 0.12, 0.03, 0.18],
+      "STORAGE": [0.04, 0.10, 0.03, 0.15],
+      "PSU": [0.05, 0.10, 0.03, 0.15],
+      "CASE": [0.03, 0.08, 0.02, 0.12],
+      "COOLER": [0.02, 0.07, 0.00, 0.12]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "gpu_perf": 0.50,
+        "cpu_perf": 0.25,
+        "cost_efficiency": 0.15,
+        "ram_capacity": 0.10
+      },
+      "BALANCED": {
+        "gpu_perf": 0.35,
+        "cpu_perf": 0.20,
+        "psu_quality": 0.15,
+        "platform_longevity": 0.15,
+        "ram_capacity": 0.10,
+        "psu_headroom": 0.05
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.35,
+        "ram_slots": 0.20,
+        "psu_headroom": 0.20,
+        "gpu_perf": 0.15,
+        "cpu_perf": 0.10
+      }
+    }
+  },
+  "GAMING_4K": {
+    "default_objective": "PERFORMANCE",
+    "ram_saturation_gb": 32.0,
+    "storage_saturation_gb": 2000.0,
+    "allow_igpu_only": false,
+    "igpu_bonus": 0.0,
+    "bottleneck_threshold": 25.0,
+    "bottleneck_slope": 0.4,
+    "bottleneck_max_penalty": 12.0,
+    "cuda_bonus": 0.0,
+    "multicore_max_bonus": 0.0,
+    "envelopes": {
+      "GPU": [0.42, 0.62, 0.30, 0.72],
+      "CPU": [0.14, 0.22, 0.08, 0.30],
+      "MAINBOARD": [0.08, 0.15, 0.05, 0.20],
+      "RAM": [0.05, 0.12, 0.03, 0.18],
+      "STORAGE": [0.04, 0.10, 0.03, 0.15],
+      "PSU": [0.06, 0.12, 0.04, 0.18],
+      "CASE": [0.04, 0.09, 0.02, 0.14],
+      "COOLER": [0.03, 0.08, 0.01, 0.14]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "gpu_perf": 0.55,
+        "gpu_vram": 0.15,
+        "cpu_perf": 0.15,
+        "cost_efficiency": 0.10,
+        "ram_capacity": 0.05
+      },
+      "BALANCED": {
+        "gpu_perf": 0.40,
+        "gpu_vram": 0.15,
+        "cpu_perf": 0.15,
+        "psu_quality": 0.15,
+        "platform_longevity": 0.10,
+        "psu_headroom": 0.05
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.30,
+        "psu_headroom": 0.25,
+        "gpu_vram": 0.15,
+        "ram_slots": 0.15,
+        "gpu_perf": 0.15
+      }
+    }
+  },
+  "CONTENT_CREATION_3D": {
+    "default_objective": "BALANCED",
+    "ram_saturation_gb": 64.0,
+    "storage_saturation_gb": 2000.0,
+    "allow_igpu_only": false,
+    "igpu_bonus": 0.0,
+    "bottleneck_threshold": null,
+    "bottleneck_slope": 0.4,
+    "bottleneck_max_penalty": 12.0,
+    "cuda_bonus": 3.0,
+    "multicore_max_bonus": 4.0,
+    "envelopes": {
+      "CPU": [0.22, 0.35, 0.15, 0.45],
+      "GPU": [0.28, 0.45, 0.18, 0.55],
+      "RAM": [0.08, 0.18, 0.05, 0.25],
+      "STORAGE": [0.06, 0.14, 0.04, 0.20],
+      "MAINBOARD": [0.08, 0.16, 0.05, 0.22],
+      "PSU": [0.05, 0.11, 0.03, 0.16],
+      "COOLER": [0.03, 0.09, 0.01, 0.15],
+      "CASE": [0.03, 0.08, 0.02, 0.12]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "cpu_perf": 0.35,
+        "gpu_perf": 0.30,
+        "ram_capacity": 0.15,
+        "storage_capacity": 0.10,
+        "cost_efficiency": 0.10
+      },
+      "BALANCED": {
+        "cpu_perf": 0.28,
+        "gpu_perf": 0.24,
+        "ram_capacity": 0.16,
+        "psu_quality": 0.12,
+        "platform_longevity": 0.10,
+        "storage_capacity": 0.10
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.30,
+        "ram_slots": 0.25,
+        "psu_headroom": 0.20,
+        "cpu_perf": 0.15,
+        "gpu_perf": 0.10
+      }
+    }
+  },
+  "AI_DATA_SCIENCE": {
+    "default_objective": "PERFORMANCE",
+    "ram_saturation_gb": 64.0,
+    "storage_saturation_gb": 2000.0,
+    "allow_igpu_only": false,
+    "igpu_bonus": 0.0,
+    "bottleneck_threshold": null,
+    "bottleneck_slope": 0.4,
+    "bottleneck_max_penalty": 12.0,
+    "cuda_bonus": 6.0,
+    "multicore_max_bonus": 2.0,
+    "envelopes": {
+      "GPU": [0.40, 0.65, 0.25, 0.75],
+      "CPU": [0.12, 0.22, 0.08, 0.30],
+      "RAM": [0.08, 0.18, 0.05, 0.25],
+      "STORAGE": [0.05, 0.12, 0.03, 0.18],
+      "MAINBOARD": [0.07, 0.15, 0.04, 0.20],
+      "PSU": [0.06, 0.12, 0.04, 0.18],
+      "COOLER": [0.02, 0.07, 0.01, 0.12],
+      "CASE": [0.03, 0.08, 0.02, 0.12]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "gpu_vram": 0.38,
+        "gpu_perf": 0.28,
+        "cpu_perf": 0.14,
+        "ram_capacity": 0.10,
+        "cost_efficiency": 0.10
+      },
+      "BALANCED": {
+        "gpu_vram": 0.30,
+        "gpu_perf": 0.25,
+        "ram_capacity": 0.15,
+        "psu_quality": 0.15,
+        "cpu_perf": 0.10,
+        "psu_headroom": 0.05
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.30,
+        "psu_headroom": 0.25,
+        "ram_slots": 0.20,
+        "gpu_vram": 0.15,
+        "gpu_perf": 0.10
+      }
+    }
+  },
+  "OFFICE_BUDGET": {
+    "default_objective": "BALANCED",
+    "ram_saturation_gb": 16.0,
+    "storage_saturation_gb": 512.0,
+    "allow_igpu_only": true,
+    "igpu_bonus": 4.0,
+    "bottleneck_threshold": null,
+    "bottleneck_slope": 0.4,
+    "bottleneck_max_penalty": 12.0,
+    "cuda_bonus": 0.0,
+    "multicore_max_bonus": 0.0,
+    "envelopes": {
+      "CPU": [0.22, 0.38, 0.12, 0.50],
+      "MAINBOARD": [0.12, 0.24, 0.08, 0.32],
+      "RAM": [0.08, 0.18, 0.05, 0.25],
+      "STORAGE": [0.08, 0.18, 0.04, 0.25],
+      "PSU": [0.08, 0.16, 0.04, 0.22],
+      "CASE": [0.05, 0.14, 0.03, 0.20],
+      "COOLER": [0.00, 0.08, 0.00, 0.12],
+      "GPU": [0.00, 0.25, 0.00, 0.40]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "cpu_perf": 0.45,
+        "cost_efficiency": 0.30,
+        "ram_capacity": 0.15,
+        "storage_capacity": 0.10
+      },
+      "BALANCED": {
+        "cpu_perf": 0.35,
+        "cost_efficiency": 0.25,
+        "psu_quality": 0.15,
+        "platform_longevity": 0.15,
+        "ram_capacity": 0.10
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.35,
+        "ram_slots": 0.25,
+        "psu_headroom": 0.20,
+        "cpu_perf": 0.20
+      }
+    }
+  },
+  "GAMING_ESPORTS": {
+    "default_objective": "PERFORMANCE",
+    "ram_saturation_gb": 32.0,
+    "storage_saturation_gb": 1000.0,
+    "allow_igpu_only": false,
+    "igpu_bonus": 0.0,
+    "bottleneck_threshold": 20.0,
+    "bottleneck_slope": 0.5,
+    "bottleneck_max_penalty": 14.0,
+    "cuda_bonus": 0.0,
+    "multicore_max_bonus": 0.0,
+    "envelopes": {
+      "CPU": [0.24, 0.36, 0.16, 0.45],
+      "GPU": [0.26, 0.42, 0.18, 0.52],
+      "MAINBOARD": [0.08, 0.16, 0.05, 0.22],
+      "RAM": [0.06, 0.12, 0.04, 0.18],
+      "STORAGE": [0.04, 0.10, 0.03, 0.15],
+      "PSU": [0.05, 0.10, 0.03, 0.15],
+      "CASE": [0.03, 0.08, 0.02, 0.12],
+      "COOLER": [0.02, 0.07, 0.00, 0.12]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "cpu_perf": 0.42,
+        "gpu_perf": 0.32,
+        "cost_efficiency": 0.16,
+        "ram_capacity": 0.10
+      },
+      "BALANCED": {
+        "cpu_perf": 0.34,
+        "gpu_perf": 0.26,
+        "psu_quality": 0.14,
+        "platform_longevity": 0.14,
+        "ram_capacity": 0.08,
+        "psu_headroom": 0.04
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.35,
+        "cpu_perf": 0.20,
+        "ram_slots": 0.20,
+        "psu_headroom": 0.15,
+        "gpu_perf": 0.10
+      }
+    }
+  },
+  "STREAMING_GAMING": {
+    "default_objective": "BALANCED",
+    "ram_saturation_gb": 64.0,
+    "storage_saturation_gb": 2000.0,
+    "allow_igpu_only": false,
+    "igpu_bonus": 0.0,
+    "bottleneck_threshold": 25.0,
+    "bottleneck_slope": 0.4,
+    "bottleneck_max_penalty": 10.0,
+    "cuda_bonus": 3.5,
+    "multicore_max_bonus": 3.0,
+    "envelopes": {
+      "GPU": [0.30, 0.48, 0.20, 0.58],
+      "CPU": [0.20, 0.32, 0.14, 0.42],
+      "RAM": [0.07, 0.15, 0.04, 0.22],
+      "STORAGE": [0.05, 0.12, 0.03, 0.18],
+      "MAINBOARD": [0.08, 0.16, 0.05, 0.22],
+      "PSU": [0.05, 0.11, 0.03, 0.16],
+      "COOLER": [0.03, 0.08, 0.01, 0.14],
+      "CASE": [0.03, 0.08, 0.02, 0.12]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "gpu_perf": 0.38,
+        "cpu_perf": 0.32,
+        "ram_capacity": 0.14,
+        "storage_capacity": 0.06,
+        "cost_efficiency": 0.10
+      },
+      "BALANCED": {
+        "gpu_perf": 0.30,
+        "cpu_perf": 0.26,
+        "ram_capacity": 0.14,
+        "psu_quality": 0.14,
+        "platform_longevity": 0.10,
+        "storage_capacity": 0.06
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.30,
+        "ram_slots": 0.22,
+        "psu_headroom": 0.20,
+        "cpu_perf": 0.16,
+        "gpu_perf": 0.12
+      }
+    }
+  },
+  "VIDEO_EDITING": {
+    "default_objective": "BALANCED",
+    "ram_saturation_gb": 64.0,
+    "storage_saturation_gb": 2000.0,
+    "allow_igpu_only": false,
+    "igpu_bonus": 0.0,
+    "bottleneck_threshold": null,
+    "bottleneck_slope": 0.4,
+    "bottleneck_max_penalty": 12.0,
+    "cuda_bonus": 2.5,
+    "multicore_max_bonus": 5.0,
+    "envelopes": {
+      "CPU": [0.24, 0.38, 0.16, 0.48],
+      "GPU": [0.22, 0.38, 0.14, 0.48],
+      "RAM": [0.10, 0.20, 0.06, 0.28],
+      "STORAGE": [0.08, 0.16, 0.05, 0.24],
+      "MAINBOARD": [0.08, 0.16, 0.05, 0.22],
+      "PSU": [0.05, 0.11, 0.03, 0.16],
+      "COOLER": [0.03, 0.09, 0.01, 0.15],
+      "CASE": [0.03, 0.08, 0.02, 0.12]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "cpu_perf": 0.38,
+        "gpu_perf": 0.24,
+        "ram_capacity": 0.18,
+        "storage_capacity": 0.12,
+        "cost_efficiency": 0.08
+      },
+      "BALANCED": {
+        "cpu_perf": 0.30,
+        "gpu_perf": 0.20,
+        "ram_capacity": 0.18,
+        "storage_capacity": 0.12,
+        "psu_quality": 0.10,
+        "platform_longevity": 0.10
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.28,
+        "ram_slots": 0.25,
+        "psu_headroom": 0.17,
+        "cpu_perf": 0.20,
+        "storage_capacity": 0.10
+      }
+    }
+  },
+  "SOFTWARE_DEV": {
+    "default_objective": "BALANCED",
+    "ram_saturation_gb": 64.0,
+    "storage_saturation_gb": 2000.0,
+    "allow_igpu_only": true,
+    "igpu_bonus": 3.0,
+    "bottleneck_threshold": null,
+    "bottleneck_slope": 0.4,
+    "bottleneck_max_penalty": 12.0,
+    "cuda_bonus": 0.0,
+    "multicore_max_bonus": 5.0,
+    "envelopes": {
+      "CPU": [0.26, 0.44, 0.18, 0.55],
+      "RAM": [0.12, 0.24, 0.08, 0.32],
+      "STORAGE": [0.08, 0.18, 0.05, 0.26],
+      "MAINBOARD": [0.10, 0.20, 0.06, 0.28],
+      "PSU": [0.06, 0.14, 0.04, 0.20],
+      "COOLER": [0.03, 0.10, 0.00, 0.16],
+      "CASE": [0.04, 0.12, 0.02, 0.18],
+      "GPU": [0.00, 0.22, 0.00, 0.35]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "cpu_perf": 0.45,
+        "ram_capacity": 0.25,
+        "storage_capacity": 0.15,
+        "cost_efficiency": 0.15
+      },
+      "BALANCED": {
+        "cpu_perf": 0.34,
+        "ram_capacity": 0.22,
+        "storage_capacity": 0.12,
+        "platform_longevity": 0.14,
+        "psu_quality": 0.10,
+        "cost_efficiency": 0.08
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.32,
+        "ram_slots": 0.28,
+        "cpu_perf": 0.22,
+        "psu_headroom": 0.18
+      }
+    }
+  },
+  "GRAPHIC_DESIGN_2D": {
+    "default_objective": "BALANCED",
+    "ram_saturation_gb": 32.0,
+    "storage_saturation_gb": 1000.0,
+    "allow_igpu_only": true,
+    "igpu_bonus": 1.5,
+    "bottleneck_threshold": null,
+    "bottleneck_slope": 0.4,
+    "bottleneck_max_penalty": 12.0,
+    "cuda_bonus": 0.0,
+    "multicore_max_bonus": 2.0,
+    "envelopes": {
+      "CPU": [0.24, 0.40, 0.16, 0.50],
+      "GPU": [0.00, 0.32, 0.00, 0.45],
+      "RAM": [0.10, 0.20, 0.06, 0.28],
+      "STORAGE": [0.07, 0.16, 0.04, 0.22],
+      "MAINBOARD": [0.09, 0.18, 0.06, 0.25],
+      "PSU": [0.06, 0.13, 0.04, 0.18],
+      "COOLER": [0.02, 0.08, 0.00, 0.14],
+      "CASE": [0.04, 0.10, 0.02, 0.16]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "cpu_perf": 0.40,
+        "ram_capacity": 0.22,
+        "gpu_perf": 0.18,
+        "storage_capacity": 0.10,
+        "cost_efficiency": 0.10
+      },
+      "BALANCED": {
+        "cpu_perf": 0.32,
+        "ram_capacity": 0.20,
+        "gpu_perf": 0.14,
+        "storage_capacity": 0.10,
+        "platform_longevity": 0.12,
+        "psu_quality": 0.12
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.32,
+        "ram_slots": 0.24,
+        "psu_headroom": 0.20,
+        "cpu_perf": 0.16,
+        "gpu_perf": 0.08
+      }
+    }
+  },
+  "WORKSTATION_SILENT": {
+    "default_objective": "BALANCED",
+    "ram_saturation_gb": 64.0,
+    "storage_saturation_gb": 2000.0,
+    "allow_igpu_only": true,
+    "igpu_bonus": 1.0,
+    "bottleneck_threshold": null,
+    "bottleneck_slope": 0.4,
+    "bottleneck_max_penalty": 12.0,
+    "cuda_bonus": 1.5,
+    "multicore_max_bonus": 4.0,
+    "envelopes": {
+      "CPU": [0.22, 0.36, 0.14, 0.46],
+      "GPU": [0.00, 0.35, 0.00, 0.48],
+      "RAM": [0.09, 0.19, 0.05, 0.26],
+      "STORAGE": [0.07, 0.15, 0.04, 0.22],
+      "MAINBOARD": [0.10, 0.18, 0.06, 0.25],
+      "PSU": [0.08, 0.16, 0.05, 0.22],
+      "COOLER": [0.05, 0.12, 0.02, 0.18],
+      "CASE": [0.05, 0.12, 0.03, 0.18]
+    },
+    "scoring_weights": {
+      "PERFORMANCE": {
+        "cpu_perf": 0.34,
+        "gpu_perf": 0.22,
+        "ram_capacity": 0.16,
+        "psu_quality": 0.14,
+        "storage_capacity": 0.08,
+        "cost_efficiency": 0.06
+      },
+      "BALANCED": {
+        "cpu_perf": 0.26,
+        "psu_quality": 0.22,
+        "platform_longevity": 0.18,
+        "ram_capacity": 0.14,
+        "psu_headroom": 0.12,
+        "storage_capacity": 0.08
+      },
+      "UPGRADE_FRIENDLY": {
+        "platform_longevity": 0.30,
+        "psu_headroom": 0.25,
+        "psu_quality": 0.20,
+        "ram_slots": 0.15,
+        "cpu_perf": 0.10
+      }
+    }
+  }
+}

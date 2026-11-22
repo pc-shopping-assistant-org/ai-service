@@ -19,15 +19,12 @@ from typing import Any
 
 from ai_service.application.ports.hardware import ComponentCategory, ComponentSpec
 from ai_service.capabilities.pc_builder.compatibility import case_supported_form_factors
+from ai_service.capabilities.pc_builder.profiles import (
+    DEFAULT_ENVELOPES,
+    EnvelopeRange,
+    get_profile_spec,
+)
 from ai_service.capabilities.pc_builder.schemas import BuildObjective, UseCaseProfile
-
-
-@dataclass(frozen=True, slots=True)
-class EnvelopeRange:
-    preferred_min: float
-    preferred_max: float
-    absolute_min: float
-    absolute_max: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,71 +34,6 @@ class CandidatePool:
     category: ComponentCategory
     preferred: list[ComponentSpec]
     all_affordable: list[ComponentSpec]
-
-
-# Configured allocation envelopes per use-case profile
-DEFAULT_ENVELOPES: dict[UseCaseProfile, dict[ComponentCategory, EnvelopeRange]] = {
-    UseCaseProfile.GAMING_1080P: {
-        ComponentCategory.GPU: EnvelopeRange(0.30, 0.48, 0.18, 0.60),
-        ComponentCategory.CPU: EnvelopeRange(0.18, 0.28, 0.10, 0.38),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.08, 0.16, 0.05, 0.22),
-        ComponentCategory.RAM: EnvelopeRange(0.05, 0.12, 0.03, 0.18),
-        ComponentCategory.STORAGE: EnvelopeRange(0.04, 0.10, 0.03, 0.15),
-        ComponentCategory.PSU: EnvelopeRange(0.05, 0.10, 0.03, 0.15),
-        ComponentCategory.CASE: EnvelopeRange(0.03, 0.08, 0.02, 0.12),
-        ComponentCategory.COOLER: EnvelopeRange(0.02, 0.06, 0.00, 0.10),
-    },
-    UseCaseProfile.GAMING_1440P: {
-        ComponentCategory.GPU: EnvelopeRange(0.35, 0.55, 0.22, 0.65),
-        ComponentCategory.CPU: EnvelopeRange(0.15, 0.25, 0.10, 0.35),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.08, 0.16, 0.05, 0.22),
-        ComponentCategory.RAM: EnvelopeRange(0.05, 0.12, 0.03, 0.18),
-        ComponentCategory.STORAGE: EnvelopeRange(0.04, 0.10, 0.03, 0.15),
-        ComponentCategory.PSU: EnvelopeRange(0.05, 0.10, 0.03, 0.15),
-        ComponentCategory.CASE: EnvelopeRange(0.03, 0.08, 0.02, 0.12),
-        ComponentCategory.COOLER: EnvelopeRange(0.02, 0.07, 0.00, 0.12),
-    },
-    UseCaseProfile.GAMING_4K: {
-        ComponentCategory.GPU: EnvelopeRange(0.42, 0.62, 0.30, 0.72),
-        ComponentCategory.CPU: EnvelopeRange(0.14, 0.22, 0.08, 0.30),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.08, 0.15, 0.05, 0.20),
-        ComponentCategory.RAM: EnvelopeRange(0.05, 0.12, 0.03, 0.18),
-        ComponentCategory.STORAGE: EnvelopeRange(0.04, 0.10, 0.03, 0.15),
-        ComponentCategory.PSU: EnvelopeRange(0.06, 0.12, 0.04, 0.18),
-        ComponentCategory.CASE: EnvelopeRange(0.04, 0.09, 0.02, 0.14),
-        ComponentCategory.COOLER: EnvelopeRange(0.03, 0.08, 0.01, 0.14),
-    },
-    UseCaseProfile.CONTENT_CREATION_3D: {
-        ComponentCategory.CPU: EnvelopeRange(0.22, 0.35, 0.15, 0.45),
-        ComponentCategory.GPU: EnvelopeRange(0.28, 0.45, 0.18, 0.55),
-        ComponentCategory.RAM: EnvelopeRange(0.08, 0.18, 0.05, 0.25),
-        ComponentCategory.STORAGE: EnvelopeRange(0.06, 0.14, 0.04, 0.20),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.08, 0.16, 0.05, 0.22),
-        ComponentCategory.PSU: EnvelopeRange(0.05, 0.11, 0.03, 0.16),
-        ComponentCategory.COOLER: EnvelopeRange(0.03, 0.09, 0.01, 0.15),
-        ComponentCategory.CASE: EnvelopeRange(0.03, 0.08, 0.02, 0.12),
-    },
-    UseCaseProfile.AI_DATA_SCIENCE: {
-        ComponentCategory.GPU: EnvelopeRange(0.40, 0.65, 0.25, 0.75),
-        ComponentCategory.CPU: EnvelopeRange(0.12, 0.22, 0.08, 0.30),
-        ComponentCategory.RAM: EnvelopeRange(0.08, 0.18, 0.05, 0.25),
-        ComponentCategory.STORAGE: EnvelopeRange(0.05, 0.12, 0.03, 0.18),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.07, 0.15, 0.04, 0.20),
-        ComponentCategory.PSU: EnvelopeRange(0.06, 0.12, 0.04, 0.18),
-        ComponentCategory.COOLER: EnvelopeRange(0.02, 0.07, 0.01, 0.12),
-        ComponentCategory.CASE: EnvelopeRange(0.03, 0.08, 0.02, 0.12),
-    },
-    UseCaseProfile.OFFICE_BUDGET: {
-        ComponentCategory.CPU: EnvelopeRange(0.22, 0.38, 0.12, 0.50),
-        ComponentCategory.MAINBOARD: EnvelopeRange(0.12, 0.24, 0.08, 0.32),
-        ComponentCategory.RAM: EnvelopeRange(0.08, 0.18, 0.05, 0.25),
-        ComponentCategory.STORAGE: EnvelopeRange(0.08, 0.18, 0.04, 0.25),
-        ComponentCategory.PSU: EnvelopeRange(0.08, 0.16, 0.04, 0.22),
-        ComponentCategory.CASE: EnvelopeRange(0.05, 0.14, 0.03, 0.20),
-        ComponentCategory.COOLER: EnvelopeRange(0.00, 0.08, 0.00, 0.12),
-        ComponentCategory.GPU: EnvelopeRange(0.00, 0.25, 0.00, 0.40),
-    },
-}
 
 
 def get_candidate_pool(
@@ -277,17 +209,19 @@ def get_dominance_dimensions(
     Prefix with '-' indicates lower-is-better (e.g. '-tdp_watts', '-gpu_length_mm').
     Positive indicates higher-is-better (e.g. 'performance_score', 'vram_gb').
     """
+    spec = get_profile_spec(profile)
+
     if category == ComponentCategory.GPU:
         dims = ["performance_score", "-tdp_watts", "-gpu_length_mm"]
-        if profile in {UseCaseProfile.AI_DATA_SCIENCE, UseCaseProfile.CONTENT_CREATION_3D, UseCaseProfile.GAMING_4K}:
+        if spec.uses_vram:
             dims.append("vram_gb")
-        if profile in {UseCaseProfile.AI_DATA_SCIENCE, UseCaseProfile.CONTENT_CREATION_3D}:
+        if spec.cuda_bonus > 0:
             dims.append("nvidia_cuda")
         return dims
 
     if category == ComponentCategory.CPU:
         dims = ["performance_score", "-tdp_watts"]
-        if profile in {UseCaseProfile.CONTENT_CREATION_3D, UseCaseProfile.AI_DATA_SCIENCE}:
+        if spec.multicore_max_bonus > 0:
             dims.append("core_count")
         return dims
 

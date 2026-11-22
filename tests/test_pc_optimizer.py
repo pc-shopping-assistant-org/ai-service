@@ -1174,3 +1174,51 @@ def test_profile_specific_saturation_bottleneck_cuda_and_office_igpu() -> None:
     assert any(d.name == "igpu_office_fit" for d in office_score.dimensions)
 
 
+def test_load_profile_registry_from_json_validates_weights(tmp_path) -> None:
+    """Profile specs load cleanly from JSON and reject invalid weight sums."""
+    import json
+
+    from ai_service.capabilities.pc_builder.profiles import (
+        DEFAULT_PROFILES_PATH,
+        load_profile_registry,
+    )
+
+    loaded = load_profile_registry(DEFAULT_PROFILES_PATH)
+    assert set(loaded.keys()) == set(UseCaseProfile)
+    assert loaded[UseCaseProfile.AI_DATA_SCIENCE].cuda_bonus == 6.0
+
+    bad_data = json.loads(DEFAULT_PROFILES_PATH.read_text(encoding="utf-8"))
+    bad_data["GAMING_1080P"]["scoring_weights"]["PERFORMANCE"]["gpu_perf"] = 0.99
+    bad_file = tmp_path / "bad_profiles.json"
+    bad_file.write_text(json.dumps(bad_data), encoding="utf-8")
+    with pytest.raises(ValueError, match="must equal 1.0"):
+        load_profile_registry(bad_file)
+
+
+def test_extended_profiles_behavior() -> None:
+    """New profiles (GAMING_ESPORTS, STREAMING_GAMING, VIDEO_EDITING, SOFTWARE_DEV, GRAPHIC_DESIGN_2D, WORKSTATION_SILENT) behave distinctively."""
+    from ai_service.capabilities.pc_builder.profiles import get_profile_spec
+
+    # SOFTWARE_DEV allows iGPU-only builds and rewards multi-core CPUs + 64GB RAM
+    dev_spec = get_profile_spec(UseCaseProfile.SOFTWARE_DEV)
+    assert dev_spec.allow_igpu_only is True
+    assert dev_spec.ram_saturation_gb == 64.0
+    assert dev_spec.multicore_max_bonus > 0
+
+    # GAMING_ESPORTS prioritizes CPU higher than GPU under PERFORMANCE and enforces strict bottleneck penalty
+    esports_spec = get_profile_spec(UseCaseProfile.GAMING_ESPORTS)
+    assert esports_spec.scoring_weights[BuildObjective.PERFORMANCE]["cpu_perf"] > esports_spec.scoring_weights[BuildObjective.PERFORMANCE]["gpu_perf"]
+    assert esports_spec.bottleneck_threshold == 20.0
+
+    # STREAMING_GAMING rewards NVIDIA NVENC (CUDA) and multi-core CPUs
+    stream_spec = get_profile_spec(UseCaseProfile.STREAMING_GAMING)
+    assert stream_spec.cuda_bonus > 0
+    assert stream_spec.multicore_max_bonus > 0
+
+    # VIDEO_EDITING and WORKSTATION_SILENT saturate at 64GB RAM / 2TB SSD
+    assert get_profile_spec(UseCaseProfile.VIDEO_EDITING).ram_saturation_gb == 64.0
+    assert get_profile_spec(UseCaseProfile.WORKSTATION_SILENT).scoring_weights[BuildObjective.BALANCED]["psu_quality"] >= 0.20
+    assert get_profile_spec(UseCaseProfile.GRAPHIC_DESIGN_2D).allow_igpu_only is True
+
+
+
