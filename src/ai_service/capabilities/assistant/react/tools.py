@@ -105,7 +105,6 @@ def allowed_tools(
         ToolName.SEARCH_CATALOG,
         ToolName.GET_PRODUCT_DETAILS,
         ToolName.COMPARE_PRODUCTS,
-        ToolName.CHECK_BUILD_COMPATIBILITY,
         ToolName.RESEARCH_HARDWARE,
         ToolName.RESEARCH_COMPATIBILITY,
         ToolName.RESEARCH_WORKLOAD,
