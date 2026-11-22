@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import sys
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable, Coroutine, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from functools import wraps
 from time import perf_counter
+from typing import Any
 
 from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
@@ -172,7 +173,7 @@ def execution_trace(claim: ExecutionClaim) -> Iterator[StepObservation]:
 def observed_async[**P, R](
     name: str,
     function: Callable[P, Awaitable[R]],
-) -> Callable[P, Awaitable[R]]:
+) -> Callable[P, Coroutine[Any, Any, R]]:
     @wraps(function)
     async def observed(*args: P.args, **kwargs: P.kwargs) -> R:
         with step(name):
