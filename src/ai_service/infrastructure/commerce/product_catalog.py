@@ -171,7 +171,14 @@ class BackendProductCatalog:
         params: dict[str, QueryParamScalar] | None = None,
     ) -> Any:
         async def dispatch() -> Any:
-            response = await self.client.get(base_url + path, params=params)
+            from ai_service.infrastructure.observability import trace_headers
+
+            headers = trace_headers()
+            response = (
+                await self.client.get(base_url + path, params=params, headers=headers)
+                if headers
+                else await self.client.get(base_url + path, params=params)
+            )
             return self._unwrap_envelope(response)
 
         try:

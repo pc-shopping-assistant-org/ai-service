@@ -470,3 +470,104 @@ async def test_new_run_does_not_reuse_old_price_without_catalog_revalidation():
     assert second["ledger"][0] == old
     assert "9,000,000 VND" in second["answer"]["text"]
     assert "8,000,000 VND" not in second["answer"]["text"]
+
+
+@pytest.mark.asyncio
+async def test_flexible_graph_removes_redundant_loader_nodes_and_uses_compact_catalog_ref(
+    realistic_catalog,
+):
+    from test_requirement_pipeline import rows, state
+
+    trusted = context(state(), rows(realistic_catalog))
+    catalog_rows = trusted.catalog
+    runtime = trusted.model_copy(update={"catalog": [], "catalog_ready": False})
+
+    class Loader:
+        async def load(self, draft, requirements):
+            return catalog_rows
+
+    class Builder:
+        async def decide(self, message, transcript, allowed, repair, context=None):
+            result = transcript[-1].result
+            return FlexibleDecision(
+                action={
+                    "kind": "FINAL_ANSWER",
+                    "outcome": "BUILT",
+                    "answer": {
+                        "text": "Done",
+                        "build_ref": result.result.build_ref,
+                        "evidence_refs": result.evidence_refs,
+                    },
+                }
+            )
+
+    flow = build_flexible_graph(
+        Builder(),
+        ToolDispatcher(Catalog(), PCBuildApplicationService()),
+        runtime,
+        [
+            CompletionRequirement(
+                kind="BUILD", constraints_revision=trusted.requirements.revision
+            )
+        ],
+        Budget(),
+        conversation_revision=0,
+        catalog_loader=Loader(),
+    )
+    node_names = set(flow.nodes)
+    assert "load_tool_catalog" not in node_names
+    assert "load_proposal_catalog" not in node_names
+
+    result = await flow.ainvoke({"message": "Build PC"})
+    assert result["phase"] == "READY_TO_PUBLISH"
+    # Compact catalog_context stores digest ref instead of duplicating full rows
+    assert result["catalog_context"]["ready"] is True
+    assert result["catalog_context"]["count"] == len(catalog_rows)
+    assert "rows" not in result["catalog_context"]
+
+
+@pytest.mark.asyncio
+async def test_agent_hides_tools_once_tool_budget_exhausted_for_graceful_synthesis():
+    seen_allowed: list[tuple] = []
+
+    class BudgetAwareModel:
+        async def decide(self, message, transcript, allowed, repair, context=None):
+            seen_allowed.append(allowed)
+            if not transcript:
+                return FlexibleDecision(
+                    action={
+                        "kind": "CALL_TOOL",
+                        "call": {
+                            "call_id": "s1",
+                            "name": "search_catalog",
+                            "arguments": {"query": "GPU"},
+                        },
+                    }
+                )
+            # Tool budget is exhausted: allowed must be empty so the model synthesizes cleanly
+            assert allowed == ()
+            return FlexibleDecision(
+                action={
+                    "kind": "FINAL_ANSWER",
+                    "outcome": "ANSWERED",
+                    "answer": {
+                        "text": "Tổng hợp kết quả đã tra cứu.",
+                        "evidence_refs": [transcript[0].result.evidence_refs[0]],
+                    },
+                }
+            )
+
+    flow = build_flexible_graph(
+        BudgetAwareModel(),
+        ToolDispatcher(Catalog(), PCBuildApplicationService()),
+        context(),
+        [CompletionRequirement(kind="ANSWER")],
+        Budget(),
+        conversation_revision=0,
+        limits=ReactLimits(max_tool_calls=1),
+    )
+    result = await flow.ainvoke({"message": "Tìm GPU"})
+    assert result["phase"] == "READY_TO_PUBLISH"
+    assert len(seen_allowed) == 2
+    assert len(seen_allowed[0]) > 0
+    assert seen_allowed[1] == ()

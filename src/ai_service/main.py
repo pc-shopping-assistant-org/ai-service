@@ -1,14 +1,21 @@
+import logging
 from contextlib import asynccontextmanager
+from time import perf_counter
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from opentelemetry.trace import StatusCode
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ai_service.api.router import api_router
 from ai_service.config.settings import Settings, get_settings
+from ai_service.infrastructure.observability import StepOutcome, http_request_span
 from ai_service.schemas.response import ApiResponse, ErrorDetail, ResponseMessage
+
+logger = logging.getLogger(__name__)
+_SKIP_TRACE_PATHS = frozenset({"/health", "/api/v1/health"})
 
 
 async def validation_exception_handler(
@@ -48,6 +55,18 @@ async def http_exception_handler(
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    if not getattr(request.state, "_unhandled_logged", False):
+        logger.error(
+            "http.unhandled_exception method=%s path=%s",
+            request.method,
+            request.url.path,
+            exc_info=(type(exc), exc, exc.__traceback__),
+            extra={
+                "event": "http.unhandled_exception",
+                "step": f"HTTP {request.method} {request.url.path}",
+                "outcome": StepOutcome.FAILED,
+            },
+        )
     payload = ApiResponse[None](
         data=None,
         message=ResponseMessage.INTERNAL_SERVER_ERROR,
@@ -102,6 +121,59 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         ],
     )
+    @application.middleware("http")
+    async def trace_http_requests(request: Request, call_next):
+        if request.url.path in _SKIP_TRACE_PATHS:
+            return await call_next(request)
+        started = perf_counter()
+        step_name = f"HTTP {request.method} {request.url.path}"
+        with http_request_span(request.method, request.url.path, request.headers) as span:
+            try:
+                response = await call_next(request)
+            except BaseException as exc:
+                duration_ms = round((perf_counter() - started) * 1000, 3)
+                span.set_attribute("http.response.status_code", 500)
+                span.set_status(StatusCode.ERROR)
+                request.state._unhandled_logged = True
+                logger.error(
+                    "http.unhandled_exception method=%s path=%s",
+                    request.method,
+                    request.url.path,
+                    exc_info=(type(exc), exc, exc.__traceback__),
+                    extra={
+                        "event": "http.unhandled_exception",
+                        "step": step_name,
+                        "outcome": StepOutcome.FAILED,
+                        "duration_ms": duration_ms,
+                        "result_status": "500",
+                    },
+                )
+                raise
+            duration_ms = round((perf_counter() - started) * 1000, 3)
+            span.set_attribute("http.response.status_code", response.status_code)
+            outcome = (
+                StepOutcome.FAILED
+                if response.status_code >= 500
+                else StepOutcome.SUCCEEDED
+            )
+            if outcome == StepOutcome.FAILED:
+                span.set_status(StatusCode.ERROR)
+            logger.log(
+                logging.ERROR if outcome == StepOutcome.FAILED else logging.INFO,
+                "http.request.finished %s status=%s duration_ms=%s",
+                step_name,
+                response.status_code,
+                duration_ms,
+                extra={
+                    "event": "http.request.finished",
+                    "step": step_name,
+                    "outcome": outcome,
+                    "duration_ms": duration_ms,
+                    "result_status": str(response.status_code),
+                },
+            )
+            return response
+
     application.include_router(api_router, prefix="/api/v1")
     application.exception_handler(RequestValidationError)(validation_exception_handler)
     application.exception_handler(StarletteHTTPException)(http_exception_handler)

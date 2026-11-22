@@ -32,9 +32,15 @@ class BackendCommerceClient(CommerceClient):
 
     async def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         try:
+            from ai_service.infrastructure.observability import trace_headers
+
+            headers = trace_headers()
             async with httpx.AsyncClient(timeout=self.settings.request_timeout_seconds) as client:
-                response = await client.get(
-                    f"{self.settings.backend_api_url.rstrip('/')}{path}", params=params,
+                url = f"{self.settings.backend_api_url.rstrip('/')}{path}"
+                response = (
+                    await client.get(url, params=params, headers=headers)
+                    if headers
+                    else await client.get(url, params=params)
                 )
                 if response.status_code == httpx.codes.NOT_FOUND:
                     return None
