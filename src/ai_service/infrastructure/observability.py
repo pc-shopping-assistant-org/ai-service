@@ -5,7 +5,7 @@ import json
 import logging
 import sys
 import traceback
-from collections.abc import Awaitable, Callable, Coroutine, Iterator
+from collections.abc import Awaitable, Callable, Coroutine, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -19,15 +19,26 @@ from typing import Any
 
 from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.logging.handler import LoggingHandler
+from opentelemetry.metrics import Counter, Histogram, Meter
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import MetricReader, PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.id_generator import RandomIdGenerator
-from opentelemetry.trace import Span, StatusCode, Tracer, get_current_span, get_tracer
+from opentelemetry.trace import (
+    Span,
+    SpanKind,
+    StatusCode,
+    Tracer,
+    get_current_span,
+    get_tracer,
+)
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 from ai_service.application.call_attempts import ExecutionClaim
@@ -49,6 +60,29 @@ _PROPAGATOR = TraceContextTextMapPropagator()
 logger = logging.getLogger(__name__)
 _run: ContextVar[dict[str, str] | None] = ContextVar("ai_run_telemetry", default=None)
 _tracer: ContextVar[Tracer | None] = ContextVar("ai_tracer", default=None)
+
+
+@dataclass(frozen=True, slots=True)
+class _StepMetrics:
+    step_counter: Counter
+    step_duration_ms: Histogram
+
+    @classmethod
+    def from_meter(cls, meter: Meter) -> "_StepMetrics":
+        return cls(
+            step_counter=meter.create_counter(
+                name="ai_step",
+                description="Count of AI service execution steps by outcome",
+            ),
+            step_duration_ms=meter.create_histogram(
+                name="ai_step_duration_ms",
+                unit="ms",
+                description="Duration of AI service execution steps in milliseconds",
+            ),
+        )
+
+
+_metrics: ContextVar[_StepMetrics | None] = ContextVar("ai_step_metrics", default=None)
 
 
 class StepOutcome(StrEnum):
@@ -74,7 +108,9 @@ def _extract_error_location(tb: TracebackType | None) -> str | None:
         (
             frame
             for frame in reversed(frames)
-            if "ai_service" in frame.filename and frame.filename != __file__
+            if "/ai_service/" in frame.filename.replace("\\", "/")
+            and frame.filename != __file__
+            and frame.name != "trace_http_requests"
         ),
         frames[-1],
     )
@@ -96,6 +132,34 @@ def trace_headers() -> dict[str, str]:
     headers: dict[str, str] = {}
     _PROPAGATOR.inject(headers)
     return headers
+
+
+def extract_trace_context(headers: Mapping[str, str]) -> Context:
+    """Extract incoming W3C trace context from HTTP headers."""
+    return _PROPAGATOR.extract(carrier={k.lower(): v for k, v in headers.items()})
+
+
+@contextmanager
+def http_request_span(
+    method: str,
+    path: str,
+    headers: Mapping[str, str],
+) -> Iterator[Span]:
+    """Open a server span linked to any incoming W3C traceparent without recording payloads."""
+    tracer = _tracer.get() or get_tracer(__name__)
+    parent_ctx = extract_trace_context(headers)
+    with tracer.start_as_current_span(
+        f"HTTP {method} {path}",
+        context=parent_ctx,
+        kind=SpanKind.SERVER,
+        attributes={
+            "http.request.method": method,
+            "url.path": path,
+        },
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
+        yield span
 
 
 def correlation() -> dict[str, str]:
@@ -181,11 +245,12 @@ def step(name: str, *, root: bool = False) -> Iterator[StepObservation]:
             if observation.outcome == StepOutcome.FAILED:
                 span.set_status(StatusCode.ERROR)
             span.set_attribute("ai.outcome", observation.outcome)
+            duration_ms = round((perf_counter() - started) * 1000, 3)
             extra: dict[str, str | float] = {
                 "event": "step.finished",
                 "step": name,
                 "outcome": observation.outcome,
-                "duration_ms": round((perf_counter() - started) * 1000, 3),
+                "duration_ms": duration_ms,
             }
             if observation.error_type:
                 span.set_attribute("error.type", observation.error_type)
@@ -196,6 +261,11 @@ def step(name: str, *, root: bool = False) -> Iterator[StepObservation]:
             if observation.result_status:
                 span.set_attribute("ai.result_status", observation.result_status)
                 extra["result_status"] = observation.result_status
+            active_metrics = _metrics.get()
+            if active_metrics is not None:
+                metric_attrs = {"ai.step": name, "ai.outcome": observation.outcome.value}
+                active_metrics.step_counter.add(1, metric_attrs)
+                active_metrics.step_duration_ms.record(duration_ms, metric_attrs)
             logger.log(
                 logging.ERROR
                 if observation.outcome == StepOutcome.FAILED
@@ -264,6 +334,7 @@ def open_telemetry(settings: Settings) -> Iterator[None]:
         resource=resource, id_generator=RunIdGenerator(), shutdown_on_exit=False
     )
     logs = LoggerProvider(resource=resource, shutdown_on_exit=False)
+    metric_readers: list[MetricReader] = []
     console = logging.StreamHandler(sys.stdout)
     console.setFormatter(JsonLogFormatter())
     handlers: list[logging.Handler] = [console]
@@ -285,8 +356,20 @@ def open_telemetry(settings: Settings) -> Iterator[None]:
                 schedule_delay_millis=EXPORT_INTERVAL_MS,
             )
         )
+        metric_readers.append(
+            PeriodicExportingMetricReader(
+                OTLPMetricExporter(
+                    endpoint=f"{endpoint}/v1/metrics", timeout=EXPORT_TIMEOUT_SECONDS
+                ),
+                export_interval_millis=EXPORT_INTERVAL_MS,
+            )
+        )
         otlp_handler = LoggingHandler(logger_provider=logs)
         handlers.append(otlp_handler)
+    metrics_provider = MeterProvider(
+        resource=resource, metric_readers=metric_readers, shutdown_on_exit=False
+    )
+    step_metrics = _StepMetrics.from_meter(metrics_provider.get_meter(__name__))
     application_logger = logging.getLogger("ai_service")
     previous = application_logger.level, application_logger.propagate
     application_logger.setLevel(settings.log_level)
@@ -294,13 +377,16 @@ def open_telemetry(settings: Settings) -> Iterator[None]:
     for handler in handlers:
         handler.addFilter(CorrelationFilter())
         application_logger.addHandler(handler)
+    metrics_token = _metrics.set(step_metrics)
     try:
         with telemetry_scope(traces.get_tracer(__name__)):
             yield
     finally:
+        _metrics.reset(metrics_token)
         for handler in handlers:
             application_logger.removeHandler(handler)
             handler.close()
+        metrics_provider.shutdown()
         logs.shutdown()
         traces.shutdown()
         application_logger.setLevel(previous[0])

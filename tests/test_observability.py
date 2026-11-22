@@ -293,3 +293,84 @@ def test_error_location_and_w3c_trace_headers(telemetry):
         if r.get("event") == "step.finished" and r.get("step") == "tool.catalog"
     )
     assert "test_observability.py:" in failed_log["error_location"]
+
+
+def test_configured_otlp_exports_step_metrics_and_http_middleware_propagates_traceparent():
+    from fastapi.testclient import TestClient
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from ai_service.main import create_app
+
+    requests: list[tuple[str, bytes]] = []
+
+    class Receiver(BaseHTTPRequestHandler):
+        def do_POST(self):
+            requests.append(
+                (self.path, self.rfile.read(int(self.headers["Content-Length"])))
+            )
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Receiver)
+    worker = threading.Thread(target=server.serve_forever)
+    worker.start()
+    try:
+        settings = Settings(
+            _env_file=None, otlp_endpoint=f"http://127.0.0.1:{server.server_port}"
+        )
+        with open_telemetry(settings), execution_trace(claim()), step("agent"):
+            pass
+    finally:
+        server.shutdown()
+        worker.join()
+        server.server_close()
+
+    assert any(path == "/v1/metrics" for path, _ in requests)
+
+    # HTTP middleware extracts incoming W3C traceparent and logs unhandled 500s cleanly
+    app = create_app(Settings(_env_file=None))
+
+    @app.get("/api/v1/_test_boom")
+    async def _boom():
+        raise RuntimeError("SENSITIVE_HTTP_BODY")
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    output = io.StringIO()
+    handler = logging.StreamHandler(output)
+    handler.setFormatter(JsonLogFormatter())
+    from ai_service.infrastructure.observability import CorrelationFilter
+
+    handler.addFilter(CorrelationFilter())
+    app_logger = logging.getLogger("ai_service")
+    prev_level = app_logger.level
+    app_logger.setLevel(logging.INFO)
+    app_logger.addHandler(handler)
+    incoming_trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    try:
+        with telemetry_scope(provider.get_tracer("http-test")):
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.get(
+                "/api/v1/_test_boom",
+                headers={"traceparent": f"00-{incoming_trace_id}-00f067aa0ba902b7-01"},
+            )
+        assert resp.status_code == 500
+    finally:
+        app_logger.removeHandler(handler)
+        app_logger.setLevel(prev_level)
+        provider.shutdown()
+
+    http_spans = [s for s in exporter.get_finished_spans() if s.name == "HTTP GET /api/v1/_test_boom"]
+    assert len(http_spans) == 1
+    assert f"{http_spans[0].context.trace_id:032x}" == incoming_trace_id
+    assert http_spans[0].attributes["http.response.status_code"] == 500
+    assert "SENSITIVE_HTTP_BODY" not in output.getvalue()
+    log_rows = [json.loads(line) for line in output.getvalue().splitlines()]
+    unhandled = next(r for r in log_rows if r.get("event") == "http.unhandled_exception")
+    assert unhandled["trace_id"] == incoming_trace_id
+    assert unhandled["error_type"] == "RuntimeError"
+    assert "test_observability.py:" in unhandled["error_location"]
