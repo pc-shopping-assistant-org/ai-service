@@ -124,7 +124,7 @@ class SearchCatalogArgs(Contract):
     category: Text | None = Field(
         default=None,
         max_length=100,
-        description="Optional component category: CPU, MAINBOARD, RAM, GPU, PSU, CASE, COOLER, STORAGE, MONITOR, KEYBOARD, MOUSE, HEADSET.",
+        description="Catalog hardware type code (e.g. MONITOR, HEADSET, GPU) or catalog category name. Omit if unsure.",
     )
     min_price: NonNegativeInt | None = Field(
         default=None,
@@ -528,6 +528,7 @@ class ToolError(StrEnum):
     UNKNOWN_TOOL = "UNKNOWN_TOOL"
     PREREQUISITE_MISSING = "PREREQUISITE_MISSING"
     PRODUCT_NOT_FOUND = "PRODUCT_NOT_FOUND"
+    CATEGORY_UNRESOLVED = "CATEGORY_UNRESOLVED"
     CATALOG_UNAVAILABLE = "CATALOG_UNAVAILABLE"
     WEB_SEARCH_UNAVAILABLE = "WEB_SEARCH_UNAVAILABLE"
 

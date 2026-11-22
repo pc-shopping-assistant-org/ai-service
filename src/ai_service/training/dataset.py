@@ -22,6 +22,7 @@ from ai_service.capabilities.assistant.react.actions import (
 )
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
+    BuildResult,
     CompletionRequirement,
     ToolContext,
     ToolName,
@@ -221,6 +222,23 @@ def validate_label(sample: TrainingSample, snapshot: DatasetSnapshot) -> None:
                 action.draft, action.source_text or sample.message, snapshot.context
             )
         elif isinstance(action, FinalAnswerAction):
+            if (
+                action.outcome in {"INFEASIBLE", "SEARCH_INCOMPLETE"}
+                and not action.supporting_tool_call_ids
+            ):
+                build_records = [
+                    record
+                    for record in snapshot.records
+                    if record.result
+                    and record.result.status == "COMPLETED"
+                    and isinstance(record.result.result, BuildResult)
+                ]
+                if len(build_records) == 1:
+                    action = action.model_copy(
+                        update={
+                            "supporting_tool_call_ids": [build_records[0].call.call_id]
+                        }
+                    )
             validate_final_answer(
                 action,
                 [record.result for record in snapshot.records if record.result],

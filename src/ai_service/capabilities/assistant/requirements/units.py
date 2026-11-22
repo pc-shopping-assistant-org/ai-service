@@ -32,6 +32,11 @@ class QuantityConfirmation(Contract):
     message: Text = Field(max_length=4000)
 
 
+MILLION_ALIASES: frozenset[str] = frozenset(
+    {"triệu", "trieu", "million", "tr", "củ", "chai"}
+)
+MONEY_ALIASES: frozenset[str] = MILLION_ALIASES | {"vnđ", "vnd", "đ"}
+
 UNIT_ALIASES: dict[str, tuple[QuantityUnit, int]] = {
     "vnd": ("VND", 1),
     "vnđ": ("VND", 1),
@@ -40,6 +45,8 @@ UNIT_ALIASES: dict[str, tuple[QuantityUnit, int]] = {
     "trieu": ("VND", 1_000_000),
     "million": ("VND", 1_000_000),
     "tr": ("VND", 1_000_000),
+    "củ": ("VND", 1_000_000),
+    "chai": ("VND", 1_000_000),
     "gb": ("GB", 1),
     "tb": ("TB", 1),
     "gib": ("GiB", 1),
@@ -66,7 +73,7 @@ def confirmed_quantity(amount: int, quote: str, unit: QuantityUnit) -> QuantityV
 
 
 MEASUREMENT = re.compile(
-    r"(?<![\w.-])(\d+(?:[.,]\d+)*)\s*(triệu|trieu|million|vnđ|vnd|gib|tib|gb|tb|fps|w|đ|tr)(?!\w)",
+    r"(?<![\w.-])(\d+(?:[.,]\d+)*)\s*(triệu|trieu|million|vnđ|vnd|chai|củ|gib|tib|gb|tb|fps|w|đ|tr)(?!\w)",
     re.IGNORECASE,
 )
 
@@ -86,7 +93,7 @@ def verify_quantity(
     for match in MEASUREMENT.finditer(quote):
         number, alias = match.groups()
         alias = alias.casefold()
-        money = alias in {"triệu", "trieu", "million", "vnđ", "vnd", "đ", "tr"}
+        money = alias in MONEY_ALIASES
         if (expected.unit == "VND") != money:
             continue
         unit = (
@@ -100,7 +107,7 @@ def verify_quantity(
         if len(number) > 32:
             return None, "QUANTITY_EVIDENCE_MISMATCH"
         if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", number):
-            if not money or alias in {"triệu", "trieu", "million", "tr"}:
+            if not money or alias in MILLION_ALIASES:
                 ambiguous = True
                 continue
             number = number.replace(".", "").replace(",", "")
@@ -109,7 +116,7 @@ def verify_quantity(
             continue
         multiplier = (
             1_000_000
-            if alias in {"triệu", "trieu", "million", "tr"}
+            if alias in MILLION_ALIASES
             else 1000
             if unit == "TB"
             else 1

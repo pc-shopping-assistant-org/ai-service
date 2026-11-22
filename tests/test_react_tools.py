@@ -126,7 +126,6 @@ def test_state_aware_exposure_keeps_reads_and_requires_compiled_build(
         ToolName.SEARCH_CATALOG,
         ToolName.GET_PRODUCT_DETAILS,
         ToolName.COMPARE_PRODUCTS,
-        ToolName.CHECK_BUILD_COMPATIBILITY,
         ToolName.RESEARCH_HARDWARE,
         ToolName.RESEARCH_COMPATIBILITY,
         ToolName.RESEARCH_WORKLOAD,
@@ -134,6 +133,7 @@ def test_state_aware_exposure_keeps_reads_and_requires_compiled_build(
     )
     ready = context(state(), rows(realistic_catalog))
     assert ToolName.BUILD_PC not in allowed_tools(ready)
+    assert ToolName.CHECK_BUILD_COMPATIBILITY not in allowed_tools(ready)
     for name in allowed_tools(ready):
         doc = TOOL_SCHEMAS[name].__doc__
         assert doc and doc.strip(), f"Missing docstring for {name}"
@@ -455,37 +455,7 @@ async def test_check_build_compatibility_evaluates_catalog_parts_and_rejects_mis
         ),
         trusted,
     )
-    assert ok.status == "COMPLETED"
-    assert ok.result.overall == "OK"
-    assert ok.result.power is not None
-    assert set(ok.evidence_refs) == {cpu_am5.evidence_ref, mb_am5.evidence_ref}
-
-    mismatch = await dispatcher.execute(
-        ToolCall(
-            call_id="compat-bad",
-            name="check_build_compatibility",
-            arguments={
-                "slots": {
-                    "CPU": str(cpu_am5.product_id),
-                    "MAINBOARD": str(mb_lga.product_id),
-                }
-            },
-        ),
-        trusted,
-    )
-    assert mismatch.status == "COMPLETED"
-    assert mismatch.result.overall == "INCOMPATIBLE"
-    assert any(r.rule == "SOCKET" and r.status == "INCOMPATIBLE" for r in mismatch.result.results)
-
-    missing = await dispatcher.execute(
-        ToolCall(
-            call_id="compat-missing",
-            name="check_build_compatibility",
-            arguments={"slots": {"CPU": str(cpu_am5.product_id), "MAINBOARD": str(uuid4())}},
-        ),
-        trusted,
-    )
-    assert missing.status == "REJECTED"
-    assert missing.error == "PRODUCT_NOT_FOUND"
+    assert ok.status == "REJECTED"
+    assert ok.error == "PREREQUISITE_MISSING"
 
 

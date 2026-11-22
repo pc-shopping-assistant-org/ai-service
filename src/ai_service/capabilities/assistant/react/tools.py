@@ -7,7 +7,10 @@ from uuid import UUID, uuid5
 from pydantic import ValidationError
 
 from ai_service.application.cpu_work import run_cpu
-from ai_service.application.errors import BackendUnavailableError
+from ai_service.application.errors import (
+    BackendUnavailableError,
+    CatalogCategoryUnresolvedError,
+)
 from ai_service.application.ports.hardware import (
     EXTRA_HARDWARE_SPEC_FIELDS,
     ComponentCategory,
@@ -105,7 +108,6 @@ def allowed_tools(
         ToolName.SEARCH_CATALOG,
         ToolName.GET_PRODUCT_DETAILS,
         ToolName.COMPARE_PRODUCTS,
-        ToolName.CHECK_BUILD_COMPATIBILITY,
         ToolName.RESEARCH_HARDWARE,
         ToolName.RESEARCH_COMPATIBILITY,
         ToolName.RESEARCH_WORKLOAD,
@@ -483,6 +485,8 @@ class ToolDispatcher:
                     result=payload,
                     evidence_refs=[f"build:{ref}"],
                 )
+        except CatalogCategoryUnresolvedError:
+            return rejected(ToolError.CATEGORY_UNRESOLVED)
         except BackendUnavailableError:
             return ToolResult(
                 **base, status="FAILED", error=ToolError.CATALOG_UNAVAILABLE
