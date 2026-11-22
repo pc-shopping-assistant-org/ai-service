@@ -191,11 +191,13 @@ class ToolDispatcher:
         self._search_client = search_client
         self._reader = reader
         self.source_policy = source_policy or ResearchSourcePolicy()
-        if rule_engine is None:
-            from ai_service.infrastructure.hardware import LocalHardwareRuleEngine
+        self._rule_engine = rule_engine
 
-            rule_engine = LocalHardwareRuleEngine()
-        self.rule_engine = rule_engine
+    @property
+    def rule_engine(self) -> HardwareRuleEngine:
+        if self._rule_engine is None:
+            raise ValueError("Hardware rule engine adapter is not configured")
+        return self._rule_engine
 
     @property
     def search_client(self) -> WebSearchClient:

@@ -40,6 +40,7 @@ from ai_service.infrastructure.graph.flexible import (
     FLEXIBLE_GRAPH_VERSION,
     build_flexible_graph,
 )
+from ai_service.infrastructure.hardware import LocalHardwareRuleEngine
 from ai_service.infrastructure.persistence.accepted_state import (
     PostgresAcceptedCheckpointReader,
 )
@@ -237,6 +238,7 @@ async def open_build_runtime(
                     BudgetedWebSearch(web_search, attempts),
                     BudgetedWebReader(web_reader, attempts),
                     source_policy=source_policy,
+                    rule_engine=LocalHardwareRuleEngine(),
                 ),
                 tool_context,
                 tasks,

@@ -1221,4 +1221,74 @@ def test_extended_profiles_behavior() -> None:
     assert get_profile_spec(UseCaseProfile.GRAPHIC_DESIGN_2D).allow_igpu_only is True
 
 
+def test_audit_fixes_igpu_cooler_tdp_and_pareto_safety(optimizer: DeterministicPCOptimizer) -> None:
+    """Regression tests for critical audit fixes:
+    1. Gaming profile (allow_igpu_only=False) never synthesizes iGPU.
+    2. OFFICE_BUDGET awards igpu_office_fit even on synthetic is_integrated GPU produced by optimize().
+    3. Aftermarket cooler with tdp_watts < cpu.tdp_watts is rejected as INCOMPATIBLE.
+    4. Pareto pruning preserves RAM kit_modules, Case max_radiator_mm, Cooler radiator_mm, and SATA storage.
+    """
+    # 1. Gaming does not award igpu_office_fit on iGPU builds (unlike OFFICE_BUDGET)
+    igpu_only_catalog = [
+        ComponentSpec(
+            name="Ryzen 5 7600",
+            category=ComponentCategory.CPU,
+            price=5_000_000,
+            socket="AM5",
+            tdp_watts=65,
+            performance_score=85,
+            has_integrated_graphics=True,
+            integrated_graphics_score=30.0,
+            integrated_graphics_power_watts=15,
+            includes_stock_cooler=True,
+            stock_cooler_height_mm=55,
+            stock_cooler_tdp_watts=65,
+            stock_cooler_score=50,
+        ),
+        ComponentSpec(name="B650M", category=ComponentCategory.MAINBOARD, price=3_000_000, socket="AM5", ram_type="DDR5", form_factor="Micro-ATX", ram_slots=4),
+        ComponentSpec(name="16GB DDR5", category=ComponentCategory.RAM, price=1_400_000, ram_type="DDR5", capacity_gb=16, performance_score=75),
+        ComponentSpec(name="Case mATX", category=ComponentCategory.CASE, price=1_000_000, form_factor="Micro-ATX", supported_form_factors=["Micro-ATX"], max_gpu_length_mm=330, max_cooler_height_mm=160),
+        ComponentSpec(name="500GB NVMe", category=ComponentCategory.STORAGE, price=900_000, capacity_gb=500, performance_score=70),
+        ComponentSpec(name="550W PSU", category=ComponentCategory.PSU, price=1_100_000, wattage=550, psu_tier="C", performance_score=72),
+    ]
+    gaming_res = optimizer.optimize(
+        PCBuildConstraints(
+            target_budget_vnd=ConstraintValue[int](value=20_000_000, source=ConstraintSource.USER),
+            use_case=ConstraintValue[UseCaseProfile](value=UseCaseProfile.GAMING_1440P),
+        ),
+        igpu_only_catalog,
+    )
+    gaming_build = gaming_res.builds[BuildObjective.BALANCED]
+    assert not any(ev.metric == "score_dim_igpu_office_fit" for ev in gaming_build.evidence)
+
+    # 2. OFFICE_BUDGET succeeds and includes igpu_office_fit in evidence
+    office_res = optimizer.optimize(
+        PCBuildConstraints(
+            target_budget_vnd=ConstraintValue[int](value=20_000_000, source=ConstraintSource.USER),
+            use_case=ConstraintValue[UseCaseProfile](value=UseCaseProfile.OFFICE_BUDGET),
+        ),
+        igpu_only_catalog,
+    )
+    office_build = office_res.builds[BuildObjective.BALANCED]
+    assert any(ev.metric == "score_dim_igpu_office_fit" for ev in office_build.evidence)
+
+    # 3. Aftermarket cooler TDP < CPU TDP is INCOMPATIBLE
+    hot_cpu = ComponentSpec(name="i9-14900K", category=ComponentCategory.CPU, price=14_000_000, socket="LGA1700", tdp_watts=253, performance_score=98)
+    weak_cooler = ComponentSpec(name="Weak Air 95W", category=ComponentCategory.COOLER, price=300_000, cooler_height_mm=130, tdp_watts=95, supported_sockets=["LGA1700"], performance_score=40)
+    assert check_compatibility_status({ComponentCategory.CPU: hot_cpu, ComponentCategory.COOLER: weak_cooler}, 0) == CompatibilityStatus.INCOMPATIBLE
+
+    # 4. Pareto pruning preserves RAM kit_modules, Case max_radiator_mm, and SATA storage
+    ram_4x8 = ComponentSpec(name="4x8GB", category=ComponentCategory.RAM, price=1_800_000, ram_type="DDR5", capacity_gb=32, kit_modules=4, performance_score=80)
+    ram_2x16 = ComponentSpec(name="2x16GB", category=ComponentCategory.RAM, price=2_000_000, ram_type="DDR5", capacity_gb=32, kit_modules=2, performance_score=80)
+    assert dominates(ram_4x8, ram_2x16, UseCaseProfile.GAMING_1440P, BuildObjective.BALANCED) is False
+
+    case_no_aio = ComponentSpec(name="Air Case", category=ComponentCategory.CASE, price=1_000_000, form_factor="ATX", supported_form_factors=["ATX"], max_gpu_length_mm=360, max_cooler_height_mm=170, max_radiator_mm=0)
+    case_aio = ComponentSpec(name="AIO Case", category=ComponentCategory.CASE, price=1_500_000, form_factor="ATX", supported_form_factors=["ATX"], max_gpu_length_mm=360, max_cooler_height_mm=170, max_radiator_mm=360)
+    assert dominates(case_no_aio, case_aio, UseCaseProfile.GAMING_1440P, BuildObjective.BALANCED) is False
+
+    nvme_ssd = ComponentSpec(name="NVMe 1TB", category=ComponentCategory.STORAGE, price=1_200_000, capacity_gb=1000, interface="NVMe", form_factor="M.2", performance_score=85)
+    sata_ssd = ComponentSpec(name="SATA 1TB", category=ComponentCategory.STORAGE, price=1_400_000, capacity_gb=1000, interface="SATA", form_factor="2.5", performance_score=70)
+    assert dominates(nvme_ssd, sata_ssd, UseCaseProfile.GAMING_1440P, BuildObjective.BALANCED) is False
+
+
 

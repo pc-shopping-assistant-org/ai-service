@@ -280,7 +280,7 @@ def check_compatibility_status(
         if psu.wattage < min_psu_watts:
             return CompatibilityStatus.INCOMPATIBLE
 
-    # 7. Cooler vs CPU Socket (if cooler specifies supported sockets or socket)
+    # 7. Cooler vs CPU Socket & Thermal Capacity (TDP)
     if cooler and cpu:
         if cooler.supported_sockets:
             if not cpu.socket:
@@ -294,6 +294,13 @@ def check_compatibility_status(
                 return CompatibilityStatus.INCOMPATIBLE
         else:
             return CompatibilityStatus.UNKNOWN
+
+        if (
+            cooler.tdp_watts is not None
+            and cpu.tdp_watts is not None
+            and cooler.tdp_watts < cpu.tdp_watts
+        ):
+            return CompatibilityStatus.INCOMPATIBLE
 
     # 8. Storage vs Mainboard M.2 Interface
     storage = parts.get(ComponentCategory.STORAGE)
@@ -345,6 +352,12 @@ def score_build(
     mb = parts.get(ComponentCategory.MAINBOARD)
     psu = parts.get(ComponentCategory.PSU)
 
+    is_igpu = (
+        (gpu is None or gpu.is_integrated)
+        and cpu is not None
+        and cpu.has_integrated_graphics
+    )
+
     # 1. Policy-driven validation: fail-safe rejection if any required metric is missing
     for dim, weight in weights.items():
         if weight <= 0:
@@ -359,7 +372,7 @@ def score_build(
             return ScoreBreakdown(total_score=-1.0, dimensions=[])
         if dim == "storage_capacity" and (storage is None or storage.capacity_gb is None):
             return ScoreBreakdown(total_score=-1.0, dimensions=[])
-        if dim == "platform_longevity" and (mb is None or not mb.socket or _norm(mb.socket) not in policy_map):
+        if dim == "platform_longevity" and (mb is None or not mb.socket):
             return ScoreBreakdown(total_score=-1.0, dimensions=[])
         if dim == "ram_slots" and (mb is None or mb.ram_slots is None):
             return ScoreBreakdown(total_score=-1.0, dimensions=[])
@@ -368,12 +381,7 @@ def score_build(
         if dim == "psu_headroom" and (psu is None or psu.wattage is None):
             return ScoreBreakdown(total_score=-1.0, dimensions=[])
         if dim == "cost_efficiency":
-            igpu_only_ok = (
-                spec.allow_igpu_only
-                and gpu is None
-                and cpu is not None
-                and cpu.has_integrated_graphics
-            )
+            igpu_only_ok = spec.allow_igpu_only and is_igpu
             if cpu is None or cpu.performance_score is None:
                 return ScoreBreakdown(total_score=-1.0, dimensions=[])
             if not igpu_only_ok and (gpu is None or gpu.performance_score is None):
@@ -423,8 +431,7 @@ def score_build(
             raw_values["psu_headroom"] = round(psu_watts - power.estimated_sustained_peak_watts, 1)
 
     if "cpu_perf" in dimension_scores and (
-        "gpu_perf" in dimension_scores
-        or (spec.allow_igpu_only and gpu is None and cpu is not None and cpu.has_integrated_graphics)
+        "gpu_perf" in dimension_scores or (spec.allow_igpu_only and is_igpu)
     ):
         price_millions = max(1.0, spending / 1_000_000.0)
         gpu_contrib = (
@@ -432,8 +439,10 @@ def score_build(
             if "gpu_perf" in dimension_scores
             else float(cpu.integrated_graphics_score or 0.0) if cpu is not None else 0.0
         )
-        raw_efficiency = (gpu_contrib + dimension_scores["cpu_perf"]) / price_millions
-        dimension_scores["cost_efficiency"] = max(0.0, min(100.0, (raw_efficiency / 12.0) * 100.0))
+        # Sqrt price scaling rewards value-for-money without unfairly penalizing higher-budget builds
+        # and stays independent of target_budget (preserving budget monotonicity).
+        raw_efficiency = (gpu_contrib + dimension_scores["cpu_perf"]) / (price_millions**0.5)
+        dimension_scores["cost_efficiency"] = max(0.0, min(100.0, (raw_efficiency / 50.0) * 100.0))
         raw_values["cost_efficiency"] = round(raw_efficiency, 2)
 
     # 3. Transparent ScoreBreakdown with individual dimensions and contributions
@@ -500,7 +509,7 @@ def score_build(
                 )
             )
 
-    if spec.igpu_bonus > 0 and gpu is None and cpu is not None and cpu.has_integrated_graphics:
+    if spec.igpu_bonus > 0 and is_igpu:
         total_score = min(100.0, total_score + spec.igpu_bonus)
         dimensions.append(
             ScoreDimension(
@@ -600,9 +609,11 @@ class DeterministicPCOptimizer:
         self,
         platform_policy: dict[str, float] | None = None,
         enable_pruning: bool = True,
+        max_evaluations: int = 250_000,
     ) -> None:
         self.platform_policy = platform_policy or DEFAULT_PLATFORM_POLICY
         self.enable_pruning = enable_pruning
+        self.max_evaluations = max(1, max_evaluations)
 
     def optimize(
         self,
@@ -674,6 +685,7 @@ class DeterministicPCOptimizer:
         # 2. Candidate retrieval: partition into preferred envelope and all affordable
         # Apply profile- and objective-aware Pareto pruning across all objectives
         pruned_pools: dict[ComponentCategory, list[ComponentSpec]] = {}
+        preferred_pools: dict[ComponentCategory, list[ComponentSpec]] = {}
         total_pruned_candidates = 0
 
         for cat, items in categorized.items():
@@ -681,38 +693,54 @@ class DeterministicPCOptimizer:
                 owned_comp = owned_map[cat].component
                 if owned_comp is not None:
                     pruned_pools[cat] = [owned_comp]
+                    preferred_pools[cat] = [owned_comp]
                     continue
                 else:
                     raise ValueError(f"Owned part for category '{cat}' must specify a valid ComponentSpec.")
 
             if cat in constraints.pinned_parts:
                 # Hard pins bypass dominance pruning, not budget/compatibility rules.
-                pruned_pools[cat] = [item for item in items if item.price <= budget]
+                pinned_affordable = [item for item in items if item.price <= budget]
+                pruned_pools[cat] = pinned_affordable
+                preferred_pools[cat] = pinned_affordable
                 if not pruned_pools[cat]:
                     rejected_candidates.append(f"{cat}: pinned variant unavailable or over budget")
                 continue
 
             pool = get_candidate_pool(items, budget, cat, profile)
-            if self.enable_pruning and not any(
+            has_pref_scores = any(
                 constraints.preference_scores.get(part.id, 0) if part.id else 0 for part in pool.all_affordable
-            ):
+            )
+            if self.enable_pruning and not has_pref_scores:
                 non_dominated = pareto_prune_all_objectives(pool.all_affordable, profile)
                 total_pruned_candidates += len(pool.all_affordable) - len(non_dominated)
+                preferred_set = {stable_component_id(p) for p in pool.preferred}
+                preferred_non_dominated = [c for c in non_dominated if stable_component_id(c) in preferred_set] or non_dominated
             else:
                 non_dominated = list(pool.all_affordable)
+                preferred_non_dominated = list(pool.preferred) or non_dominated
 
             # Sort globally by (spending_price asc, stable_id asc)
             non_dominated.sort(key=lambda c: (get_spending_price(cat, c), stable_component_id(c)))
+            preferred_non_dominated.sort(key=lambda c: (get_spending_price(cat, c), stable_component_id(c)))
             pruned_pools[cat] = non_dominated
+            preferred_pools[cat] = preferred_non_dominated
 
-        cpus = pruned_pools.get(ComponentCategory.CPU, [])
-        mainboards = pruned_pools.get(ComponentCategory.MAINBOARD, [])
-        rams = pruned_pools.get(ComponentCategory.RAM, [])
-        catalog_gpus = pruned_pools.get(ComponentCategory.GPU, [])
-        cases = pruned_pools.get(ComponentCategory.CASE, [])
-        catalog_coolers = pruned_pools.get(ComponentCategory.COOLER, [])
-        storages = pruned_pools.get(ComponentCategory.STORAGE, [])
-        psus = pruned_pools.get(ComponentCategory.PSU, [])
+        # Estimate core search space (excluding CASE/COOLER which are algebraically reduced per (cpu, mb, gpu))
+        estimated_core_space = (
+            max(1, len(pruned_pools.get(ComponentCategory.CPU, [])))
+            * max(1, len(pruned_pools.get(ComponentCategory.MAINBOARD, [])))
+            * max(1, len(pruned_pools.get(ComponentCategory.RAM, [])))
+            * max(1, len(pruned_pools.get(ComponentCategory.GPU, [])))
+            * max(1, len(pruned_pools.get(ComponentCategory.STORAGE, [])))
+            * max(1, len(pruned_pools.get(ComponentCategory.PSU, [])))
+        )
+
+        # Use envelope-focused pools first only when the full catalog would exceed the evaluation budget
+        use_envelope_first = estimated_core_space > self.max_evaluations
+        search_passes: list[dict[ComponentCategory, list[ComponentSpec]]] = (
+            [preferred_pools, pruned_pools] if use_envelope_first else [pruned_pools]
+        )
 
         best_builds: dict[
             BuildObjective,
@@ -724,167 +752,316 @@ class DeterministicPCOptimizer:
         }
 
         evaluated_combinations = 0
+        enumeration_complete = True
         feasible_record: tuple[tuple[Any, ...], dict[ComponentCategory, ComponentSpec], PowerEstimate] | None = None
 
-        # Deterministic constrained enumeration with early budget and compatibility pruning
-        for cpu in cpus:
-            if cpu.has_integrated_graphics and (
-                cpu.integrated_graphics_power_watts is None
-            ):
-                metadata_rejections += 1
-            if cpu.includes_stock_cooler and (
-                cpu.stock_cooler_height_mm is None
-            ):
-                metadata_rejections += 1
-            # Build GPU options: dedicated catalog GPUs plus iGPU only if CPU has integrated graphics
-            if ComponentCategory.GPU in owned_map or ComponentCategory.GPU in constraints.pinned_parts:
-                available_gpus = list(catalog_gpus)
-            else:
-                available_gpus = list(catalog_gpus)
-                if (
-                    cpu.has_integrated_graphics
-                    and cpu.integrated_graphics_power_watts is not None
-                ):
-                    igpu_spec = ComponentSpec(
-                        id=uuid5(SYNTHETIC_NAMESPACE, f"{stable_component_id(cpu)}:igpu"),
-                        name=f"Đồ họa tích hợp {cpu.name} (iGPU)",
-                        category=ComponentCategory.GPU,
-                        price=0,
-                        tdp_watts=cpu.integrated_graphics_power_watts,
-                        performance_score=cpu.integrated_graphics_score,
-                        is_integrated=True,
-                        brand=cpu.brand,
-                    )
-                    brand = constraints.preferred_gpu_brand
-                    if not (brand.locked and brand.value) or brand.value.upper() in (igpu_spec.brand or "").upper():
-                        available_gpus.append(igpu_spec)
+        case_or_cooler_has_prefs = any(
+            (part.id is not None and constraints.preference_scores.get(part.id, 0) != 0)
+            for cat in (ComponentCategory.CASE, ComponentCategory.COOLER)
+            for part in pruned_pools.get(cat, [])
+        )
 
-            if not available_gpus:
-                continue
+        def _is_m2_storage(storage: ComponentSpec) -> bool:
+            s_iface = storage.interface
+            s_ff = storage.form_factor
+            return bool((s_iface and "NVME" in _norm(s_iface)) or (s_ff and "M.2" in str(s_ff).upper()))
 
-            # CRITICAL FIX 1: Sort available_gpus by spending price ascending to prevent break bug
-            available_gpus.sort(key=lambda c: (get_spending_price(ComponentCategory.GPU, c), stable_component_id(c)))
+        def _select_case_cooler_pairs(
+            mb: ComponentSpec,
+            gpu: ComponentSpec,
+            cases_list: list[ComponentSpec],
+            coolers_list: list[ComponentSpec],
+            max_pair_budget: int,
+        ) -> list[tuple[ComponentSpec, ComponentSpec, int]]:
+            """Find compatible (case, cooler) pairs; when no CASE/COOLER preference exists,
+            exact algebraic decomposition keeps only the single cheapest compatible pair."""
+            nonlocal missing_case_support, metadata_rejections
+            pairs: list[tuple[ComponentSpec, ComponentSpec, int]] = []
+            best_pair: tuple[int, str, str, ComponentSpec, ComponentSpec] | None = None
 
-            # Build Cooler options: aftermarket catalog coolers plus stock cooler only if CPU includes one
-            if ComponentCategory.COOLER in owned_map or ComponentCategory.COOLER in constraints.pinned_parts:
-                available_coolers = list(catalog_coolers)
-            else:
-                available_coolers = list(catalog_coolers)
-                if (
-                    cpu.includes_stock_cooler
-                    and cpu.stock_cooler_height_mm is not None
-                    and (cpu.stock_cooler_tdp_watts is None or cpu.stock_cooler_tdp_watts >= (cpu.tdp_watts or 65))
-                ):
-                    stock_cooler = ComponentSpec(
-                        id=uuid5(SYNTHETIC_NAMESPACE, f"{stable_component_id(cpu)}:stock_cooler"),
-                        name=f"Tản nhiệt kèm theo CPU {cpu.name} (Stock Cooler)",
-                        category=ComponentCategory.COOLER,
-                        price=0,
-                        cooler_height_mm=cpu.stock_cooler_height_mm,
-                        performance_score=cpu.stock_cooler_score,
-                        tdp_watts=cpu.stock_cooler_tdp_watts,
-                        supported_sockets=[cpu.socket] if cpu.socket else [],
-                        brand=cpu.brand,
-                    )
-                    available_coolers.append(stock_cooler)
-
-            if not available_coolers:
-                continue
-
-            # CRITICAL FIX 1: Sort available_coolers by spending price ascending to prevent break bug
-            available_coolers.sort(key=lambda c: (get_spending_price(ComponentCategory.COOLER, c), stable_component_id(c)))
-
-            for mb in mainboards:
-                # Socket check
-                if not cpu.socket or not mb.socket:
-                    metadata_rejections += 1
-                if not cpu.socket or not mb.socket or _norm(cpu.socket) != _norm(mb.socket):
-                    continue
-                sub_1 = get_spending_price(ComponentCategory.CPU, cpu) + get_spending_price(ComponentCategory.MAINBOARD, mb)
-                if sub_1 > budget:
+            for case in cases_list:
+                case_price = get_spending_price(ComponentCategory.CASE, case)
+                if case_price > max_pair_budget:
+                    break
+                if best_pair is not None and case_price > best_pair[0]:
                     break
 
-                for ram in rams:
-                    # RAM type check
-                    if not mb.ram_type or not ram.ram_type:
+                case_status = check_case_form_factor(mb, case)
+                if case_supported_form_factors(case) is None:
+                    missing_case_support = True
+                    rejected_candidates.append(f"{case.name}: CASE_SUPPORT_METADATA_REQUIRED")
+                if case_status != CompatibilityStatus.COMPATIBLE:
+                    if case_status == CompatibilityStatus.UNKNOWN:
                         metadata_rejections += 1
-                    if not mb.ram_type or not ram.ram_type or _norm(mb.ram_type) != _norm(ram.ram_type):
+                    continue
+
+                if not gpu.is_integrated:
+                    if gpu.gpu_length_mm is None or case.max_gpu_length_mm is None:
+                        metadata_rejections += 1
                         continue
-                    sub_2 = sub_1 + get_spending_price(ComponentCategory.RAM, ram)
-                    if sub_2 > budget:
+                    if gpu.gpu_length_mm > case.max_gpu_length_mm:
+                        continue
+
+                for cooler in coolers_list:
+                    pair_price = case_price + get_spending_price(ComponentCategory.COOLER, cooler)
+                    if pair_price > max_pair_budget:
+                        break
+                    if best_pair is not None and pair_price > best_pair[0]:
                         break
 
+                    if cooler.radiator_mm is not None:
+                        if case.max_radiator_mm is None:
+                            metadata_rejections += 1
+                            continue
+                        if case.max_radiator_mm == 0 or cooler.radiator_mm > case.max_radiator_mm:
+                            continue
+                    elif cooler.cooler_height_mm is not None:
+                        if case.max_cooler_height_mm is None:
+                            metadata_rejections += 1
+                            continue
+                        if cooler.cooler_height_mm > case.max_cooler_height_mm:
+                            continue
+                    else:
+                        metadata_rejections += 1
+                        continue
+
+                    if case_or_cooler_has_prefs:
+                        pairs.append((case, cooler, pair_price))
+                    else:
+                        candidate_key = (
+                            pair_price,
+                            stable_component_id(case),
+                            stable_component_id(cooler),
+                        )
+                        if best_pair is None or candidate_key < best_pair[:3]:
+                            best_pair = (*candidate_key, case, cooler)
+                        # Coolers are sorted by price asc; first valid cooler for this case is cheapest
+                        break
+
+            if case_or_cooler_has_prefs:
+                pairs.sort(key=lambda item: (item[2], stable_component_id(item[0]), stable_component_id(item[1])))
+                return pairs
+            if best_pair is not None:
+                return [(best_pair[3], best_pair[4], best_pair[0])]
+            return []
+
+        for active_pools in search_passes:
+            cpus = active_pools.get(ComponentCategory.CPU, [])
+            mainboards = active_pools.get(ComponentCategory.MAINBOARD, [])
+            rams = active_pools.get(ComponentCategory.RAM, [])
+            catalog_gpus = active_pools.get(ComponentCategory.GPU, [])
+            cases = active_pools.get(ComponentCategory.CASE, [])
+            catalog_coolers = active_pools.get(ComponentCategory.COOLER, [])
+            storages = active_pools.get(ComponentCategory.STORAGE, [])
+            psus = active_pools.get(ComponentCategory.PSU, [])
+
+            if not (cpus and mainboards and rams and cases and storages and psus):
+                continue
+
+            min_storage_price = get_spending_price(ComponentCategory.STORAGE, storages[0])
+            min_psu_price = get_spending_price(ComponentCategory.PSU, psus[0])
+            min_ram_price = get_spending_price(ComponentCategory.RAM, rams[0])
+            min_case_price = get_spending_price(ComponentCategory.CASE, cases[0])
+            min_tail_after_gpu = min_ram_price + min_case_price + min_storage_price + min_psu_price
+
+            budget_hit = False
+
+            # Deterministic constrained enumeration with exact algebraic reduction & suffix-price pruning
+            for cpu in cpus:
+                if budget_hit:
+                    break
+                if cpu.has_integrated_graphics and cpu.integrated_graphics_power_watts is None:
+                    metadata_rejections += 1
+                if cpu.includes_stock_cooler and cpu.stock_cooler_height_mm is None:
+                    metadata_rejections += 1
+
+                # Build GPU options: dedicated catalog GPUs plus iGPU when CPU has integrated graphics
+                # (scoring & igpu_bonus remain governed by profile_spec.allow_igpu_only / igpu_bonus).
+                if ComponentCategory.GPU in owned_map or ComponentCategory.GPU in constraints.pinned_parts:
+                    available_gpus = list(catalog_gpus)
+                else:
+                    available_gpus = list(catalog_gpus)
+                    if (
+                        cpu.has_integrated_graphics
+                        and cpu.integrated_graphics_power_watts is not None
+                    ):
+                        igpu_spec = ComponentSpec(
+                            id=uuid5(SYNTHETIC_NAMESPACE, f"{stable_component_id(cpu)}:igpu"),
+                            name=f"Đồ họa tích hợp {cpu.name} (iGPU)",
+                            category=ComponentCategory.GPU,
+                            price=0,
+                            tdp_watts=cpu.integrated_graphics_power_watts,
+                            performance_score=cpu.integrated_graphics_score,
+                            is_integrated=True,
+                            brand=cpu.brand,
+                        )
+                        brand = constraints.preferred_gpu_brand
+                        if not (brand.locked and brand.value) or brand.value.upper() in (igpu_spec.brand or "").upper():
+                            available_gpus.append(igpu_spec)
+
+                if not available_gpus:
+                    continue
+
+                available_gpus.sort(key=lambda c: (get_spending_price(ComponentCategory.GPU, c), stable_component_id(c)))
+
+                # Build Cooler options: aftermarket catalog coolers + stock cooler, pre-filtered for CPU socket & TDP
+                if ComponentCategory.COOLER in owned_map or ComponentCategory.COOLER in constraints.pinned_parts:
+                    raw_coolers = list(catalog_coolers)
+                else:
+                    raw_coolers = list(catalog_coolers)
+                    if (
+                        cpu.includes_stock_cooler
+                        and cpu.stock_cooler_height_mm is not None
+                        and (cpu.stock_cooler_tdp_watts is None or cpu.stock_cooler_tdp_watts >= (cpu.tdp_watts or 65))
+                    ):
+                        stock_cooler = ComponentSpec(
+                            id=uuid5(SYNTHETIC_NAMESPACE, f"{stable_component_id(cpu)}:stock_cooler"),
+                            name=f"Tản nhiệt kèm theo CPU {cpu.name} (Stock Cooler)",
+                            category=ComponentCategory.COOLER,
+                            price=0,
+                            cooler_height_mm=cpu.stock_cooler_height_mm,
+                            performance_score=cpu.stock_cooler_score,
+                            tdp_watts=cpu.stock_cooler_tdp_watts,
+                            supported_sockets=[cpu.socket] if cpu.socket else [],
+                            brand=cpu.brand,
+                        )
+                        raw_coolers.append(stock_cooler)
+
+                cpu_coolers: list[ComponentSpec] = []
+                for cooler in raw_coolers:
+                    if cooler.supported_sockets:
+                        if not cpu.socket:
+                            metadata_rejections += 1
+                            continue
+                        if _norm(cpu.socket) not in [_norm(s) for s in cooler.supported_sockets]:
+                            continue
+                    elif cooler.socket:
+                        if not cpu.socket:
+                            metadata_rejections += 1
+                            continue
+                        if _norm(cpu.socket) != _norm(cooler.socket):
+                            continue
+                    else:
+                        metadata_rejections += 1
+                        continue
+                    if (
+                        cooler.tdp_watts is not None
+                        and cpu.tdp_watts is not None
+                        and cooler.tdp_watts < cpu.tdp_watts
+                    ):
+                        continue
+                    cpu_coolers.append(cooler)
+
+                if not cpu_coolers:
+                    continue
+
+                cpu_coolers.sort(key=lambda c: (get_spending_price(ComponentCategory.COOLER, c), stable_component_id(c)))
+                min_gpu_price = get_spending_price(ComponentCategory.GPU, available_gpus[0])
+                min_cooler_price = get_spending_price(ComponentCategory.COOLER, cpu_coolers[0])
+                cpu_price = get_spending_price(ComponentCategory.CPU, cpu)
+
+                for mb in mainboards:
+                    if budget_hit:
+                        break
+                    if not cpu.socket or not mb.socket:
+                        metadata_rejections += 1
+                    if not cpu.socket or not mb.socket or _norm(cpu.socket) != _norm(mb.socket):
+                        continue
+                    sub_cpu_mb = cpu_price + get_spending_price(ComponentCategory.MAINBOARD, mb)
+                    if sub_cpu_mb + min_gpu_price + min_cooler_price + min_tail_after_gpu > budget:
+                        break
+
+                    # Pre-filter compatible RAMs and Storages once per Mainboard
+                    mb_rams = [
+                        r
+                        for r in rams
+                        if mb.ram_type
+                        and r.ram_type
+                        and _norm(mb.ram_type) == _norm(r.ram_type)
+                        and not (
+                            mb.ram_slots is not None
+                            and r.kit_modules is not None
+                            and r.kit_modules > mb.ram_slots
+                        )
+                    ]
+                    if not mb_rams:
+                        if not mb.ram_type:
+                            metadata_rejections += 1
+                        continue
+                    mb_min_ram_price = get_spending_price(ComponentCategory.RAM, mb_rams[0])
+
+                    mb_storages = [
+                        s
+                        for s in storages
+                        if not (_is_m2_storage(s) and mb.m2_slots is not None and mb.m2_slots == 0)
+                    ]
+                    if not mb_storages:
+                        continue
+                    mb_min_storage_price = get_spending_price(ComponentCategory.STORAGE, mb_storages[0])
+
                     for gpu in available_gpus:
-                        sub_3 = sub_2 + get_spending_price(ComponentCategory.GPU, gpu)
-                        if sub_3 > budget:
+                        if budget_hit:
+                            break
+                        sub_cpu_mb_gpu = sub_cpu_mb + get_spending_price(ComponentCategory.GPU, gpu)
+                        max_cc_budget = budget - sub_cpu_mb_gpu - mb_min_ram_price - mb_min_storage_price - min_psu_price
+                        if max_cc_budget < min_case_price + min_cooler_price:
                             break
 
-                        temp_parts = {
-                            ComponentCategory.CPU: cpu,
-                            ComponentCategory.MAINBOARD: mb,
-                            ComponentCategory.RAM: ram,
-                            ComponentCategory.GPU: gpu,
-                        }
                         try:
-                            power = calculate_power_estimate(temp_parts, profile)
+                            power = calculate_power_estimate(
+                                {ComponentCategory.CPU: cpu, ComponentCategory.GPU: gpu},
+                                profile,
+                            )
                         except ValueError as exc:
                             metadata_rejections += 1
                             rejected_candidates.append(str(exc))
                             continue
 
-                        for case in cases:
-                            sub_4 = sub_3 + get_spending_price(ComponentCategory.CASE, case)
-                            if sub_4 > budget:
+                        valid_psus = [
+                            p
+                            for p in psus
+                            if p.wattage is not None and p.wattage >= power.minimum_capacity_watts
+                        ]
+                        if not valid_psus:
+                            continue
+                        gpu_min_psu_price = get_spending_price(ComponentCategory.PSU, valid_psus[0])
+                        max_cc_budget = budget - sub_cpu_mb_gpu - mb_min_ram_price - mb_min_storage_price - gpu_min_psu_price
+                        if max_cc_budget < min_case_price + min_cooler_price:
+                            continue
+
+                        cc_pairs = _select_case_cooler_pairs(mb, gpu, cases, cpu_coolers, max_cc_budget)
+                        if not cc_pairs:
+                            continue
+
+                        for case, cooler, cc_price in cc_pairs:
+                            if budget_hit:
                                 break
-                            case_status = check_case_form_factor(mb, case)
-                            if case_supported_form_factors(case) is None:
-                                missing_case_support = True
-                                rejected_candidates.append(f"{case.name}: CASE_SUPPORT_METADATA_REQUIRED")
-                            if case_status != CompatibilityStatus.COMPATIBLE:
-                                if case_status == CompatibilityStatus.UNKNOWN:
-                                    metadata_rejections += 1
-                                continue
+                            sub_cc = sub_cpu_mb_gpu + cc_price
+                            if sub_cc + mb_min_ram_price + mb_min_storage_price + gpu_min_psu_price > budget:
+                                break
 
-                            # Dedicated GPU length check
-                            if (
-                                not gpu.is_integrated
-                                and gpu.gpu_length_mm
-                                and case.max_gpu_length_mm
-                                and gpu.gpu_length_mm > case.max_gpu_length_mm
-                            ):
-                                continue
-
-                            for cooler in available_coolers:
-                                # Cooler clearance check (Radiator for AIO, Height for Air)
-                                if cooler.radiator_mm is not None and case.max_radiator_mm is not None:
-                                    if case.max_radiator_mm == 0 or cooler.radiator_mm > case.max_radiator_mm:
-                                        continue
-                                elif cooler.cooler_height_mm and case.max_cooler_height_mm and cooler.cooler_height_mm > case.max_cooler_height_mm:
-                                    continue
-
-                                # Cooler socket check
-                                if cooler.supported_sockets:
-                                    if not cpu.socket or _norm(cpu.socket) not in [_norm(s) for s in cooler.supported_sockets]:
-                                        continue
-                                elif cooler.socket and (
-                                    not cpu.socket or _norm(cpu.socket) != _norm(cooler.socket)
-                                ):
-                                    continue
-
-                                sub_5 = sub_4 + get_spending_price(ComponentCategory.COOLER, cooler)
-                                if sub_5 > budget:
+                            for ram in mb_rams:
+                                if budget_hit:
+                                    break
+                                sub_ram = sub_cc + get_spending_price(ComponentCategory.RAM, ram)
+                                if sub_ram + mb_min_storage_price + gpu_min_psu_price > budget:
                                     break
 
-                                for storage in storages:
-                                    sub_6 = sub_5 + get_spending_price(ComponentCategory.STORAGE, storage)
-                                    if sub_6 > budget:
+                                for storage in mb_storages:
+                                    if budget_hit:
+                                        break
+                                    sub_storage = sub_ram + get_spending_price(ComponentCategory.STORAGE, storage)
+                                    if sub_storage + gpu_min_psu_price > budget:
                                         break
 
-                                    for psu in psus:
-                                        if psu.wattage and psu.wattage < power.minimum_capacity_watts:
-                                            continue
-                                        total_spending = sub_6 + get_spending_price(ComponentCategory.PSU, psu)
+                                    for psu in valid_psus:
+                                        total_spending = sub_storage + get_spending_price(ComponentCategory.PSU, psu)
                                         if total_spending > budget:
+                                            break
+
+                                        if evaluated_combinations >= self.max_evaluations:
+                                            enumeration_complete = False
+                                            budget_hit = True
                                             break
 
                                         full_parts = {
@@ -897,15 +1074,6 @@ class DeterministicPCOptimizer:
                                             ComponentCategory.STORAGE: storage,
                                             ComponentCategory.PSU: psu,
                                         }
-
-                                        # Enforce complete physical and electrical compatibility
-                                        compat_status = check_compatibility_status(
-                                            full_parts, power.minimum_capacity_watts
-                                        )
-                                        if compat_status != CompatibilityStatus.COMPATIBLE:
-                                            if compat_status == CompatibilityStatus.UNKNOWN:
-                                                metadata_rejections += 1
-                                            continue
 
                                         evaluated_combinations += 1
                                         tie_key = build_tie_key(full_parts, total_spending)
@@ -925,17 +1093,22 @@ class DeterministicPCOptimizer:
                                             )
                                             if breakdown.total_score < 0.0:
                                                 scoring_rejections += 1
-                                                # Reject build with missing required scoring metric
                                                 continue
 
                                             breakdown = apply_preferences(breakdown, full_parts, constraints.preference_scores)
                                             score_val = breakdown.total_score
                                             current_record = best_builds[obj]
-                                            if current_record is None or score_val > current_record[0]:
+                                            if (
+                                                current_record is None
+                                                or score_val > current_record[0]
+                                                or (abs(score_val - current_record[0]) < 1e-6 and tie_key < current_record[1])
+                                            ):
                                                 best_builds[obj] = (score_val, tie_key, full_parts, power, breakdown)
-                                            elif abs(score_val - current_record[0]) < 1e-6 and tie_key < current_record[1]:
-                                                # Deterministic tie-breaking: lower price first, then lexicographical ID
-                                                best_builds[obj] = (score_val, tie_key, full_parts, power, breakdown)
+
+            # If envelope-first pass already produced ranked builds for all objectives, stop early
+            if use_envelope_first and all(best_builds[obj] is not None for obj in BuildObjective):
+                enumeration_complete = False
+                break
 
         # Build output structures
         ranked_builds: dict[BuildObjective, RankedBuild] = {}
@@ -978,7 +1151,7 @@ class DeterministicPCOptimizer:
             pruned_count=total_pruned_candidates,
             rejected_candidates=list(dict.fromkeys(rejected_candidates)),
             search_trace=OptimizerSearchTrace(
-                enumeration_complete=True,
+                enumeration_complete=enumeration_complete,
                 pruned_candidates=total_pruned_candidates,
                 metadata_rejections=metadata_rejections,
                 scoring_rejections=scoring_rejections,

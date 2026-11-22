@@ -433,7 +433,13 @@ async def test_check_build_compatibility_evaluates_catalog_parts_and_rejects_mis
         async def search(self, query, limit):
             return list(by_id.values())[:limit]
 
-    dispatcher = ToolDispatcher(CompatCatalog(), PCBuildApplicationService())
+    from ai_service.infrastructure.hardware import LocalHardwareRuleEngine
+
+    dispatcher = ToolDispatcher(
+        CompatCatalog(),
+        PCBuildApplicationService(),
+        rule_engine=LocalHardwareRuleEngine(),
+    )
     trusted = context()
 
     ok = await dispatcher.execute(

@@ -286,8 +286,14 @@ def dominates(
     if better.category == ComponentCategory.CPU and not preserves_cpu_optional_capabilities(better, worse):
         return False
 
-    # RAM standard matching
+    # RAM standard & module-count matching (more modules restricts 2-slot mainboards)
     if _norm_str(better.ram_type) != _norm_str(worse.ram_type):
+        return False
+    if (
+        better.category == ComponentCategory.RAM
+        and worse.kit_modules is not None
+        and (better.kit_modules is None or better.kit_modules > worse.kit_modules)
+    ):
         return False
 
     # Mainboard form factor matching
@@ -298,18 +304,46 @@ def dominates(
     if better.category == ComponentCategory.GPU and better.is_integrated != worse.is_integrated:
         return False
 
-    # Cooler supported sockets matching: better must support at least all sockets that worse supports
-    if better.category == ComponentCategory.COOLER and worse.supported_sockets:
-        w_sockets = {_norm_str(s) for s in worse.supported_sockets}
-        b_sockets = {_norm_str(s) for s in better.supported_sockets}
-        if not w_sockets.issubset(b_sockets):
+    # Cooler compatibility preservation: AIO vs Air, radiator size, TDP rating, and supported sockets
+    if better.category == ComponentCategory.COOLER:
+        if (better.radiator_mm is not None) != (worse.radiator_mm is not None):
             return False
+        if worse.radiator_mm is not None and (
+            better.radiator_mm is None or better.radiator_mm > worse.radiator_mm
+        ):
+            return False
+        if worse.tdp_watts is not None and (
+            better.tdp_watts is None or better.tdp_watts < worse.tdp_watts
+        ):
+            return False
+        if worse.supported_sockets:
+            w_sockets = {_norm_str(s) for s in worse.supported_sockets}
+            b_sockets = {_norm_str(s) for s in better.supported_sockets}
+            if not w_sockets.issubset(b_sockets):
+                return False
 
-    # Case supported form factors: better must support at least all form factors that worse supports
+    # Case compatibility preservation: supported form factors & max radiator support
     if better.category == ComponentCategory.CASE:
         w_supported = case_supported_form_factors(worse)
         b_supported = case_supported_form_factors(better)
         if w_supported is None or b_supported is None or not w_supported.issubset(b_supported):
+            return False
+        if worse.max_radiator_mm is not None and (
+            better.max_radiator_mm is None or better.max_radiator_mm < worse.max_radiator_mm
+        ):
+            return False
+
+    # Storage interface preservation: M.2/NVMe cannot dominate non-M.2 (e.g. SATA on boards with 0 M.2 slots)
+    if better.category == ComponentCategory.STORAGE:
+        b_is_m2 = bool(
+            (better.interface and "NVME" in _norm_str(better.interface))
+            or (better.form_factor and "M.2" in str(better.form_factor).upper())
+        )
+        w_is_m2 = bool(
+            (worse.interface and "NVME" in _norm_str(worse.interface))
+            or (worse.form_factor and "M.2" in str(worse.form_factor).upper())
+        )
+        if b_is_m2 and not w_is_m2:
             return False
 
     # 3. Dimensions evaluation
