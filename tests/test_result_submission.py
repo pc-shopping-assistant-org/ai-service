@@ -115,12 +115,23 @@ async def test_build_submission_drops_unknown_synthetic_call_ids_and_keeps_valid
     assert resolved.supporting_tool_call_ids == ["catalog"]
     assert selected == [record]
 
+    resolved_inf, selected_inf = resolve_result_selection(
+        ResultSelection(
+            text="Ngân sách không đủ",
+            evidence_refs=[],
+            supporting_tool_call_ids=["build-inf-low"],
+        ),
+        [record],
+    )
+    assert resolved_inf.supporting_tool_call_ids == ["catalog"]
+    assert selected_inf == [record]
+
     with pytest.raises(ValueError, match="canonical unique tool selections"):
         resolve_result_selection(
             ResultSelection(
                 text="Không có build_ref",
                 evidence_refs=result.evidence_refs,
-                supporting_tool_call_ids=["build-1080p-20m"],
+                supporting_tool_call_ids=["unknown-call-id"],
             ),
             [record],
         )

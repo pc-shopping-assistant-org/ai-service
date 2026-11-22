@@ -145,10 +145,11 @@ def resolve_result_selection(
 ) -> tuple[ResultSelection, list[ToolRecord]]:
     """Resolve model-selected calls into canonical evidence for every answer lane."""
     by_id = {record.call.call_id: record for record in records}
-    ids = selection.supporting_tool_call_ids
-    if selection.build_ref is not None:
-        # Auto-run build_result entries are matched by build_ref/refs; drop synthetic build call IDs.
-        ids = [cid for cid in ids if cid in by_id]
+    ids = [
+        cid
+        for cid in selection.supporting_tool_call_ids
+        if cid in by_id or not (selection.build_ref is not None or cid.startswith("build-"))
+    ]
     if (
         len(by_id) != len(records)
         or len(ids) != len(set(ids))
