@@ -2,15 +2,18 @@
 
 from ai_service.capabilities.assistant.provenance import CatalogRowV1
 
-from .compiler import compile_requirements
+from .compiler import Mapping, compile_requirements
 from .contracts import CanonicalRequirementState
+from .diagnostics import CompilationReason, CompilationStatus
 from .resolver import RequirementDraft
 
 CATALOG_DEPENDENT_REASONS = frozenset(
     {
-        "VARIANT_NOT_RESOLVED",
-        "METADATA_INSUFFICIENT",
-        "ACCESSORY_UNAVAILABLE_OR_METADATA_MISSING",
+        CompilationReason.VARIANT_NOT_RESOLVED,
+        CompilationReason.PIN_UNAVAILABLE,
+        CompilationReason.METADATA_INSUFFICIENT,
+        CompilationReason.ACCESSORY_UNAVAILABLE_OR_METADATA_MISSING,
+        CompilationReason.ACCESSORY_BUDGET_EXCEEDED,
     }
 )
 REFERENCE_PREDICATES = frozenset({"identity", "use_resource"})
@@ -20,9 +23,9 @@ def build_needs_catalog(state: CanonicalRequirementState) -> bool:
     """Wait for catalog-independent goals/semantics before acquiring candidates."""
     preflight = compile_requirements(state, [])
     return all(
-        item.status == "APPLIED"
+        item.status == CompilationStatus.APPLIED
         or (
-            item.status == "NEEDS_CLARIFICATION"
+            item.status == CompilationStatus.NEEDS_CLARIFICATION
             and item.reason in CATALOG_DEPENDENT_REASONS
         )
         for item in preflight.mapping
@@ -39,16 +42,16 @@ def draft_needs_catalog(draft: RequirementDraft) -> bool:
     )
 
 
-def build_clarification_reasons(
+def build_clarification_items(
     state: CanonicalRequirementState,
     catalog: list[CatalogRowV1],
     *,
     catalog_ready: bool,
-) -> set[str]:
+) -> list[Mapping]:
     """Unacquired candidates cannot prove missing SKU/spec metadata."""
-    return {
-        item.reason
+    return [
+        item
         for item in compile_requirements(state, catalog).mapping
-        if item.status == "NEEDS_CLARIFICATION"
+        if item.status == CompilationStatus.NEEDS_CLARIFICATION
         and (catalog_ready or item.reason not in CATALOG_DEPENDENT_REASONS)
-    }
+    ]

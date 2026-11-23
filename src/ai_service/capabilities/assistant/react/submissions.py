@@ -111,7 +111,7 @@ class ResultSelection(Contract):
     build_ref: UUID | None = None
     supporting_tool_call_ids: list[Text] = Field(default_factory=list, max_length=20)
     web_excerpts: list[WebExcerpt] = Field(default_factory=list, max_length=8)
-    explanation: Text | None = Field(default=None, max_length=3000)
+    explanation: Text | None = Field(default=None, max_length=4000)
     explanation_evidence_refs: list[Text] | None = Field(default=None, max_length=20)
     review: ProductReview | None = None
 

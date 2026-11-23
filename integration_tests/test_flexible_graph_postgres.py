@@ -294,7 +294,11 @@ async def test_confirm_then_clarify_preparation_survives_reopen(postgres_dsn):
                 confirmation=confirmation,
             )
             assert len(prepared.snapshot.requirement_state.requirements) == 1
-            assert prepared.clarification.missing_fields == ["BUDGET_REQUIRED"]
+            assert prepared.clarification.missing_fields == [
+                "BUDGET_REQUIRED",
+                "METADATA_INSUFFICIENT",
+                "USE_CASE_REQUIRED",
+            ]
             assert prepared.task_outcomes[0].status == "UNRESOLVED"
             assert waiting.snapshot.requirement_state.requirements == {}
     finally:

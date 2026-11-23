@@ -3,6 +3,8 @@
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from ai_service.capabilities.assistant.requirements.diagnostics import CompilationReason
+
 from .actions import RespondAction
 from .contracts import (
     AnswerCandidate,
@@ -29,8 +31,12 @@ def pending_context(
     if pending is None or pending.status != "WAITING_INPUT":
         return None
     proposal = pending.pending_proposal
+    missing = pending.clarification.missing_fields if pending.clarification else ()
     return PendingConversationContext(
         question=pending.waiting_message or pending.task_message,
+        missing_fields=[
+            CompilationReason(code) for code in missing if code in CompilationReason
+        ],
         proposal=proposal.patch if proposal else None,
         proposal_sources=list(proposal.source_messages.values()) if proposal else [],
         resolution=pending.resolution_options,

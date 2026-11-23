@@ -10,14 +10,18 @@ from test_flexible_publication import base_snapshot
 from test_flexible_reference_continuation import pending_reference
 from test_react_graph import Budget
 from test_react_tools import Catalog, context
-from test_requirement_pipeline import requirement, rows
+from test_requirement_pipeline import requirement, rows, state
+from test_setup_preferences import accessory
 from test_waiting_publication import Proposer
 
 from ai_service.application.errors import BackendUnavailableError
 from ai_service.application.ports.stateful_conversation import (
     AcceptedConversationSnapshot,
 )
-from ai_service.capabilities.assistant.react.actions import FlexibleDecision
+from ai_service.capabilities.assistant.react.actions import (
+    AskClarificationAction,
+    FlexibleDecision,
+)
 from ai_service.capabilities.assistant.react.contracts import (
     CompletionRequirement,
     ToolName,
@@ -29,6 +33,8 @@ from ai_service.capabilities.assistant.react.tools import ToolDispatcher
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
     QuantityValue,
+    ReferenceValue,
+    TextValue,
 )
 from ai_service.capabilities.assistant.requirements.resolver import RequirementDraft
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
@@ -65,13 +71,7 @@ async def test_missing_build_goals_clarify_without_hardware_dependency(registere
     class Ask:
         async def decide(self, message, transcript, allowed, repair, context=None):
             assert ToolName.BUILD_PC not in allowed
-            return FlexibleDecision(
-                action={
-                    "kind": "ASK_CLARIFICATION",
-                    "question": "Ngân sách và nhu cầu sử dụng của bạn là gì?",
-                    "missing_fields": ["BUDGET_REQUIRED", "USE_CASE_REQUIRED"],
-                }
-            )
+            return FlexibleDecision(action=AskClarificationAction())
 
     class Tasks:
         async def extract_tasks(self, message):
@@ -150,19 +150,11 @@ async def test_unloaded_catalog_does_not_prove_missing_component_metadata():
     class Ask:
         async def decide(self, message, transcript, allowed, repair, context=None):
             model_calls.append(True)
-            if len(model_calls) == 1:
-                missing = ["METADATA_INSUFFICIENT"]
-            else:
-                assert set(repair.missing_fields) == {
-                    "BUDGET_REQUIRED",
-                    "USE_CASE_REQUIRED",
-                }
-                missing = ["BUDGET_REQUIRED", "USE_CASE_REQUIRED"]
             return FlexibleDecision(
                 action={
                     "kind": "ASK_CLARIFICATION",
                     "question": "Cần thêm thông tin",
-                    "missing_fields": missing,
+                    "missing_fields": ["METADATA_INSUFFICIENT"],
                 }
             )
 
@@ -184,12 +176,166 @@ async def test_unloaded_catalog_does_not_prove_missing_component_metadata():
         "BUDGET_REQUIRED",
         "USE_CASE_REQUIRED",
     ]
-    assert len(model_calls) == 2
+    assert len(model_calls) == 1
+    assert "ngân sách" in snapshot.flexible.assistant_message.lower()
+    assert "BUDGET_REQUIRED" not in snapshot.flexible.assistant_message
     forged = deepcopy(result)
     forged["decision"]["action"]["missing_fields"] = ["METADATA_INSUFFICIENT"]
     forged["clarification"]["missing_fields"] = ["METADATA_INSUFFICIENT"]
     with pytest.raises(ValueError, match="actual missing prerequisites"):
         source.prepare(forged, ctx, tasks, service, 0)
+
+
+@pytest.mark.asyncio
+async def test_budget_reply_publishes_only_remaining_question_in_one_model_call():
+    ctx, products = unloaded_context(), Catalog()
+    service, tasks = (
+        PCBuildApplicationService(),
+        [CompletionRequirement(kind="BUILD", constraints_revision=0)],
+    )
+    source = binding(ctx, "Build PC")
+
+    class Ask:
+        async def decide(self, *args):
+            return FlexibleDecision(action=AskClarificationAction())
+
+    async def run(model, trusted, publication, revision):
+        graph = build_flexible_graph(
+            model,
+            ToolDispatcher(products, service),
+            trusted,
+            tasks,
+            Budget(),
+            conversation_revision=revision,
+            publication=publication,
+            catalog_loader=OfflineHardware(),
+        )
+        result = await graph.ainvoke({"message": publication.request_message})
+        assert result["model_calls"] == 1
+        return AcceptedConversationSnapshot.model_validate(result["accepted_snapshot"])
+
+    initial = await run(Ask(), ctx, source, 0)
+    assert initial.flexible.status == "WAITING_INPUT"
+    assert initial.flexible.clarification.missing_fields == [
+        "BUDGET_REQUIRED",
+        "USE_CASE_REQUIRED",
+    ]
+    reply = "30 triệu"
+
+    class BudgetReply:
+        async def decide(self, message, *args):
+            return FlexibleDecision(
+                action={
+                    "kind": "PROPOSE_REQUIREMENTS",
+                    "draft": {
+                        "items": [
+                            {
+                                "target": "GOAL",
+                                "subject": "SETUP",
+                                "predicate": "budget",
+                                "operator": "LTE",
+                                "start": 0,
+                                "end": len(message),
+                                "value": {
+                                    "kind": "QUANTITY",
+                                    "amount": 30_000_000,
+                                    "unit": "VND",
+                                },
+                            }
+                        ]
+                    },
+                }
+            )
+
+    continuation = source.model_copy(
+        update={"accepted": initial, "request_message": reply}
+    )
+    next_ctx = ctx.model_copy(
+        update={"run_id": uuid4(), "requirements": initial.requirement_state}
+    )
+    updated = await run(BudgetReply(), next_ctx, continuation, 1)
+    assert updated.flexible.status == "WAITING_INPUT"
+    assert updated.flexible.clarification.missing_fields == ["USE_CASE_REQUIRED"]
+    assert "ngân sách" not in updated.flexible.assistant_message.lower()
+    assert (
+        next(iter(updated.requirement_state.goals.values())).value.amount == 30_000_000
+    )
+    assert initial.requirement_state == source.accepted.requirement_state
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "PIN_UNAVAILABLE",
+        "ACCESSORY_BUDGET_EXCEEDED",
+        "ACCESSORY_UNAVAILABLE_OR_METADATA_MISSING",
+        "METADATA_INSUFFICIENT",
+    ],
+)
+async def test_catalog_blockers_publish_canonical_questions(realistic_catalog, reason):
+    catalog = rows(realistic_catalog)
+    if reason == "PIN_UNAVAILABLE":
+        gpu = next(row for row in catalog if row.component.category == "GPU")
+        canonical = state(
+            requirement("GPU", "identity", ReferenceValue(variant_id=gpu.variant_id))
+        )
+        gpu.quantity = 0
+        expected = f"{gpu.component.name} hiện hết hàng"
+    elif reason in {
+        "ACCESSORY_BUDGET_EXCEEDED",
+        "ACCESSORY_UNAVAILABLE_OR_METADATA_MISSING",
+    }:
+        canonical = state(
+            requirement("SETUP", "scope", TextValue(text="FULL_SETUP")),
+            requirement(
+                "SETUP",
+                "accessory_budget",
+                QuantityValue(amount=1_500_000, unit="VND"),
+                operator="LTE",
+            ),
+            requirement("MONITOR", "selection", TextValue(text="RECOMMEND")),
+        )
+        if reason == "ACCESSORY_BUDGET_EXCEEDED":
+            catalog.append(accessory(catalog, kind="MONITOR", price=2_500_000))
+            expected = "vượt mức chi đã đặt"
+        else:
+            expected = "chưa xác nhận được phụ kiện"
+    else:
+        canonical = state(
+            requirement(
+                "STORAGE",
+                "capacity",
+                QuantityValue(amount=1_000, unit="GB"),
+                operator="GTE",
+            )
+        )
+        catalog = [row for row in catalog if row.component.category != "STORAGE"]
+        expected = "dung lượng ổ lưu trữ"
+
+    class Ask:
+        async def decide(self, *args):
+            return FlexibleDecision(action=AskClarificationAction())
+
+    ctx = context().model_copy(update={"requirements": canonical, "catalog": catalog})
+    source = binding(ctx, "Tiếp tục build PC")
+    graph = build_flexible_graph(
+        Ask(),
+        ToolDispatcher(Catalog(), PCBuildApplicationService()),
+        ctx,
+        [CompletionRequirement(kind="BUILD", constraints_revision=0)],
+        Budget(),
+        conversation_revision=0,
+        publication=source,
+    )
+    terminal = await graph.ainvoke({"message": source.request_message})
+    published = AcceptedConversationSnapshot.model_validate(
+        terminal["accepted_snapshot"]
+    )
+    assert published.flexible.status == "WAITING_INPUT"
+    assert published.flexible.clarification.missing_fields == [reason]
+    assert expected in published.flexible.assistant_message
+    assert published.requirement_state == canonical
 
 
 @pytest.mark.asyncio

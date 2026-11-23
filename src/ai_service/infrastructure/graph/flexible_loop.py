@@ -22,6 +22,9 @@ from ai_service.capabilities.assistant.react.actions import (
     action_calls,
     decode_flexible_decision,
 )
+from ai_service.capabilities.assistant.react.build_clarification import (
+    build_clarification,
+)
 from ai_service.capabilities.assistant.react.contracts import (
     TOOL_SCHEMAS,
     ToolCall,
@@ -45,7 +48,6 @@ from ai_service.capabilities.assistant.react.tools import (
     project_current_tools,
 )
 from ai_service.capabilities.assistant.requirements.catalog_policy import (
-    build_clarification_reasons,
     build_needs_catalog,
     draft_needs_catalog,
 )
@@ -83,6 +85,26 @@ def build_loop_nodes(
     dispatcher: ToolDispatcher,
     attempts: AttemptBoundary,
 ) -> LoopNodes:
+    def wait_for_build_input(
+        state: FlexibleState,
+        question: AskClarificationAction,
+        decision: FlexibleDecision | None = None,
+    ) -> dict[str, Any]:
+        resolved = (
+            decision.model_copy(update={"action": question})
+            if decision is not None
+            else FlexibleDecision(action=question)
+        )
+        return runtime.bounded(
+            state,
+            {
+                "decision": resolved.model_dump(mode="json"),
+                "clarification": question.model_dump(mode="json"),
+                "repair_feedback": None,
+                "phase": "WAITING_INPUT",
+            },
+        )
+
     async def prepare_agent(state: FlexibleState) -> dict[str, Any]:
         if (
             runtime.publication
@@ -94,6 +116,23 @@ def build_loop_nodes(
             return {}
         ctx = runtime.current(state)
         tasks_for_turn = runtime.registered_tasks(state)
+        can_clarify = (
+            not ctx.read_only_turn
+            and ctx.execution_allowed
+            and ctx.read_catalog_allowed
+            and not state.get("pending_proposal")
+            and not state.get("pending_draft")
+            and not runtime.unresolved_tasks(state)
+            and bool(tasks_for_turn)
+            and all(task.kind == "BUILD" for task in tasks_for_turn)
+            and (
+                state.get("phase") == "REQUIREMENTS_ACCEPTED"
+                or (
+                    runtime.publication is not None
+                    and runtime.publication.confirmation is not None
+                )
+            )
+        )
         entries = runtime.records(state)
         should_build = (
             not ctx.read_only_turn
@@ -118,22 +157,32 @@ def build_loop_nodes(
                 for entry in entries
             )
         )
-        if not should_build:
-            return {}
-        loaded = await runtime.load_catalog(state) if not ctx.catalog_ready else {}
-        merged = cast(FlexibleState, dict(state) | loaded)
-        ctx = runtime.current(merged)
-        if not (
+        loaded = (
+            await runtime.load_catalog(state)
+            if should_build and not ctx.catalog_ready
+            else {}
+        )
+        merged = cast(FlexibleState, dict(state) | loaded) if loaded else state
+        ctx = runtime.current(merged) if loaded else ctx
+        if not should_build or not (
             ctx.catalog_ready
             and compile_requirements(ctx.requirements, ctx.catalog).ready
         ):
+            if (
+                can_clarify
+                and (
+                    question := build_clarification(
+                        ctx.requirements, ctx.catalog, catalog_ready=ctx.catalog_ready
+                    )
+                )
+                is not None
+            ):
+                return loaded | wait_for_build_input(merged, question)
             return loaded
         if merged.get("tool_calls", 0) >= runtime.limits.max_tool_calls:
             return loaded
         used = {
-            entry.call.call_id
-            for entry in entries
-            if entry.origin_run_id == ctx.run_id
+            entry.call.call_id for entry in entries if entry.origin_run_id == ctx.run_id
         } | {entry.call.call_id for entry in ctx.control_history}
         call_id = (
             "build" if "build" not in used else f"build_{ctx.requirements.revision}"
@@ -339,32 +388,39 @@ def build_loop_nodes(
                 },
             )
         if isinstance(action, AskClarificationAction):
+            if (
+                ctx.read_only_turn
+                or not ctx.execution_allowed
+                or not ctx.read_catalog_allowed
+                or state.get("pending_proposal")
+                or state.get("pending_draft")
+            ):
+                return runtime.repair(state, "INVALID_ACTION")
             pending_fields = runtime.unresolved_tasks(state)
             if pending_fields:
-                if not set(action.missing_fields) <= set(pending_fields):
-                    return runtime.repair(state, "INVALID_ACTION", pending_fields)
-                return runtime.bounded(
+                return wait_for_build_input(
                     state,
-                    {
-                        "clarification": action.model_dump(mode="json"),
-                        "phase": "WAITING_INPUT",
-                    },
+                    AskClarificationAction(
+                        question="Cần xác định rõ sản phẩm hoặc cấu hình để hoàn thành yêu cầu.",
+                        missing_fields=pending_fields,
+                    ),
+                    decision,
                 )
-            missing = build_clarification_reasons(
+            if not any(task.kind == "BUILD" for task in ctx.completion_requirements):
+                return runtime.repair(state, "INVALID_ACTION")
+            loaded = (
+                await runtime.load_catalog(state)
+                if not ctx.catalog_ready and build_needs_catalog(ctx.requirements)
+                else {}
+            )
+            merged = cast(FlexibleState, dict(state) | loaded)
+            ctx = runtime.current(merged)
+            question = build_clarification(
                 ctx.requirements, ctx.catalog, catalog_ready=ctx.catalog_ready
             )
-            if (
-                not any(task.kind == "BUILD" for task in ctx.completion_requirements)
-                or not set(action.missing_fields) <= missing
-            ):
-                return runtime.repair(state, "INVALID_ACTION", sorted(missing))
-            return runtime.bounded(
-                state,
-                {
-                    "clarification": action.model_dump(mode="json"),
-                    "phase": "WAITING_INPUT",
-                },
-            )
+            if question is None:
+                return loaded | runtime.repair(merged, "INVALID_ACTION")
+            return loaded | wait_for_build_input(merged, question, decision)
         assert isinstance(action, FinalAnswerAction)
         unresolved = runtime.unresolved_tasks(state)
         if unresolved:
@@ -481,7 +537,9 @@ def build_loop_nodes(
             return runtime.bounded(
                 state, loaded | runtime.repair(state, "INVALID_ACTION")
             )
-        return runtime.bounded(state, loaded | runtime.acknowledge_control(state, update))
+        return runtime.bounded(
+            state, loaded | runtime.acknowledge_control(state, update)
+        )
 
     return LoopNodes(
         prepare_agent=prepare_agent,

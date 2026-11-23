@@ -3,6 +3,10 @@
 from enum import StrEnum
 
 from ai_service.application.ports.web_search import WebPageReadStatus
+from ai_service.capabilities.assistant.requirements.diagnostics import CompilationReason
+from ai_service.capabilities.assistant.requirements.units import (
+    is_standalone_money_amount,
+)
 from ai_service.capabilities.assistant.stateful_contracts import Contract
 from ai_service.capabilities.pc_builder.schemas import UseCaseProfile
 
@@ -22,6 +26,11 @@ from .model_contracts import (
 )
 from .submissions import derive_final_action, resolve_result_selection, selected_answer
 
+PENDING_SPENDING_CAPS = {
+    "budget": CompilationReason.BUDGET_REQUIRED,
+    "accessory_budget": CompilationReason.ACCESSORY_BUDGET_REQUIRED,
+}
+
 
 class ControlName(StrEnum):
     PROPOSE_REQUIREMENTS = "propose_requirements"
@@ -29,9 +38,13 @@ class ControlName(StrEnum):
     SUBMIT_RESULT = "submit_result"
 
 
+class ClarificationRequestInput(Contract):
+    """Ask the application to determine which build requirements need input."""
+
+
 CONTROL_SCHEMAS: dict[ControlName, type[Contract]] = {
     ControlName.PROPOSE_REQUIREMENTS: RequirementProposalInput,
-    ControlName.ASK_CLARIFICATION: AskClarificationAction,
+    ControlName.ASK_CLARIFICATION: ClarificationRequestInput,
     ControlName.SUBMIT_RESULT: ResultSubmissionInput,
 }
 CONTROL_ACTIONS = {
@@ -67,16 +80,18 @@ CONTROL_DESCRIPTIONS = {
         "source_text is only your own suggestion (requires consent)."
     ),
     ControlName.ASK_CLARIFICATION: (
-        "Ask for missing business input using actual missing field names (e.g. 'BUDGET_REQUIRED', 'USE_CASE_REQUIRED', "
-        "'ACCESSORY_BUDGET_REQUIRED') "
-        "or unresolved selection reasons when required information is not available in context. "
-        "Do not ask for fields already present in context. General conversation can be plain text."
+        "Request a server-rendered clarification for the current PC build. "
+        "Admit any new requirements from the latest message using propose_requirements first. "
+        "Use plain text for ordinary clarifying questions about other topics."
     ),
     ControlName.SUBMIT_RESULT: (
-        "Submit final verified answers with supporting evidence citations (refs) after research or catalog lookup. "
-        "Select refs/build_ref or supporting calls. One comparison is one result covering all selected products. "
-        "Put your answer, advice, or tradeoffs in explanation (server renders canonical facts above it). "
-        "Use quotes for exact web excerpts."
+        "Submit final verified answers with supporting evidence citations (refs/build_ref/calls) "
+        "after research or catalog lookup. One comparison is one result covering all selected products. "
+        "ALWAYS provide a clear, helpful user-facing consultation in `explanation` (directly answer the user, "
+        "explain why recommended items fit, compare key differences/tradeoffs, and mention products naturally "
+        "by exact catalog name so the UI links them; do not dump a bare product/price list because the UI "
+        "renders verified product cards and build tables automatically; never invent URLs, prices, or specs). "
+        "Use `quotes` for exact web excerpts."
     ),
 }
 
@@ -94,6 +109,7 @@ def allowed_controls(
     if (context is None or not context.read_only_turn) and (
         context is None
         or context.completion_requirements
+        or context.task_registration_open
         or context.pending
         or context.requirements.requirements
         or context.requirements.goals
@@ -125,7 +141,22 @@ def normalize_control(
         # Existing IDs are globally unique; their trusted collection determines
         # scope, even when the provider repeats the default REQUIREMENT target.
         if context is not None:
+            # A bare amount answers the server's pending spending-cap question.
+            pending_cap = (
+                set(context.pending.missing_fields)
+                if context.pending
+                and quoted.source_text is None
+                and is_standalone_money_amount(message)
+                else set()
+            )
             for item in draft.items:
+                if (
+                    item.subject == "SETUP"
+                    and item.operation == "SET"
+                    and item.operator == "EQ"
+                    and PENDING_SPENDING_CAPS.get(item.predicate) in pending_cap
+                ):
+                    item.operator = "LTE"
                 if item.target_id in context.requirements.goals:
                     item.target = "GOAL"
                 elif item.target_id in context.requirements.requirements:
@@ -144,9 +175,7 @@ def normalize_control(
     ).submission()
     if len(submitted.results) == 1 and submitted.results[0].task_index is None:
         selection, _ = resolve_result_selection(submitted.results[0], records)
-        response = RespondAction.model_validate(
-            selected_answer(selection).model_dump()
-        )
+        response = RespondAction.model_validate(selected_answer(selection).model_dump())
         return FlexibleDecision(action=response, control_call=call)
     return FlexibleDecision(
         action=derive_final_action(submitted, records), control_call=call

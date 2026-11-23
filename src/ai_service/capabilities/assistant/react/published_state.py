@@ -91,6 +91,7 @@ class FlexiblePublishedState(Contract):
                 self.answer is not None
                 or not self.waiting_message
                 or sum(item is not None for item in artifacts) != 1
+                or (self.clarification is not None and not self.clarification.question)
             ):
                 raise ValueError(
                     "Waiting state requires one artifact and unresolved original tasks"

@@ -10,6 +10,7 @@ from test_training_dataset import dataset, sample
 from test_training_evaluation import run_config
 
 from ai_service.capabilities.assistant.react.actions import (
+    AskClarificationAction,
     CallToolAction,
     FinalAnswerAction,
     action_calls,
@@ -135,11 +136,7 @@ def test_control_targets_export_native_calls_matching_serving_schema(tmp_path, k
         assert "start" not in arguments["items"][0]
         assert "end" not in arguments["items"][0]
     else:
-        assert arguments == {
-            key: value
-            for key, value in record.target.action.model_dump(mode="json").items()
-            if key != "kind"
-        }
+        assert arguments == {}
     _, serving_schemas = build_react_request(
         record.message,
         snapshot.records,
@@ -151,7 +148,12 @@ def test_control_targets_export_native_calls_matching_serving_schema(tmp_path, k
         entry["function"] for entry in example["request"]["tools"]
     ] == serving_schemas
     parsed = parse_export(example, snapshot)
-    assert parsed is not None and parsed.action == record.target.action
+    expected = (
+        AskClarificationAction()
+        if kind == "ASK_CLARIFICATION"
+        else record.target.action
+    )
+    assert parsed is not None and parsed.action == expected
 
 
 def _expected_roundtrip_action(action):

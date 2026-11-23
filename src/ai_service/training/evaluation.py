@@ -13,6 +13,7 @@ from pydantic import Field, JsonValue
 
 from ai_service.capabilities.assistant.conversation_core import Digest
 from ai_service.capabilities.assistant.react.actions import (
+    AskClarificationAction,
     CallToolAction,
     CallToolsAction,
     action_calls,
@@ -155,18 +156,23 @@ def evaluate_responses(
                 validate_label(sample.model_copy(update={"target": target}), snapshot)
                 matches = target == sample.target
                 if isinstance(sample, ReactDecisionSample):
-                    matches = target.action == sample.target.action
-                if isinstance(sample, ReactDecisionSample) and isinstance(
-                    target.action, (CallToolAction, CallToolsAction)
-                ):
                     gold = sample.target.action
-                    matches = isinstance(gold, (CallToolAction, CallToolsAction)) and (
-                        [
-                            (call.name, call.arguments)
-                            for call in action_calls(target.action)
-                        ]
-                        == [(call.name, call.arguments) for call in action_calls(gold)]
-                    )
+                    matches = target.action == gold
+                    if isinstance(target.action, AskClarificationAction):
+                        matches = isinstance(gold, AskClarificationAction)
+                    elif isinstance(target.action, (CallToolAction, CallToolsAction)):
+                        matches = isinstance(
+                            gold, (CallToolAction, CallToolsAction)
+                        ) and (
+                            [
+                                (call.name, call.arguments)
+                                for call in action_calls(target.action)
+                            ]
+                            == [
+                                (call.name, call.arguments)
+                                for call in action_calls(gold)
+                            ]
+                        )
                 row.update(
                     status=CaseStatus.PASS.value,
                     error=None,

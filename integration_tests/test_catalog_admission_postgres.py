@@ -44,19 +44,18 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
             return self
 
         async def ainvoke(self, messages):
-            if isinstance(messages[0], tuple):
-                source = json.loads(messages[-1][1])["user_message"]
-                if source == "Chào bạn":
-                    return {"tasks": []}
-                assert source == "Build PC"
-                return {"tasks": [{"kind": "BUILD", "quote": "Build PC"}]}
             message = messages[1].content
             calls.append(message)
             if message == "Chào bạn":
                 return AIMessage(content="Chào bạn! Tôi có thể giúp chọn linh kiện PC.")
             if message == "Build PC":
-                assert "ask_clarification" not in self.tools
-                return AIMessage(content="Ngân sách và nhu cầu sử dụng của bạn là gì?")
+                assert "ask_clarification" in self.tools
+                return AIMessage(
+                    content="",
+                    tool_calls=[
+                        {"id": "clarify", "name": "ask_clarification", "args": {}}
+                    ],
+                )
             if message == "32GB có cần thiết không?":
                 context = json.loads(
                     messages[0].content.split(" Application context (data): ", 1)[1]
@@ -70,46 +69,31 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
                 return AIMessage(
                     content="RAM 32GB vẫn là đề xuất chưa áp dụng; hãy cân nhắc theo nhu cầu đa nhiệm."
                 )
-            action = (
-                {
-                    "kind": "ASK_CLARIFICATION",
-                    "question": "Ngân sách và nhu cầu sử dụng của bạn là gì?",
-                    "missing_fields": ["BUDGET_REQUIRED", "USE_CASE_REQUIRED"],
+            if message == "30 triệu":
+                item = {
+                    "target": "GOAL",
+                    "subject": "SETUP",
+                    "predicate": "budget",
+                    "operator": "LTE",
+                    "quote": message,
+                    "value": 30_000_000,
+                    "unit": "VND",
                 }
-                if message == "Build PC"
-                else {
-                    "kind": "PROPOSE_REQUIREMENTS",
-                    "source_text": "RAM 32",
-                    "items": [
-                        {
-                            "subject": "RAM",
-                            "predicate": "capacity",
-                            "quote": "RAM 32",
-                            "value": 32,
-                        }
-                    ],
+            else:
+                assert message == "RAM 32"
+                item = {
+                    "subject": "RAM",
+                    "predicate": "capacity",
+                    "quote": message,
+                    "value": 32,
                 }
-            )
             return AIMessage(
                 content="",
-                tool_calls=(
-                    [
-                        {
-                            "id": "register",
-                            "name": "register_tasks",
-                            "args": {"tasks": [{"kind": "BUILD", "quote": "Build PC"}]},
-                        }
-                    ]
-                    if message == "Build PC" and "register_tasks" in self.tools
-                    else []
-                )
-                + [
+                tool_calls=[
                     {
-                        "id": "clarify" if message == "Build PC" else "proposal",
-                        "name": action["kind"].lower(),
-                        "args": {
-                            key: value for key, value in action.items() if key != "kind"
-                        },
+                        "id": "proposal",
+                        "name": "propose_requirements",
+                        "args": {"items": [item]},
                     }
                 ],
             )
@@ -207,18 +191,21 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
                 hello = await turn("Chào bạn", 0, expected_status="COMPLETED")
                 assert hello["flexible"]["task_outcomes"] == []
                 assert "Chào bạn!" in hello["flexible"]["answer"]
-            first = await turn("Build PC", revision, expected_status="COMPLETED")
+            first = await turn("Build PC", revision)
             assert "Ngân sách" in first["flexible"]["answer"]
-            assert first["flexible"]["task_outcomes"] == []
-            second = await turn("RAM 32", revision + 1)
+            assert first["flexible"]["task_outcomes"][0]["kind"] == "BUILD"
+            budget = await turn("30 triệu", revision + 1)
+            assert "dùng PC chủ yếu" in budget["flexible"]["answer"]
+            assert "ngân sách" not in budget["flexible"]["answer"].lower()
+            second = await turn("RAM 32", revision + 2)
             pending = second["flexible"]["clarification"]
             assert pending is not None
             third = await turn(
                 "GB",
-                revision + 2,
+                revision + 3,
                 unit_reply={
                     "pending_message_id": pending["pending_message_id"],
-                    "constraints_revision": 0,
+                    "constraints_revision": 1,
                     "selections": [
                         {
                             "item_index": 0,
@@ -232,7 +219,7 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
             )
             assert third["flexible"]["proposal"] is not None
             assert third["flexible"]["clarification"] is None
-            side = await turn("32GB có cần thiết không?", revision + 3)
+            side = await turn("32GB có cần thiết không?", revision + 4)
             assert side["flexible"]["proposal"] == third["flexible"]["proposal"]
             assert (
                 side["flexible"]["task_outcomes"] == third["flexible"]["task_outcomes"]
@@ -240,13 +227,14 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
             assert "đề xuất chưa áp dụng" in side["flexible"]["answer"]
             assert calls == (["Chào bạn"] if greeting else []) + [
                 "Build PC",
+                "30 triệu",
                 "RAM 32",
                 "32GB có cần thiết không?",
             ]
             assert outbound == []
             history = (await client.get(path + "/messages")).json()["data"]["items"]
             assert [item["role"] for item in history] == ["user", "assistant"] * (
-                4 + revision
+                5 + revision
             )
     finally:
         if conversation_id is not None:
