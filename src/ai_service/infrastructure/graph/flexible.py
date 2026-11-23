@@ -6,18 +6,18 @@ never raw request dictionaries.
 
 from __future__ import annotations
 
-from typing import Any
-
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from ai_service.application.activity import ActivitySink
 from ai_service.application.call_attempts import AttemptBoundary
 from ai_service.capabilities.assistant.react.contracts import (
     CompletionRequirement,
     ReactLimits,
     ToolContext,
 )
+from ai_service.capabilities.assistant.react.phases import ReActPhase
 from ai_service.capabilities.assistant.react.snapshot_publication import (
     FlexiblePublicationInput,
 )
@@ -66,6 +66,7 @@ def build_flexible_graph(
     amender: PendingAmender | None = None,
     task_amender: TaskAmender | None = None,
     catalog_loader: RequirementCatalog | None = None,
+    activity_sink: ActivitySink | None = None,
 ) -> CompiledStateGraph:
     trusted = ToolContext.model_validate(context.model_dump())
     if publication and publication.read_only_turn:
@@ -139,9 +140,10 @@ def build_flexible_graph(
         model=model,
         dispatcher=dispatcher,
         attempts=attempts,
+        activity_sink=activity_sink,
     )
 
-    def begin(state: FlexibleState) -> dict[str, Any]:
+    def begin(state: FlexibleState) -> FlexibleState:
         return runtime.initialize(state, runtime.turn_input)
 
     builder = StateGraph(FlexibleState)
@@ -168,7 +170,7 @@ def build_flexible_graph(
     terminal = END
     if validated_publication:
 
-        def prepare(state: FlexibleState) -> dict[str, Any]:
+        def prepare(state: FlexibleState) -> FlexibleState:
             assert validated_publication is not None
             snapshot = validated_publication.prepare(
                 state,
@@ -187,8 +189,16 @@ def build_flexible_graph(
 
     builder.add_conditional_edges(
         "prepare_agent",
-        lambda s: s["phase"] if s["phase"] in {"DECIDED", "WAITING_INPUT"} else "ready",
-        {"DECIDED": "validate_action", "ready": "agent", "WAITING_INPUT": terminal},
+        lambda s: (
+            s["phase"]
+            if s["phase"] in {ReActPhase.DECIDED.code, ReActPhase.WAITING_INPUT.code}
+            else "ready"
+        ),
+        {
+            ReActPhase.DECIDED.code: "validate_action",
+            "ready": "agent",
+            ReActPhase.WAITING_INPUT.code: terminal,
+        },
     )
     builder.add_edge(START, "begin_turn")
     start_agent = "prepare_agent"
@@ -223,9 +233,14 @@ def build_flexible_graph(
                 builder.add_conditional_edges(
                     "interpret_task_reply",
                     lambda s: (
-                        "AMEND_TASK" if s.get("phase") == "AMEND_TASK" else "STARTED"
+                        ReActPhase.AMEND_TASK.code
+                        if s.get("phase") == ReActPhase.AMEND_TASK.code
+                        else ReActPhase.STARTED.code
                     ),
-                    {"AMEND_TASK": "amend_task", "STARTED": "resolve_registered_tasks"},
+                    {
+                        ReActPhase.AMEND_TASK.code: "amend_task",
+                        ReActPhase.STARTED.code: "resolve_registered_tasks",
+                    },
                 )
                 builder.add_edge("amend_task", "resolve_registered_tasks")
             else:
@@ -244,43 +259,47 @@ def build_flexible_graph(
         "begin_turn",
         lambda s: s["phase"],
         {
-            "STARTED": start_agent,
-            "WAITING_INPUT": terminal,
-            "INTERPRET_REPLY": "interpret_reply",
-            "READY_TO_PUBLISH": terminal,
+            ReActPhase.STARTED.code: start_agent,
+            ReActPhase.WAITING_INPUT.code: terminal,
+            ReActPhase.INTERPRET_REPLY.code: "interpret_reply",
+            ReActPhase.READY_TO_PUBLISH.code: terminal,
         },
     )
     builder.add_conditional_edges(
         "interpret_reply",
         lambda s: s["phase"],
         {
-            "WAITING_INPUT": terminal,
-            "STARTED": start_agent,
-            "AMEND_PENDING": "amend_pending",
+            ReActPhase.WAITING_INPUT.code: terminal,
+            ReActPhase.STARTED.code: start_agent,
+            ReActPhase.AMEND_PENDING.code: "amend_pending",
         },
     )
     builder.add_conditional_edges(
         "amend_pending",
         lambda s: s["phase"],
-        {"WAITING_INPUT": terminal, "STARTED": start_agent},
+        {ReActPhase.WAITING_INPUT.code: terminal, ReActPhase.STARTED.code: start_agent},
     )
     builder.add_conditional_edges(
         "agent",
         lambda s: s["phase"],
         {
-            "DECIDED": "validate_action",
-            **({"REGISTER_REQUEST": "register_request"} if registering else {}),
+            ReActPhase.DECIDED.code: "validate_action",
+            **(
+                {ReActPhase.REGISTER_REQUEST.code: "register_request"}
+                if registering
+                else {}
+            ),
         },
     )
     builder.add_conditional_edges(
         "validate_action",
         lambda s: s["phase"],
         {
-            "REPAIR": "agent",
-            "TOOL_PENDING": "execute_tool",
-            "RESOLVE_PROPOSAL": "resolve_proposal",
-            "WAITING_INPUT": terminal,
-            "READY_TO_PUBLISH": terminal,
+            ReActPhase.REPAIR.code: "agent",
+            ReActPhase.TOOL_PENDING.code: "execute_tool",
+            ReActPhase.RESOLVE_PROPOSAL.code: "resolve_proposal",
+            ReActPhase.WAITING_INPUT.code: terminal,
+            ReActPhase.READY_TO_PUBLISH.code: terminal,
         },
     )
     builder.add_edge("execute_tool", "agent")
@@ -288,10 +307,10 @@ def build_flexible_graph(
         "resolve_proposal",
         lambda s: s["phase"],
         {
-            "REPAIR": "agent",
-            "WAITING_INPUT": terminal,
-            "REQUIREMENTS_UNCHANGED": "prepare_agent",
-            "REQUIREMENTS_ACCEPTED": "prepare_agent",
+            ReActPhase.REPAIR.code: "agent",
+            ReActPhase.WAITING_INPUT.code: terminal,
+            ReActPhase.REQUIREMENTS_UNCHANGED.code: "prepare_agent",
+            ReActPhase.REQUIREMENTS_ACCEPTED.code: "prepare_agent",
         },
     )
     return builder.compile(checkpointer=checkpointer)

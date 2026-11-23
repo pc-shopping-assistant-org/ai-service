@@ -35,6 +35,7 @@ from ai_service.capabilities.pc_builder.application.service import (
 from .actions import FinalAnswerAction, decode_flexible_decision
 from .contracts import BuildResult, CompletionRequirement, ToolContext, ToolRecord
 from .outcomes import FlexibleAnswer, validate_final_answer
+from .phases import ReActPhase
 from .tools import project_current_tools
 
 
@@ -147,7 +148,7 @@ def prepare_answer_publication(
     accepted = AcceptedConversationSnapshot.model_validate(accepted.model_dump())
     context = ToolContext.model_validate(context.model_dump())
     if (
-        values.get("phase") != "READY_TO_PUBLISH"
+        values.get("phase") != ReActPhase.READY_TO_PUBLISH.code
         or not context.execution_allowed
         or not context.read_catalog_allowed
         or any(
@@ -184,8 +185,8 @@ def prepare_answer_publication(
     records = [ToolRecord.model_validate(row) for row in values.get("ledger", [])]
     if len({(row.origin_run_id, row.call.call_id) for row in records}) != len(
         records
-    ) or any(row.result is None for row in records):
-        raise ValueError("Publication ledger is unresolved or contains duplicate calls")
+    ):
+        raise ValueError("Publication ledger contains duplicate calls")
     current = project_current_tools(records, context)
     answer = validate_final_answer(
         action,

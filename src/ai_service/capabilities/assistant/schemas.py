@@ -113,6 +113,7 @@ class ChatStreamEventType(StrEnum):
 
     START = "START"
     DELTA = "DELTA"
+    STATUS = "STATUS"
     COMPLETED = "COMPLETED"
     ERROR = "ERROR"
 

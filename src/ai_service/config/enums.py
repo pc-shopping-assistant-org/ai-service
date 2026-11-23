@@ -40,9 +40,32 @@ class EmbeddingProviderKind(StrEnum):
     HASH = "hash"
 
 
+class ThinkingMode(StrEnum):
+    """Unified reasoning/thinking control selectable per turn from the UI."""
+
+    OFF = "off"
+    MINIMAL = "minimal"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    ON = "on"
+
+
+class ThinkingStrategy(StrEnum):
+    """Provider-specific transport used to apply a ThinkingMode."""
+
+    NONE = "none"
+    GEMINI_REASONING = "gemini_reasoning"
+    OLLAMA_THINK = "ollama_think"
+    OPENAI_REASONING = "openai_reasoning"
+    QWEN_THINKING = "qwen_thinking"
+
+
 __all__ = [
     "AIProvider",
     "EmbeddingProviderKind",
     "LogLevel",
     "RetrievalBackend",
+    "ThinkingMode",
+    "ThinkingStrategy",
 ]

@@ -3,6 +3,7 @@
 import asyncio
 import inspect
 from collections.abc import Awaitable, Callable
+from uuid import UUID
 
 from ai_service.application.call_attempts import ExecutionClaim
 from ai_service.infrastructure.graph.durable import DurableConversationGraph
@@ -18,45 +19,52 @@ class ConversationExecution:
             DurableConversationGraph | Awaitable[DurableConversationGraph],
         ],
         graph_version: str,
+        *,
+        on_finish: Callable[[UUID], None] | None = None,
     ) -> None:
         self.coordinator, self.graph_factory, self.graph_version = (
             coordinator,
             graph_factory,
             graph_version,
         )
+        self.on_finish = on_finish
 
     async def __call__(
         self, claim: ExecutionClaim, children: asyncio.TaskGroup
     ) -> None:
-        request, head = await self.coordinator.load(claim)
-        graph = self.graph_factory(claim)
-        if inspect.isawaitable(graph):
-            graph = await graph
+        try:
+            request, head = await self.coordinator.load(claim)
+            graph = self.graph_factory(claim)
+            if inspect.isawaitable(graph):
+                graph = await graph
 
-        async def observed(ref):
-            await self.coordinator.observe_checkpoint(claim, ref, self.graph_version)
+            async def observed(ref):
+                await self.coordinator.observe_checkpoint(claim, ref, self.graph_version)
 
-        recovery = await self.coordinator.recovery_source(claim)
-        if recovery:
-            source, previous, evidence = recovery
-            ref = await graph.resume(
-                head,
-                source,
-                previous,
-                claim,
-                request.execution_input(),
-                self.graph_version,
-                evidence=evidence,
-                checkpoint_sink=observed,
-            )
-        else:
-            ref = await graph.new_turn(
-                head,
-                claim.run_id,
-                request.execution_input(),
-                self.graph_version,
-                execution=claim,
-                checkpoint_sink=observed,
-            )
-        await self.coordinator.stage(claim, ref)
-        # Only ManagedExecutor's drained stop ACK can finalize and publish.
+            recovery = await self.coordinator.recovery_source(claim)
+            if recovery:
+                source, previous, evidence = recovery
+                ref = await graph.resume(
+                    head,
+                    source,
+                    previous,
+                    claim,
+                    request.execution_input(),
+                    self.graph_version,
+                    evidence=evidence,
+                    checkpoint_sink=observed,
+                )
+            else:
+                ref = await graph.new_turn(
+                    head,
+                    claim.run_id,
+                    request.execution_input(),
+                    self.graph_version,
+                    execution=claim,
+                    checkpoint_sink=observed,
+                )
+            await self.coordinator.stage(claim, ref)
+            # Only ManagedExecutor's drained stop ACK can finalize and publish.
+        finally:
+            if self.on_finish is not None:
+                self.on_finish(claim.run_id)

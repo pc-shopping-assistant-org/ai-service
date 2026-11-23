@@ -596,6 +596,15 @@ class ToolRecord(Contract):
         return self
 
 
+class UnresolvedToolCallError(ValueError):
+    """The transcript is being read before all tool calls have results."""
+
+
+def require_tool_results(records: list[ToolRecord]) -> None:
+    if any(record.result is None for record in records):
+        raise UnresolvedToolCallError("Tool call has no recorded result")
+
+
 class SavedBuildEvidence(Contract):
     source_ref: CheckpointRefV1
     snapshot: PublicBuildV1

@@ -22,6 +22,7 @@ from ai_service.main import create_app
 
 @pytest.mark.asyncio
 async def test_v2_http_schema_requires_version_and_keeps_envelope_owner_boundaries(
+    tmp_path,
     monkeypatch,
 ):
     owner, saver, received = uuid4(), InMemorySaver(), []
@@ -55,10 +56,23 @@ async def test_v2_http_schema_requires_version_and_keeps_envelope_owner_boundari
     monkeypatch.setattr(
         "ai_service.infrastructure.stateful.open_stateful_resources", opened
     )
+    models_cfg = tmp_path / "models.yaml"
+    models_cfg.write_text(
+        """
+default_model: test-local
+models:
+  - id: test-local
+    label: Test Local
+    provider: openai
+    model_name: gpt-4o-mini
+    base_url: http://127.0.0.1:11434/v1
+    api_key_optional: true
+""",
+        encoding="utf-8",
+    )
     settings = Settings(
         _env_file=None,
-        provider="openai",
-        openai_api_key="fixture",
+        models_config_path=str(models_cfg),
         database_url="postgresql+psycopg://fixture:fixture@localhost/ai_db",
         jwt_jwks_url="http://identity.test/jwks",
     )

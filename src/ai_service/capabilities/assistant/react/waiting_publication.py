@@ -54,6 +54,7 @@ from .actions import (
 from .build_clarification import build_clarification
 from .contracts import CompletionRequirement, ToolContext
 from .outcomes import TaskOutcome
+from .phases import ReActPhase
 from .publication import bind_publication_context, snapshot_for_requirements
 
 
@@ -110,7 +111,7 @@ def prepare_waiting_publication(
         CompletionRequirement.model_validate(task.model_dump()) for task in required
     ]
     if (
-        values.get("phase") != "WAITING_INPUT"
+        values.get("phase") != ReActPhase.WAITING_INPUT.code
         or values.get("message") != source_message
         or not source_message.strip()
         or len(source_message) > 4000

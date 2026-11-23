@@ -20,6 +20,7 @@ from ai_service.main import create_app
 @pytest.mark.parametrize("greeting", [False, True])
 async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
     postgres_dsn,
+    test_models_config_path,
     monkeypatch,
     greeting,
 ):
@@ -124,16 +125,15 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
 
     monkeypatch.setattr(httpx, "AsyncClient", client_factory)
     monkeypatch.setattr(
-        "ai_service.infrastructure.execution.build_runtime.build_model_provider",
-        lambda settings: Provider(),
+        "ai_service.infrastructure.providers.registry._instantiate_provider",
+        lambda entry, mode: Provider(),
     )
     monkeypatch.setattr(
         "ai_service.infrastructure.stateful.JwtAuthenticator", lambda *args: Auth()
     )
     settings = Settings(
         _env_file=None,
-        provider="openai",
-        openai_api_key="fixture",
+        models_config_path=test_models_config_path,
         backend_api_url="https://catalog.test",
         database_url=postgres_dsn.replace("postgresql://", "postgresql+psycopg://", 1),
         jwt_jwks_url="http://identity.test/jwks",

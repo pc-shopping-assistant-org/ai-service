@@ -39,6 +39,7 @@ from ai_service.capabilities.assistant.react.contracts import (
     ToolContext,
     ToolName,
     ToolRecord,
+    require_tool_results,
 )
 from ai_service.capabilities.assistant.react.control_actions import (
     CONTROL_DESCRIPTIONS,
@@ -253,8 +254,7 @@ def build_react_request(
     """Shared serving/training projection; no internal decision union in the prompt."""
     limits = limits or ReactLimits()
     records = [ToolRecord.model_validate(item.model_dump()) for item in transcript]
-    if any(item.result is None for item in records):
-        raise ValueError("Unresolved tool transcript")
+    require_tool_results(records)
     schemas = [
         {
             "name": name.value,

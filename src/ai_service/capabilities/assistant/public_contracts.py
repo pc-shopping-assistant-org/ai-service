@@ -273,6 +273,30 @@ class TextDeltaV1(EventIdentityV1):
     replace: bool = False
 
 
+class AgentActivityStage(StrEnum):
+    """Public UI-safe stage indicating what the assistant is currently doing."""
+
+    THINKING = "THINKING"
+    SEARCHING_CATALOG = "SEARCHING_CATALOG"
+    LOADING_DETAILS = "LOADING_DETAILS"
+    COMPARING = "COMPARING"
+    CHECKING_COMPATIBILITY = "CHECKING_COMPATIBILITY"
+    BUILDING_PC = "BUILDING_PC"
+    SEARCHING_WEB = "SEARCHING_WEB"
+    VERIFYING = "VERIFYING"
+
+
+class RunStatusV1(Contract):
+    """Ephemeral live activity update streamed alongside durable run events."""
+
+    conversation_id: UUID
+    run_id: UUID
+    event: Literal["STATUS"] = "STATUS"
+    stage: AgentActivityStage
+    tool: Text | None = None
+    detail: Text | None = Field(default=None, max_length=160)
+
+
 class RunCompletedV1(EventIdentityV1):
     event: Literal["COMPLETED"]
     result: TurnResultV1

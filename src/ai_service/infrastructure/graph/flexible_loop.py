@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
 
 from pydantic import JsonValue, ValidationError
 
+from ai_service.application.activity import ActivitySink
 from ai_service.application.call_attempts import AttemptBoundary, AttemptKind
 from ai_service.capabilities.assistant.provenance import canonical_hash
+from ai_service.capabilities.assistant.public_contracts import AgentActivityStage
 from ai_service.capabilities.assistant.react.actions import (
     ActionKind,
     AskClarificationAction,
@@ -38,6 +39,7 @@ from ai_service.capabilities.assistant.react.outcomes import (
     InvalidTaskAnswer,
     validate_final_answer,
 )
+from ai_service.capabilities.assistant.react.phases import ReActPhase
 from ai_service.capabilities.assistant.react.proposal_resolution import (
     resolve_requirement_proposal,
 )
@@ -68,6 +70,8 @@ from ai_service.infrastructure.graph.flexible_state import (
 )
 from ai_service.infrastructure.graph.tool_batches import execute_tool_batch
 
+_CORE_BUILD_SUBJECTS = frozenset({"SETUP", "WORKLOAD"})
+
 
 @dataclass(frozen=True, slots=True)
 class LoopNodes:
@@ -84,12 +88,20 @@ def build_loop_nodes(
     model: FlexibleModel,
     dispatcher: ToolDispatcher,
     attempts: AttemptBoundary,
+    activity_sink: ActivitySink | None = None,
 ) -> LoopNodes:
+    def emit_activity(
+        stage: AgentActivityStage,
+        tool: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        if activity_sink is not None:
+            activity_sink(stage, tool, detail)
     def wait_for_build_input(
         state: FlexibleState,
         question: AskClarificationAction,
         decision: FlexibleDecision | None = None,
-    ) -> dict[str, Any]:
+    ) -> FlexibleState:
         resolved = (
             decision.model_copy(update={"action": question})
             if decision is not None
@@ -101,21 +113,42 @@ def build_loop_nodes(
                 "decision": resolved.model_dump(mode="json"),
                 "clarification": question.model_dump(mode="json"),
                 "repair_feedback": None,
-                "phase": "WAITING_INPUT",
+                "phase": ReActPhase.WAITING_INPUT.code,
             },
         )
 
-    async def prepare_agent(state: FlexibleState) -> dict[str, Any]:
+    async def prepare_agent(state: FlexibleState) -> FlexibleState:
         if (
             runtime.publication
             and runtime.publication.dialogue_continuation
+            and state.get("phase") != ReActPhase.REQUIREMENTS_UNCHANGED.code
             and (runtime.current(state).requirements == runtime.trusted.requirements)
         ):
             return {}
-        if state.get("phase") == "DECIDED":
+        if state.get("phase") == ReActPhase.DECIDED.code:
             return {}
         ctx = runtime.current(state)
         tasks_for_turn = runtime.registered_tasks(state)
+        entries = runtime.records(state)
+        run_entries = [entry for entry in entries if entry.origin_run_id == ctx.run_id]
+        decision_action = (
+            decode_flexible_decision(state["decision"]).action
+            if state.get("decision")
+            else None
+        )
+        proposed_core_build = (
+            not tasks_for_turn
+            and not run_entries
+            and state.get("phase") == ReActPhase.REQUIREMENTS_ACCEPTED.code
+            and isinstance(decision_action, ProposeRequirementsAction)
+            and any(
+                item.subject in _CORE_BUILD_SUBJECTS
+                for item in decision_action.draft.items
+            )
+        )
+        build_only_tasks = bool(tasks_for_turn) and all(
+            task.kind == "BUILD" for task in tasks_for_turn
+        )
         can_clarify = (
             not ctx.read_only_turn
             and ctx.execution_allowed
@@ -123,17 +156,24 @@ def build_loop_nodes(
             and not state.get("pending_proposal")
             and not state.get("pending_draft")
             and not runtime.unresolved_tasks(state)
-            and bool(tasks_for_turn)
-            and all(task.kind == "BUILD" for task in tasks_for_turn)
             and (
-                state.get("phase") == "REQUIREMENTS_ACCEPTED"
+                proposed_core_build
                 or (
-                    runtime.publication is not None
-                    and runtime.publication.confirmation is not None
+                    build_only_tasks
+                    and (
+                        state.get("phase")
+                        in {
+                            ReActPhase.REQUIREMENTS_ACCEPTED.code,
+                            ReActPhase.REQUIREMENTS_UNCHANGED.code,
+                        }
+                        or (
+                            runtime.publication is not None
+                            and runtime.publication.confirmation is not None
+                        )
+                    )
                 )
             )
         )
-        entries = runtime.records(state)
         should_build = (
             not ctx.read_only_turn
             and ctx.execution_allowed
@@ -157,12 +197,12 @@ def build_loop_nodes(
                 for entry in entries
             )
         )
-        loaded = (
+        loaded: FlexibleState = (
             await runtime.load_catalog(state)
             if should_build and not ctx.catalog_ready
             else {}
         )
-        merged = cast(FlexibleState, dict(state) | loaded) if loaded else state
+        merged = state | loaded if loaded else state
         ctx = runtime.current(merged) if loaded else ctx
         if not should_build or not (
             ctx.catalog_ready
@@ -202,6 +242,7 @@ def build_loop_nodes(
             dispatcher,
             attempts,
             runtime.limits,
+            activity_sink=activity_sink,
         )
         return runtime.bounded(
             merged,
@@ -212,7 +253,7 @@ def build_loop_nodes(
             },
         )
 
-    async def agent(state: FlexibleState) -> dict[str, Any]:
+    async def agent(state: FlexibleState) -> FlexibleState:
         ctx = runtime.current(state)
         entries = runtime.records(state)
         transcript = project_current_tools(entries, ctx)
@@ -239,6 +280,7 @@ def build_loop_nodes(
             "context": runtime.context_digest_payload(ctx),
             "graph_version": FLEXIBLE_GRAPH_VERSION,
         }
+        emit_activity(AgentActivityStage.THINKING)
         decision = await attempts.invoke(
             AttemptKind.MODEL,
             f"flexible:agent:{count}",
@@ -254,13 +296,13 @@ def build_loop_nodes(
                 ).model_dump(mode="json")
                 if decision
                 else None,
-                "phase": "REGISTER_REQUEST"
+                "phase": ReActPhase.REGISTER_REQUEST.code
                 if decision and decision.registration is not None
-                else "DECIDED",
+                else ReActPhase.DECIDED.code,
             },
         )
 
-    async def validate(state: FlexibleState) -> dict[str, Any]:
+    async def validate(state: FlexibleState) -> FlexibleState:
         if state.get("decision") is None:
             return runtime.repair(state, "INVALID_ACTION")
         decision = decode_flexible_decision(state["decision"])
@@ -279,7 +321,7 @@ def build_loop_nodes(
                 )
             if state.get("tool_calls", 0) + len(calls) > runtime.limits.max_tool_calls:
                 raise ValueError("REACT_TOOL_LIMIT")
-            loaded: dict[str, Any] = {}
+            loaded: FlexibleState = {}
             if (
                 not ctx.catalog_ready
                 and runtime.catalog_loader is not None
@@ -287,7 +329,7 @@ def build_loop_nodes(
             ):
                 loaded = await runtime.load_catalog(state)
                 if loaded:
-                    state = cast(FlexibleState, dict(state) | loaded)
+                    state = state | loaded
                     ctx = runtime.current(state)
             used = {
                 entry.call.call_id
@@ -341,11 +383,11 @@ def build_loop_nodes(
                     "ledger": [entry.model_dump(mode="json") for entry in entries],
                     "tool_calls": state.get("tool_calls", 0) + len(calls),
                     "repair_feedback": None,
-                    "phase": "TOOL_PENDING",
+                    "phase": ReActPhase.TOOL_PENDING.code,
                 },
             )
         if isinstance(action, ProposeRequirementsAction):
-            return {"phase": "RESOLVE_PROPOSAL"}
+            return {"phase": ReActPhase.RESOLVE_PROPOSAL.code}
         if isinstance(action, RespondAction):
             continuing = bool(
                 runtime.publication
@@ -384,7 +426,7 @@ def build_loop_nodes(
                 {
                     "response": response.model_dump(mode="json"),
                     "repair_feedback": None,
-                    "phase": "READY_TO_PUBLISH",
+                    "phase": ReActPhase.READY_TO_PUBLISH.code,
                 },
             )
         if isinstance(action, AskClarificationAction):
@@ -413,7 +455,7 @@ def build_loop_nodes(
                 if not ctx.catalog_ready and build_needs_catalog(ctx.requirements)
                 else {}
             )
-            merged = cast(FlexibleState, dict(state) | loaded)
+            merged = state | loaded
             ctx = runtime.current(merged)
             question = build_clarification(
                 ctx.requirements, ctx.catalog, catalog_ready=ctx.catalog_ready
@@ -422,6 +464,7 @@ def build_loop_nodes(
                 return loaded | runtime.repair(merged, "INVALID_ACTION")
             return loaded | wait_for_build_input(merged, question, decision)
         assert isinstance(action, FinalAnswerAction)
+        emit_activity(AgentActivityStage.VERIFYING)
         unresolved = runtime.unresolved_tasks(state)
         if unresolved:
             return runtime.repair(state, "TASK_INCOMPLETE", unresolved)
@@ -458,11 +501,11 @@ def build_loop_nodes(
             {
                 "answer": answer.model_dump(mode="json"),
                 "repair_feedback": None,
-                "phase": "READY_TO_PUBLISH",
+                "phase": ReActPhase.READY_TO_PUBLISH.code,
             },
         )
 
-    async def execute(state: FlexibleState) -> dict[str, Any]:
+    async def execute(state: FlexibleState) -> FlexibleState:
         ctx, entries = runtime.current(state), runtime.records(state)
         await execute_tool_batch(
             entries,
@@ -471,23 +514,24 @@ def build_loop_nodes(
             dispatcher,
             attempts,
             runtime.limits,
+            activity_sink=activity_sink,
         )
         return runtime.bounded(
             state,
             {
                 "ledger": [item.model_dump(mode="json") for item in entries],
-                "phase": "TOOL_COMMITTED",
+                "phase": ReActPhase.TOOL_COMMITTED.code,
             },
         )
 
-    async def resolve(state: FlexibleState) -> dict[str, Any]:
+    async def resolve(state: FlexibleState) -> FlexibleState:
         action = decode_flexible_decision(state["decision"]).action
         assert isinstance(action, ProposeRequirementsAction)
-        loaded: dict[str, Any] = {}
+        loaded: FlexibleState = {}
         if draft_needs_catalog(action.draft):
             loaded = await runtime.load_catalog(state)
             if loaded:
-                state = cast(FlexibleState, dict(state) | loaded)
+                state = state | loaded
         ctx = runtime.current(state)
         if state.get("pending_proposal"):
             return runtime.repair(state, "PROPOSAL_CONFIRMATION_REQUIRED")
@@ -500,12 +544,15 @@ def build_loop_nodes(
                 state["message"],
                 runtime.conversation_revision,
             )
-            update: dict[str, Any] = {
+            update: FlexibleState = {
                 "repair_feedback": None,
             }
             if isinstance(result, PendingResolution):
                 update.update(
-                    pending_draft=result.model_dump(mode="json"), phase="WAITING_INPUT"
+                    {
+                        "pending_draft": result.model_dump(mode="json"),
+                        "phase": ReActPhase.WAITING_INPUT.code,
+                    }
                 )
             elif isinstance(result, UserRequirementReceipt):
                 changed = apply_user_receipt(
@@ -516,22 +563,28 @@ def build_loop_nodes(
                     catalog=ctx.catalog,
                 )
                 update.update(
-                    working_requirements=changed.model_dump(mode="json"),
-                    user_receipts=[
-                        *state.get("user_receipts", []),
-                        result.model_dump(mode="json"),
-                    ],
-                    phase="REQUIREMENTS_ACCEPTED",
+                    {
+                        "working_requirements": changed.model_dump(mode="json"),
+                        "user_receipts": [
+                            *state.get("user_receipts", []),
+                            result.model_dump(mode="json"),
+                        ],
+                        "phase": ReActPhase.REQUIREMENTS_ACCEPTED.code,
+                    }
                 )
             else:
                 update.update(
-                    working_requirements=result.requirements.model_dump(mode="json"),
-                    pending_proposal=result.pending.model_dump(mode="json")
-                    if result.pending
-                    else None,
-                    phase="WAITING_INPUT"
-                    if result.disposition == "NEEDS_CONFIRMATION"
-                    else "REQUIREMENTS_UNCHANGED",
+                    {
+                        "working_requirements": result.requirements.model_dump(
+                            mode="json"
+                        ),
+                        "pending_proposal": result.pending.model_dump(mode="json")
+                        if result.pending
+                        else None,
+                        "phase": ReActPhase.WAITING_INPUT.code
+                        if result.disposition == "NEEDS_CONFIRMATION"
+                        else ReActPhase.REQUIREMENTS_UNCHANGED.code,
+                    }
                 )
         except ValueError:
             return runtime.bounded(

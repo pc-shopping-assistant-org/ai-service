@@ -12,6 +12,7 @@ from ai_service.application.use_cases.stateful_conversations import (
     StatefulConversationService,
     StatefulRunService,
 )
+from ai_service.config.models import ModelCatalog
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.auth import JwtAuthenticator
 from ai_service.infrastructure.graph.initial_root import NativeConversationInitializer
@@ -29,6 +30,7 @@ class StatefulResources:
     runs: StatefulRunService | None = None
     events: StatefulRunEventService | None = None
     memories: UserMemoryStore | None = None
+    models: ModelCatalog | None = None
 
 
 @asynccontextmanager
@@ -79,7 +81,11 @@ async def open_stateful_resources(settings: Settings):
                 open_build_runtime,
             )
 
-            async with open_build_runtime(settings, engine, saver, client) as runs:
+            async with open_build_runtime(settings, engine, saver, client) as (
+                runs,
+                models,
+                activity_broker,
+            ):
                 from ai_service.infrastructure.persistence.user_memory import (
                     PostgresUserMemoryStore,
                 )
@@ -88,6 +94,11 @@ async def open_stateful_resources(settings: Settings):
                     resources.conversations,
                     resources.authenticator,
                     runs,
-                    StatefulRunEventService(PostgresRunEventStore(engine), runs.store),
+                    StatefulRunEventService(
+                        PostgresRunEventStore(engine),
+                        runs.store,
+                        activity_broker=activity_broker,
+                    ),
                     PostgresUserMemoryStore(engine),
+                    models,
                 )

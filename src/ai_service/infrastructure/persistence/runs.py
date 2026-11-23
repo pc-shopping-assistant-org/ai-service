@@ -30,6 +30,7 @@ from ai_service.capabilities.assistant.react.contracts import (
     SavedBuildEvidence,
     ValidatedAnswer,
 )
+from ai_service.capabilities.assistant.react.phases import ReActPhase
 from ai_service.capabilities.assistant.react.snapshot_publication import (
     revalidate_flexible_publication,
 )
@@ -660,7 +661,7 @@ class PostgresRunCoordinator:
                 if snapshot.flexible.status == "WAITING_INPUT"
                 else "COMPLETED",
             }
-        if values.get("phase") != "READY_TO_PUBLISH":
+        if values.get("phase") != ReActPhase.READY_TO_PUBLISH.code:
             raise ValueError("Checkpoint is not ready to publish")
         # Application payload is allowlisted, not model prose promoted to facts.
         publication = AcceptedConversationSnapshot.model_validate(

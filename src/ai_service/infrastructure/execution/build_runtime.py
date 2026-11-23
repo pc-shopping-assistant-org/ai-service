@@ -8,6 +8,7 @@ import httpx
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_service.application.activity import RunActivityBroker
 from ai_service.application.call_attempts import AttemptBoundary, ExecutionClaim
 from ai_service.application.use_cases.stateful_conversations import StatefulRunService
 from ai_service.capabilities.assistant.react.contracts import (
@@ -29,6 +30,7 @@ from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
 )
 from ai_service.capabilities.web_search.source_policy import ResearchSourcePolicy
+from ai_service.config.models import load_model_catalog
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.commerce.hardware_catalog import (
     BackendRequirementCatalog,
@@ -49,10 +51,10 @@ from ai_service.infrastructure.persistence.conversations import (
 )
 from ai_service.infrastructure.persistence.runs import PostgresRunCoordinator
 from ai_service.infrastructure.persistence.user_memory import PostgresUserMemoryStore
-from ai_service.infrastructure.providers.factory import build_model_provider
 from ai_service.infrastructure.providers.react_model import (
     NativeFlexibleModel,
 )
+from ai_service.infrastructure.providers.registry import ModelProviderRegistry
 from ai_service.infrastructure.providers.requirement_extractor import (
     NativeRequirementExtractor,
 )
@@ -78,9 +80,13 @@ async def open_build_runtime(
     client: httpx.AsyncClient,
 ):
     mapping = HardwareCatalogMapping.model_validate(settings.hardware_catalog_mapping or {})
-    provider = build_model_provider(settings)
-    if provider is None:
-        raise ValueError("Stateful execution requires a model provider")
+    if not settings.models_config_path or not settings.models_config_path.strip():
+        raise ValueError(
+            "Stateful execution requires AI_MODELS_CONFIG_PATH pointing to a YAML model config"
+        )
+    model_catalog = load_model_catalog(settings.models_config_path.strip())
+    provider_registry = ModelProviderRegistry(model_catalog)
+    activity_broker = RunActivityBroker()
     service = PCBuildApplicationService()
     coordinator = PostgresRunCoordinator(
         engine,
@@ -221,6 +227,20 @@ async def open_build_runtime(
                 ),
             )
         )
+        provider, model_entry, resolved_thinking = provider_registry.resolve_provider(
+            request.model_id, request.thinking_mode
+        )
+        logger.info(
+            "model.selected model_id=%s provider=%s thinking_mode=%s",
+            model_entry.id,
+            model_entry.provider,
+            resolved_thinking.value if resolved_thinking else "none",
+            extra={
+                "event": "model.selected",
+                "conversation_id": str(claim.conversation_id),
+                "run_id": str(claim.run_id),
+            },
+        )
         requirement_extractor = NativeRequirementExtractor(provider, attempts)
         task_interpreter = NativeTaskExtractor(
             provider, attempts, context=tool_context
@@ -255,6 +275,7 @@ async def open_build_runtime(
                 catalog_loader=BackendRequirementCatalog(
                     client, settings.backend_api_url, attempts, mapping
                 ),
+                activity_sink=activity_broker.sink(claim.conversation_id, claim.run_id),
             ),
             accepted_versions={FLEXIBLE_GRAPH_VERSION},
         )
@@ -265,15 +286,20 @@ async def open_build_runtime(
             coordinator,
             graph_factory,
             FLEXIBLE_GRAPH_VERSION,
+            on_finish=activity_broker.finish,
         ),
         worker_id=uuid4(),
     )
     try:
         await executor.start()
-        yield StatefulRunService(coordinator, executor.wake, executor.cancel_run)
+        yield (
+            StatefulRunService(coordinator, executor.wake, executor.cancel_run),
+            model_catalog,
+            activity_broker,
+        )
     finally:
         # Shutdown may exceed grace, but live CPU/checkpoint work must not lose
         # its clients/DB beneath it or be reported stopped merely on a timeout.
         while not await executor.stop(grace_seconds=30):
             logger.warning("Stateful shutdown is waiting for execution drain")
-        await provider.aclose()
+        await provider_registry.aclose()
