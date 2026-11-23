@@ -447,7 +447,16 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                 assert [m["role"] for m in messages] == ["user", "assistant"]
                 # Empty catalog must be truthful infeasibility, never sample data.
                 if version == "v2":
-                    assert "8,000,000 VND" in messages[-1]["content"]
+                    if selected:
+                        assert (
+                            "Đối chiếu thông số và nhu cầu" in messages[-1]["content"]
+                        )
+                        assert any(
+                            p["list_price"] == 8_000_000
+                            for p in messages[-1]["products"]
+                        )
+                    else:
+                        assert "8,000,000 VND" in messages[-1]["content"]
                     view = (await client.get(path)).json()["data"]
                     assert view["revision"] == 1
                     assert view["flexible"]["status"] == "COMPLETED"
@@ -603,10 +612,18 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                         assert (await client.get(path)).json()["data"]["revision"] == 3
                         result = await client.get(path + f"/runs/{recovered_id}/result")
                         assert result.status_code == 200
+                        result_payload = result.json()["data"]["result"]
                         assert (
-                            "8,000,000 VND" in result.json()["data"]["result"]["answer"]
+                            "Đối chiếu thông số và nhu cầu" in result_payload["answer"]
                         )
-                        assert "8,000,000 VND" in last_context[0]["assistant_text"]
+                        assert any(
+                            p["list_price"] == 8_000_000
+                            for p in result_payload["products"]
+                        )
+                        assert (
+                            "Đối chiếu thông số và nhu cầu"
+                            in last_context[0]["assistant_text"]
+                        )
                     if retry:
                         assert len(failures) == 1
                         assert backend_calls.count("/products/snapshot") == 0

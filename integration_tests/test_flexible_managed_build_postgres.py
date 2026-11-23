@@ -579,7 +579,10 @@ async def test_managed_confirmation_build_and_saved_explanation_preserve_snapsho
                     return FlexibleDecision(action={
                         "kind": "FINAL_ANSWER", "answer": {
                             "text": "Ignored", "evidence_refs": refs,
-                            "explanation": {"text": "Nhận xét từ sản phẩm trong catalog.", "evidence_refs": refs},
+                            "explanation": {
+                                "text": f"Nhận xét về {products.product.name} từ sản phẩm trong catalog.",
+                                "evidence_refs": refs,
+                            },
                         },
                     })
 

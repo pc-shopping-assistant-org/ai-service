@@ -254,7 +254,8 @@ async def test_v2_rejects_legacy_saved_snapshot_after_orphan_and_reopen(
                 assert values["public_build"] == snapshot.model_dump(mode="json")
                 assert values["answer"] == "Fixture accepted historical build"
                 assert current.revision == 1
-        assert closed == [True]
+            # Legacy checkpoint is rejected before any model provider is lazily instantiated.
+            assert closed == []
     finally:
         async with engine.begin() as conn:
             await conn.execute(
