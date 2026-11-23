@@ -96,22 +96,16 @@ class OpenAIModelProvider(ModelProvider):
         if self._max_output_tokens is not None:
             kwargs["max_tokens"] = self._max_output_tokens
         if (
-            self._thinking_strategy == ThinkingStrategy.OLLAMA_THINK
+            self._thinking_strategy
+            in {ThinkingStrategy.OLLAMA_THINK, ThinkingStrategy.OPENAI_REASONING}
             and self._thinking_mode is not None
         ):
-            kwargs["extra_body"] = {
-                "think": self._thinking_mode != ThinkingMode.OFF
-            }
-        elif (
-            self._thinking_strategy == ThinkingStrategy.OPENAI_REASONING
-            and self._thinking_mode is not None
-            and self._thinking_mode != ThinkingMode.OFF
-        ):
-            kwargs["reasoning_effort"] = (
-                "medium"
-                if self._thinking_mode == ThinkingMode.ON
-                else self._thinking_mode.value
-            )
+            if self._thinking_mode == ThinkingMode.OFF:
+                kwargs["reasoning_effort"] = "none"
+            elif self._thinking_mode == ThinkingMode.ON:
+                kwargs["reasoning_effort"] = "medium"
+            else:
+                kwargs["reasoning_effort"] = self._thinking_mode.value
         self._model = ChatOpenAI(**kwargs)  # type: ignore[arg-type]
         return self._model
 

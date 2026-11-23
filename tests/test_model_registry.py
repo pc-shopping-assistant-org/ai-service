@@ -139,8 +139,8 @@ async def test_provider_registry_caches_and_wires_ollama_think_flag(tmp_path):
 
         llm_on = p_on_1.create_model()
         llm_off = p_off.create_model()
-        assert getattr(llm_on, "extra_body", None) == {"think": True}
-        assert getattr(llm_off, "extra_body", None) == {"think": False}
+        assert getattr(llm_on, "reasoning_effort", None) == "medium"
+        assert getattr(llm_off, "reasoning_effort", None) == "none"
     finally:
         await registry.aclose()
 

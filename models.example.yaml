@@ -36,9 +36,9 @@ models:
     base_url_env: AI_OPENAI_BASE_URL
     api_key_env: AI_OPENAI_API_KEY
     api_key_optional: true
-    max_output_tokens: 4096
+    max_output_tokens: 8192
     timeout_seconds: 180
     thinking:
       strategy: ollama_think
       supported_modes: [off, on]
-      default_mode: on
+      default_mode: off
