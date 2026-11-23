@@ -19,7 +19,9 @@ from ai_service.capabilities.assistant.react.contracts import (
     ToolContext,
     ToolName,
     ToolRecord,
+    require_tool_results,
 )
+from ai_service.capabilities.assistant.react.phases import ReActPhase, ReActPhaseCode
 from ai_service.capabilities.assistant.react.tools import (
     ToolDispatcher,
     allowed_tools,
@@ -52,7 +54,7 @@ class ReactState(TypedDict, total=False):
     model_calls: int
     repairs: int
     repair: bool
-    phase: str
+    phase: ReActPhaseCode
     answer: dict[str, Any]
     react_answer: dict[str, Any]
 
@@ -102,7 +104,12 @@ def add_react_nodes(
             raise ValueError("REACT_VALIDATION_EXHAUSTED")
         return bounded(
             state,
-            {"repairs": repairs, "repair": True, "phase": "REPAIR", answer_channel: {}},
+            {
+                "repairs": repairs,
+                "repair": True,
+                "phase": ReActPhase.REPAIR.code,
+                answer_channel: {},
+            },
         )
 
     async def agent(state: ReactState) -> dict[str, Any]:
@@ -113,8 +120,7 @@ def add_react_nodes(
             raise ValueError("REACT_MESSAGE_INVALID")
         bounded(state, {})
         transcript = records(state)
-        if any(entry.result is None for entry in transcript):
-            raise ValueError("REACT_UNRESOLVED_TOOL_PROTOCOL")
+        require_tool_results(transcript)
         count = state.get("model_calls", 0)
         if count >= limits.max_model_calls:
             raise ValueError("REACT_MODEL_LIMIT")
@@ -155,7 +161,7 @@ def add_react_nodes(
                 "decision": decision.model_dump(mode="json"),
                 "model_calls": count + 1,
                 answer_channel: {},
-                "phase": "DECIDED",
+                "phase": ReActPhase.DECIDED.code,
             },
         )
 
@@ -179,7 +185,7 @@ def add_react_nodes(
                 state,
                 {
                     "ledger": [r.model_dump(mode="json") for r in transcript],
-                    "phase": "TOOL_PENDING",
+                    "phase": ReActPhase.TOOL_PENDING.code,
                     "repair": False,
                 },
             )
@@ -202,7 +208,7 @@ def add_react_nodes(
             state,
             {
                 answer_channel: answer.model_dump(mode="json"),
-                "phase": "READY_TO_PUBLISH",
+                "phase": ReActPhase.READY_TO_PUBLISH.code,
                 "repair": False,
             },
         )
@@ -227,16 +233,15 @@ def add_react_nodes(
             state,
             {
                 "ledger": [r.model_dump(mode="json") for r in transcript],
-                "phase": "TOOL_COMMITTED",
+                "phase": ReActPhase.TOOL_COMMITTED.code,
             },
         )
 
     async def observe(state: ReactState) -> dict[str, Any]:
         # Transcript is a pure projection of validated records; no independently
         # writable messages channel and no model call before all pairs resolve.
-        if any(r.result is None for r in records(state)):
-            raise ValueError("REACT_UNRESOLVED_TOOL_PROTOCOL")
-        return {"phase": "OBSERVED"}
+        require_tool_results(records(state))
+        return {"phase": ReActPhase.OBSERVED.code}
 
     # Use the owning graph's full state schema; automatic annotation inference
     # would filter out requirements/catalog channels when these nodes are embedded.
@@ -251,9 +256,9 @@ def add_react_nodes(
         "validate_decision",
         lambda s: s["phase"],
         {
-            "REPAIR": "agent",
-            "TOOL_PENDING": "execute_tool",
-            "READY_TO_PUBLISH": done_node,
+            ReActPhase.REPAIR.code: "agent",
+            ReActPhase.TOOL_PENDING.code: "execute_tool",
+            ReActPhase.READY_TO_PUBLISH.code: done_node,
         },
     )
     builder.add_edge("execute_tool", "observe")

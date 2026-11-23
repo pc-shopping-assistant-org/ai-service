@@ -50,17 +50,16 @@ class Settings(BaseSettings):
             raise ValueError("Stateful mode requires AI_DATABASE_URL and AI_JWT_JWKS_URL")
         if not self.database_url.get_secret_value().startswith("postgresql+psycopg://"):
             raise ValueError("AI_DATABASE_URL must use postgresql+psycopg")
-        if self.provider == AIProvider.QWEN:
-            if self.qwen_base_url is None:
-                raise ValueError("Qwen requires AI_QWEN_BASE_URL")
-            return self
-        key = (
-            self.openai_api_key if self.provider == AIProvider.OPENAI
-            else self.gemini_api_key if self.provider == AIProvider.GEMINI else None
-        )
-        if not key or not key.strip():
-            raise ValueError("Stateful execution requires an explicitly configured model provider/key")
+        if not self.models_config_path or not self.models_config_path.strip():
+            raise ValueError(
+                "Stateful execution requires AI_MODELS_CONFIG_PATH pointing to a YAML model config"
+            )
+        from ai_service.config.models import load_model_catalog
+
+        load_model_catalog(self.models_config_path.strip())
         return self
+
+    models_config_path: str | None = None
 
     retrieval_backend: RetrievalBackend = RetrievalBackend.BACKEND
     qdrant_url: str | None = Field(

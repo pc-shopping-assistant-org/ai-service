@@ -79,6 +79,7 @@ from .contracts import (
     ToolRecord,
     ToolResult,
     ValidatedAnswer,
+    require_tool_results,
     result_web_pages,
     web_evidence_refs,
 )
@@ -138,8 +139,7 @@ def project_current_tools(
     records: list[ToolRecord], context: ToolContext
 ) -> list[ToolRecord]:
     """Select complete current evidence without rewriting the canonical ledger."""
-    if any(record.result is None for record in records):
-        raise ValueError("REACT_UNRESOLVED_TOOL_PROTOCOL")
+    require_tool_results(records)
     return [
         record
         for record in records

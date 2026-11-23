@@ -21,8 +21,10 @@ from ai_service.capabilities.assistant.react.contracts import (
     ToolContext,
     ToolName,
     ToolRecord,
+    require_tool_results,
 )
 from ai_service.capabilities.assistant.react.dialogue import pending_context
+from ai_service.capabilities.assistant.react.phases import ReActPhase, ReActPhaseCode
 from ai_service.capabilities.assistant.react.resolution_reply import (
     apply_resolution_command,
 )
@@ -76,7 +78,7 @@ class FlexibleModel(Protocol):
 
 
 class AsyncNode(Protocol):
-    def __call__(self, state: FlexibleState) -> Coroutine[Any, Any, dict[str, Any]]: ...
+    def __call__(self, state: FlexibleState) -> Coroutine[Any, Any, FlexibleState]: ...
 
 
 class FlexibleState(TypedDict, total=False):
@@ -94,7 +96,7 @@ class FlexibleState(TypedDict, total=False):
     tool_calls: int
     repairs: int
     repair_feedback: dict[str, Any] | None
-    phase: str
+    phase: ReActPhaseCode
     answer: dict[str, Any]
     response: dict[str, Any] | None
     control_history: list[dict[str, Any]]
@@ -147,7 +149,11 @@ class FlexibleRuntime:
         if not ctx.catalog_ready:
             return None
         if self._cached_catalog_hash is None:
-            rows = self._cached_catalog if self._cached_catalog is not None else ctx.catalog
+            rows = (
+                self._cached_catalog
+                if self._cached_catalog is not None
+                else ctx.catalog
+            )
             self._cached_catalog_hash = canonical_hash(
                 [row.model_dump(mode="json") for row in rows]
             )
@@ -180,7 +186,9 @@ class FlexibleRuntime:
                 )
             working = self.base_context(state)
             working.requirements = CanonicalRequirementState.model_validate(
-                state.get("working_requirements", self.trusted.requirements.model_dump())
+                state.get(
+                    "working_requirements", self.trusted.requirements.model_dump()
+                )
             )
             return evidence_requirements(
                 state.get("decision"),
@@ -201,12 +209,10 @@ class FlexibleRuntime:
             )
         return []
 
-    def bounded(self, state: FlexibleState, update: dict[str, Any]) -> dict[str, Any]:
+    def bounded(self, state: FlexibleState, update: FlexibleState) -> FlexibleState:
         if (
             len(
-                json.dumps(
-                    dict(state) | update, ensure_ascii=False, allow_nan=False
-                ).encode()
+                json.dumps(state | update, ensure_ascii=False, allow_nan=False).encode()
             )
             > self.limits.max_state_bytes
         ):
@@ -219,8 +225,7 @@ class FlexibleRuntime:
         if catalog_context is not None:
             if "rows" in catalog_context:
                 rows = [
-                    CatalogRowV1.model_validate(row)
-                    for row in catalog_context["rows"]
+                    CatalogRowV1.model_validate(row) for row in catalog_context["rows"]
                 ]
                 self._cached_catalog = rows
                 self._cached_catalog_hash = None
@@ -301,8 +306,8 @@ class FlexibleRuntime:
         return project_current_tools(self.records(state), self.current(state))
 
     def acknowledge_control(
-        self, state: FlexibleState, update: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, state: FlexibleState, update: FlexibleState
+    ) -> FlexibleState:
         decision = (
             decode_flexible_decision(state["decision"])
             if state.get("decision")
@@ -318,7 +323,7 @@ class FlexibleRuntime:
                 history.append(
                     ControlRecord(
                         call=call,
-                        code=update.get("phase", "REPAIR"),
+                        code=update.get("phase", ReActPhase.REPAIR.code),
                         model_step=state.get("model_calls", 0),
                     )
                 )
@@ -335,7 +340,7 @@ class FlexibleRuntime:
         *,
         task_indices: list[int] | None = None,
         next_actions: list[ActionKind] | None = None,
-    ) -> dict[str, Any]:
+    ) -> FlexibleState:
         count = state.get("repairs", 0) + 1
         if count > self.limits.max_repairs:
             raise ValueError("REACT_VALIDATION_EXHAUSTED")
@@ -354,36 +359,40 @@ class FlexibleRuntime:
                 {
                     "repairs": count,
                     "repair_feedback": feedback.model_dump(mode="json"),
-                    "phase": "REPAIR",
+                    "phase": ReActPhase.REPAIR.code,
                     "answer": {},
                 },
             ),
         )
 
-    def resolution_update(self, continued: ResolutionContinuation) -> dict[str, Any]:
-        update: dict[str, Any] = {
+    def resolution_update(self, continued: ResolutionContinuation) -> FlexibleState:
+        update: FlexibleState = {
             "reference_reply": None,
             "unit_reply": None,
             "pending_draft": continued.pending.model_dump(mode="json")
             if continued.pending
             else None,
-            "phase": "WAITING_INPUT"
+            "phase": ReActPhase.WAITING_INPUT.code
             if continued.pending
             or (continued.admission and continued.admission.pending)
-            else "STARTED",
+            else ReActPhase.STARTED.code,
         }
         if continued.admission:
             update.update(
-                working_requirements=continued.admission.requirements.model_dump(
-                    mode="json"
-                ),
-                pending_proposal=continued.admission.pending.model_dump(mode="json")
-                if continued.admission.pending
-                else None,
+                {
+                    "working_requirements": continued.admission.requirements.model_dump(
+                        mode="json"
+                    ),
+                    "pending_proposal": continued.admission.pending.model_dump(
+                        mode="json"
+                    )
+                    if continued.admission.pending
+                    else None,
+                }
             )
         return update
 
-    async def load_catalog(self, state: FlexibleState) -> dict[str, Any]:
+    async def load_catalog(self, state: FlexibleState) -> FlexibleState:
         ctx = self.base_context(state)
         if ctx.catalog_ready and (ctx.catalog or self._cached_catalog is not None):
             return {}
@@ -395,7 +404,7 @@ class FlexibleRuntime:
         validated = [CatalogRowV1.model_validate(row.model_dump()) for row in rows]
         ctx.catalog = validated
         ctx.catalog_ready = True
-        update: dict[str, Any] = {
+        update: FlexibleState = {
             "catalog_context": self._catalog_ref(validated),
         }
         if self.publication:
@@ -411,11 +420,11 @@ class FlexibleRuntime:
 
     def initialize(
         self, state: FlexibleState, bound_input: dict[str, Any]
-    ) -> dict[str, Any]:
+    ) -> FlexibleState:
         if self.publication:
             if state.get("message") != self.publication.request_message:
                 raise ValueError("Graph request differs from the stored request")
-            state = cast(FlexibleState, dict(state) | bound_input)
+            state = state | cast(FlexibleState, bound_input)
         # New turns do not inherit the prior run's optimizer snapshot. Native
         # resume skips initialization and keeps its own committed snapshot.
         initial_catalog_ref = (
@@ -423,17 +432,14 @@ class FlexibleRuntime:
             if self.trusted.catalog_ready
             else None
         )
-        state = cast(
-            FlexibleState,
-            dict(state) | {"catalog_context": initial_catalog_ref},
-        )
+        state = state | {"catalog_context": initial_catalog_ref}
         ctx = self.current(state)
         if not ctx.execution_allowed or not ctx.read_catalog_allowed:
             raise ValueError("REACT_EXECUTION_NOT_AUTHORIZED")
         if not state.get("message", "").strip() or len(state["message"]) > 4000:
             raise ValueError("REACT_MESSAGE_INVALID")
-        update: dict[str, Any] = {
-            **bound_input,
+        update: FlexibleState = {
+            **cast(FlexibleState, bound_input),
             "task_draft": {"tasks": []} if self.registering else None,
             "task_resolution": TaskResolution().model_dump(mode="json")
             if self.registering
@@ -448,7 +454,7 @@ class FlexibleRuntime:
             "response": None,
             "control_history": [],
             "clarification": None,
-            "phase": "STARTED",
+            "phase": ReActPhase.STARTED.code,
             "catalog_context": initial_catalog_ref,
             "free_resolution_reply": None,
             "user_receipts": [],
@@ -460,8 +466,7 @@ class FlexibleRuntime:
             # Previous-run evidence remains in immutable native ancestors. Window
             # only this new checkpoint; resume(None) never runs begin_turn again.
             previous = self.records(state)
-            if any(entry.result is None for entry in previous):
-                raise ValueError("REACT_UNRESOLVED_TOOL_PROTOCOL")
+            require_tool_results(previous)
             update["ledger"] = [
                 entry.model_dump(mode="json")
                 for entry in previous
@@ -476,7 +481,11 @@ class FlexibleRuntime:
             ).model_dump(mode="json")
         if self.publication and self.publication.discard_pending:
             update.update(
-                pending_draft=None, pending_proposal=None, phase="READY_TO_PUBLISH"
+                {
+                    "pending_draft": None,
+                    "pending_proposal": None,
+                    "phase": ReActPhase.READY_TO_PUBLISH.code,
+                }
             )
             return self.bounded(state, update)
         if (
@@ -488,7 +497,7 @@ class FlexibleRuntime:
             and self.publication
             and (self.clarifier or self.unit_clarifier)
         ):
-            update["phase"] = "INTERPRET_REPLY"
+            update["phase"] = ReActPhase.INTERPRET_REPLY.code
             return self.bounded(state, update)
         if state.get("reference_reply") or state.get("unit_reply"):
             if (
@@ -532,8 +541,12 @@ class FlexibleRuntime:
                 conversation_revision=self.conversation_revision,
             )
             update.update(
-                working_requirements=admission.requirements.model_dump(mode="json"),
-                pending_proposal=None,
-                confirmation=None,
+                {
+                    "working_requirements": admission.requirements.model_dump(
+                        mode="json"
+                    ),
+                    "pending_proposal": None,
+                    "confirmation": None,
+                }
             )
         return self.bounded(state, update)

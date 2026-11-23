@@ -12,10 +12,13 @@ from ai_service.capabilities.assistant.react.contracts import (
     ToolCall,
     ToolContext,
     ToolName,
+    ToolRecord,
+    UnresolvedToolCallError,
 )
 from ai_service.capabilities.assistant.react.tools import (
     ToolDispatcher,
     allowed_tools,
+    project_current_tools,
     validate_answer,
 )
 from ai_service.capabilities.assistant.requirements.contracts import (
@@ -56,6 +59,18 @@ class Catalog:
     async def get(self, product_id):
         self.calls += 1
         return self.product if product_id == self.product.product_id else None
+
+
+def test_tool_projection_rejects_a_call_without_a_result():
+    trusted = context()
+    pending = ToolRecord(
+        call=ToolCall(
+            call_id="pending", name=ToolName.SEARCH_CATALOG, arguments={"query": "GPU"}
+        ),
+        origin_run_id=trusted.run_id,
+    )
+    with pytest.raises(UnresolvedToolCallError):
+        project_current_tools([pending], trusted)
 
 
 @pytest.mark.asyncio
@@ -415,9 +430,7 @@ async def test_compare_products_resolves_keywords_in_single_turn_without_prior_s
 
     class KeywordComparisonCatalog:
         async def get(self, product_id):
-            return next(
-                (p for p in (gpu_a, gpu_b) if p.product_id == product_id), None
-            )
+            return next((p for p in (gpu_a, gpu_b) if p.product_id == product_id), None)
 
         async def search(self, query, limit):
             lowered = query.casefold()
@@ -554,5 +567,3 @@ async def test_check_build_compatibility_evaluates_catalog_parts_and_rejects_mis
     )
     assert ok.status == "REJECTED"
     assert ok.error == "PREREQUISITE_MISSING"
-
-

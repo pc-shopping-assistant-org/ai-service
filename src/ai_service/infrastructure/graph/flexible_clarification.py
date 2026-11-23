@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
 
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.react.actions import decode_flexible_decision
 from ai_service.capabilities.assistant.react.contracts import ControlRecord
+from ai_service.capabilities.assistant.react.phases import ReActPhase
 from ai_service.capabilities.assistant.react.public_views import (
     public_resolution_options,
 )
@@ -67,7 +67,7 @@ def build_clarification_nodes(
     amender: PendingAmender | None,
     task_amender: TaskAmender | None,
 ) -> ClarificationNodes:
-    async def interpret_reply(state: FlexibleState) -> dict[str, Any]:
+    async def interpret_reply(state: FlexibleState) -> FlexibleState:
         assert runtime.publication is not None
         ctx = runtime.current(state)
         pending = PendingResolution.model_validate(state["pending_draft"])
@@ -107,13 +107,15 @@ def build_clarification_nodes(
                 state,
                 {
                     "free_resolution_reply": receipt.model_dump(mode="json"),
-                    "phase": "AMEND_PENDING" if amender else "WAITING_INPUT",
+                    "phase": ReActPhase.AMEND_PENDING.code
+                    if amender
+                    else ReActPhase.WAITING_INPUT.code,
                     "model_calls": state.get("model_calls", 0) + 1,
                 },
             )
         # A side question needs only the saved offered choices. Fetch current
         # hardware only after a real selection, before deterministic admission.
-        loaded = (
+        loaded: FlexibleState = (
             await runtime.load_catalog(state)
             if draft_needs_catalog(
                 RequirementDraft(items=pending.draft.resolution.draft.items)
@@ -121,7 +123,7 @@ def build_clarification_nodes(
             else {}
         )
         continued = apply_resolution_command(
-            runtime.current(cast(FlexibleState, dict(state) | loaded)),
+            runtime.current(state | loaded),
             pending,
             state["message"],
             runtime.conversation_revision,
@@ -138,7 +140,7 @@ def build_clarification_nodes(
             },
         )
 
-    async def amend_reply(state: FlexibleState) -> dict[str, Any]:
+    async def amend_reply(state: FlexibleState) -> FlexibleState:
         assert runtime.publication is not None and amender is not None
         pending = (
             runtime.publication.accepted.flexible.pending_resolution
@@ -159,7 +161,7 @@ def build_clarification_nodes(
                 state,
                 {
                     "free_amendment": receipt.model_dump(mode="json"),
-                    "phase": "STARTED",
+                    "phase": ReActPhase.STARTED.code,
                     "model_calls": state.get("model_calls", 0) + 1,
                 },
             )
@@ -175,10 +177,12 @@ def build_clarification_nodes(
                 ]
             )
         )
-        loaded = await runtime.load_catalog(state) if needs_catalog else {}
+        loaded: FlexibleState = (
+            await runtime.load_catalog(state) if needs_catalog else {}
+        )
         continued = apply_amendment_receipt(
             receipt,
-            runtime.current(cast(FlexibleState, dict(state) | loaded)),
+            runtime.current(state | loaded),
             pending,
             state["message"],
             runtime.conversation_revision,
@@ -193,7 +197,7 @@ def build_clarification_nodes(
             },
         )
 
-    async def register(state: FlexibleState) -> dict[str, Any]:
+    async def register(state: FlexibleState) -> FlexibleState:
         assert runtime.publication is not None
         pending = runtime.publication.accepted.flexible
         if pending and pending.pending_task_resolution:
@@ -209,7 +213,7 @@ def build_clarification_nodes(
         draft.validate_source(runtime.publication.task_message)
         return runtime.bounded(state, {"task_draft": draft.model_dump(mode="json")})
 
-    async def resolve_registered(state: FlexibleState) -> dict[str, Any]:
+    async def resolve_registered(state: FlexibleState) -> FlexibleState:
         assert task_catalog is not None and runtime.publication is not None
         ctx = runtime.current(state)
         pending = runtime.publication.accepted.flexible
@@ -249,7 +253,7 @@ def build_clarification_nodes(
             selections=selections,
             mention_overrides=previous.mention_overrides if previous else None,
         )
-        update: dict[str, Any] = {"task_resolution": result.model_dump(mode="json")}
+        update: FlexibleState = {"task_resolution": result.model_dump(mode="json")}
         update["publication_context"] = FlexibleExecutionContext(
             context=runtime.base_context(state), required=[], registered=True
         ).model_dump(mode="json")
@@ -269,12 +273,16 @@ def build_clarification_nodes(
                     )
                 )
             update.update(
-                control_history=[entry.model_dump(mode="json") for entry in history],
-                phase="DECIDED",
+                {
+                    "control_history": [
+                        entry.model_dump(mode="json") for entry in history
+                    ],
+                    "phase": ReActPhase.DECIDED.code,
+                }
             )
         return runtime.bounded(state, update)
 
-    async def interpret_task_reply(state: FlexibleState) -> dict[str, Any]:
+    async def interpret_task_reply(state: FlexibleState) -> FlexibleState:
         assert runtime.publication is not None and task_clarifier is not None
         pending = runtime.publication.accepted.flexible
         previous = pending.pending_task_resolution if pending else None
@@ -299,11 +307,13 @@ def build_clarification_nodes(
             {
                 "free_task_reply": receipt.model_dump(mode="json"),
                 "model_calls": state.get("model_calls", 0) + 1,
-                "phase": "AMEND_TASK" if reply is None and task_amender else "STARTED",
+                "phase": ReActPhase.AMEND_TASK.code
+                if reply is None and task_amender
+                else ReActPhase.STARTED.code,
             },
         )
 
-    async def amend_task_reply(state: FlexibleState) -> dict[str, Any]:
+    async def amend_task_reply(state: FlexibleState) -> FlexibleState:
         assert runtime.publication is not None and task_amender is not None
         pending = runtime.publication.accepted.flexible
         previous = pending.pending_task_resolution if pending else None
@@ -323,7 +333,7 @@ def build_clarification_nodes(
             {
                 "free_task_amendment": receipt.model_dump(mode="json"),
                 "model_calls": state.get("model_calls", 0) + 1,
-                "phase": "STARTED",
+                "phase": ReActPhase.STARTED.code,
             },
         )
 
