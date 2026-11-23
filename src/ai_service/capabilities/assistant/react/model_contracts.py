@@ -35,7 +35,9 @@ class RequirementInput(Contract):
     )
     value: StrictInt | str | None = None
     unit: QuantityUnit | None = None
-    quote: Text
+    quote: Text = Field(
+        description="Copy the exact words from the latest user message. For a short reply, copy the reply verbatim without expanding it."
+    )
     target: Literal["REQUIREMENT", "GOAL", "RESOURCE"] = "REQUIREMENT"
     operation: Literal["SET", "CLEAR"] = "SET"
     target_id: UUID | None = Field(

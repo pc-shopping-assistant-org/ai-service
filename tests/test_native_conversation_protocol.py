@@ -1,6 +1,7 @@
 """Model interaction is text/native calls; application owns business outcomes."""
 
 import json
+from uuid import uuid4
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -9,11 +10,19 @@ from test_react_tools import Catalog, context
 
 from ai_service.capabilities.assistant.react.contracts import (
     CompletionRequirement,
+    PendingConversationContext,
     ToolCall,
     ToolName,
     ToolRecord,
 )
+from ai_service.capabilities.assistant.react.control_actions import normalize_control
+from ai_service.capabilities.assistant.react.dialogue import pending_context
+from ai_service.capabilities.assistant.react.outcomes import TaskOutcome
+from ai_service.capabilities.assistant.react.published_state import (
+    FlexiblePublishedState,
+)
 from ai_service.capabilities.assistant.react.tools import ToolDispatcher
+from ai_service.capabilities.assistant.requirements.diagnostics import CompilationReason
 from ai_service.capabilities.pc_builder.application.service import (
     PCBuildApplicationService,
 )
@@ -64,6 +73,65 @@ def test_model_request_exposes_small_native_controls_without_decision_envelope()
         assert '"outcome"' not in schema
         assert '"status"' not in schema
         assert "schema_version" not in by_name[name]["parameters"].get("properties", {})
+
+
+def test_model_gets_pending_build_fields_when_user_answers_a_clarification():
+    trusted = context()
+    trusted.completion_requirements = [
+        CompletionRequirement(kind="BUILD", constraints_revision=0)
+    ]
+    trusted.pending = pending_context(
+        FlexiblePublishedState(
+            conversation_id=trusted.conversation_id,
+            task_message_id=uuid4(),
+            task_message="Build PC",
+            status="WAITING_INPUT",
+            waiting_message="Ngân sách tối đa của bạn là bao nhiêu?",
+            waiting_tasks=[
+                TaskOutcome(
+                    task=trusted.completion_requirements[0], status="UNRESOLVED"
+                )
+            ],
+            clarification={
+                "question": "Ngân sách tối đa của bạn là bao nhiêu?",
+                "missing_fields": [CompilationReason.BUDGET_REQUIRED.value],
+            },
+        )
+    )
+
+    messages, _ = build_react_request("30 triệu", [], (), None, trusted)
+    instruction, data = messages[0].content.split(" Application context (data): ", 1)
+    assert json.loads(data)["pending"]["missing_fields"] == ["BUDGET_REQUIRED"]
+    assert "call propose_requirements before replying" in instruction
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_operator"), [("30 triệu", "LTE"), ("Đúng 30 triệu", "EQ")]
+)
+def test_bare_budget_reply_uses_pending_spending_cap(message, expected_operator):
+    trusted = context()
+    trusted.pending = PendingConversationContext(
+        question="Ngân sách tối đa của bạn là bao nhiêu?",
+        missing_fields=[CompilationReason.BUDGET_REQUIRED],
+    )
+    call = ToolCall(
+        call_id="budget",
+        name="propose_requirements",
+        arguments={
+            "items": [
+                {
+                    "subject": "SETUP",
+                    "predicate": "budget",
+                    "value": 30_000_000,
+                    "unit": "VND",
+                    "operator": "EQ",
+                    "quote": message,
+                }
+            ]
+        },
+    )
+    decision = normalize_control(call, [], message, trusted)
+    assert decision.action.draft.items[0].operator == expected_operator
 
 
 @pytest.mark.asyncio

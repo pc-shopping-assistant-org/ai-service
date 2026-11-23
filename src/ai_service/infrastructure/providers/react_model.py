@@ -298,6 +298,14 @@ def build_react_request(
         }
         if context.pending is not None:
             context_payload["pending"] = context.pending.model_dump(mode="json")
+            if context.pending.missing_fields and not context.read_only_turn:
+                instruction += (
+                    " If the latest user message supplies or changes a requirement for the pending build, "
+                    "call propose_requirements before replying. A short budget or workload answer "
+                    "to the pending question counts as user input. Copy a short reply verbatim into quote. "
+                    "Side questions can be answered "
+                    "while preserving the pending build."
+                )
         if context.memories:
             context_payload["memories"] = [
                 item.model_dump(mode="json") for item in context.memories

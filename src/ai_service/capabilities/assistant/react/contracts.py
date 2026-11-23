@@ -21,6 +21,7 @@ from ai_service.application.ports.web_search import (
 )
 from ai_service.capabilities.assistant.limits import (
     MAX_BUILD_RESULT_BYTES,
+    MAX_CLARIFICATION_FIELDS,
     MAX_DIALOGUE_CHARS,
     MAX_DIALOGUE_TURNS,
     MAX_HARDWARE_CATALOG_ROWS,
@@ -40,6 +41,7 @@ from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
     RequirementPatch,
 )
+from ai_service.capabilities.assistant.requirements.diagnostics import CompilationReason
 from ai_service.capabilities.assistant.requirements.tasks import TaskDraftBatch
 from ai_service.capabilities.assistant.requirements.verifier import SatisfactionReport
 from ai_service.capabilities.assistant.stateful_contracts import (
@@ -647,6 +649,11 @@ class PendingConversationContext(Contract):
     """Model-facing pending data; never a confirmation or mutation command."""
 
     question: Text
+    missing_fields: list[CompilationReason] = Field(
+        default_factory=list,
+        max_length=MAX_CLARIFICATION_FIELDS,
+        exclude_if=lambda value: not value,
+    )
     proposal: RequirementPatch | None = None
     proposal_sources: list[Text] = Field(default_factory=list, max_length=8)
     resolution: PublicClarificationV1 | None = None

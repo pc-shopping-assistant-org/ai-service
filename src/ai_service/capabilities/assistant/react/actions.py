@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, JsonValue, StrictInt, ValidationError, model_validator
 
+from ai_service.capabilities.assistant.limits import MAX_CLARIFICATION_FIELDS
 from ai_service.capabilities.assistant.requirements.resolver import (
     Draft,
     RequirementDraft,
@@ -76,7 +77,9 @@ class AskClarificationAction(Contract):
     kind: Literal["ASK_CLARIFICATION"] = "ASK_CLARIFICATION"
     # Empty is a model request. A published clarification carries both fields.
     question: Text | None = Field(default=None, max_length=2000)
-    missing_fields: list[Text] = Field(default_factory=list, max_length=20)
+    missing_fields: list[Text] = Field(
+        default_factory=list, max_length=MAX_CLARIFICATION_FIELDS
+    )
 
     @model_validator(mode="after")
     def paired_fields(self) -> "AskClarificationAction":

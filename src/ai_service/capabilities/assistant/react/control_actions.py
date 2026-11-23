@@ -3,6 +3,10 @@
 from enum import StrEnum
 
 from ai_service.application.ports.web_search import WebPageReadStatus
+from ai_service.capabilities.assistant.requirements.diagnostics import CompilationReason
+from ai_service.capabilities.assistant.requirements.units import (
+    is_standalone_money_amount,
+)
 from ai_service.capabilities.assistant.stateful_contracts import Contract
 from ai_service.capabilities.pc_builder.schemas import UseCaseProfile
 
@@ -21,6 +25,11 @@ from .model_contracts import (
     ResultSubmissionInput,
 )
 from .submissions import derive_final_action, resolve_result_selection, selected_answer
+
+PENDING_SPENDING_CAPS = {
+    "budget": CompilationReason.BUDGET_REQUIRED,
+    "accessory_budget": CompilationReason.ACCESSORY_BUDGET_REQUIRED,
+}
 
 
 class ControlName(StrEnum):
@@ -132,7 +141,22 @@ def normalize_control(
         # Existing IDs are globally unique; their trusted collection determines
         # scope, even when the provider repeats the default REQUIREMENT target.
         if context is not None:
+            # A bare amount answers the server's pending spending-cap question.
+            pending_cap = (
+                set(context.pending.missing_fields)
+                if context.pending
+                and quoted.source_text is None
+                and is_standalone_money_amount(message)
+                else set()
+            )
             for item in draft.items:
+                if (
+                    item.subject == "SETUP"
+                    and item.operation == "SET"
+                    and item.operator == "EQ"
+                    and PENDING_SPENDING_CAPS.get(item.predicate) in pending_cap
+                ):
+                    item.operator = "LTE"
                 if item.target_id in context.requirements.goals:
                     item.target = "GOAL"
                 elif item.target_id in context.requirements.requirements:
