@@ -283,3 +283,288 @@ async def test_native_control_acknowledgement_precedes_later_tool_pairs(resume):
     assert len(terminal["control_history"]) == 1
     assert [entry["call"]["name"] for entry in terminal["ledger"]] == ["search_catalog"]
     assert terminal["accepted_snapshot"]["flexible"]["answer"]["status"] == "COMPLETED"
+
+
+@pytest.mark.asyncio
+async def test_turn1_core_build_proposal_auto_clarifies_without_extra_model_call():
+    from ai_service.capabilities.assistant.react.snapshot_publication import (
+        revalidate_flexible_publication,
+    )
+    from ai_service.capabilities.assistant.react.turn_contracts import TurnRequestV2
+    from ai_service.capabilities.assistant.stateful_contracts import CheckpointRefV1
+
+    trusted, products, provider = context(), Catalog(), Provider(None, name="openai")
+    calls = 0
+
+    async def respond(messages):
+        nonlocal calls
+        calls += 1
+        return AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "id": "budget",
+                    "name": "propose_requirements",
+                    "args": {
+                        "items": [
+                            {
+                                "target": "GOAL",
+                                "subject": "SETUP",
+                                "predicate": "budget",
+                                "operator": "LTE",
+                                "value": 20_000_000,
+                                "unit": "VND",
+                                "quote": "20 tr",
+                            }
+                        ]
+                    },
+                }
+            ],
+        )
+
+    provider.model.ainvoke = respond
+    request = TurnRequestV2(
+        conversation_id=trusted.conversation_id,
+        request_id=uuid4(),
+        expected_revision=0,
+        message="Build PC 20 tr",
+    )
+    accepted = base_snapshot(trusted)
+    flow = build_flexible_graph(
+        NativeFlexibleModel(provider),
+        ToolDispatcher(products, PCBuildApplicationService()),
+        trusted,
+        [],
+        Budget(),
+        conversation_revision=0,
+        task_catalog=products,
+        publication=FlexiblePublicationInput.for_request(
+            accepted, request, owner=trusted.account_id
+        ),
+    )
+    terminal = await flow.ainvoke({"message": request.message})
+    assert calls == 1
+    assert terminal["clarification"]["missing_fields"] == ["USE_CASE_REQUIRED"]
+    assert "dùng PC chủ yếu" in terminal["clarification"]["question"]
+    revalidated = revalidate_flexible_publication(
+        terminal,
+        accepted,
+        request,
+        owner=trusted.account_id,
+        run_id=trusted.run_id,
+        base_ref=CheckpointRefV1(thread_id=trusted.conversation_id, checkpoint_id="c0"),
+        service=PCBuildApplicationService(),
+    )
+    assert revalidated.flexible is not None
+    assert revalidated.flexible.status == "WAITING_INPUT"
+    assert revalidated.flexible.task_outcomes[0].task.kind == "BUILD"
+    assert revalidated.requirement_state is not None
+    assert any(
+        goal.predicate == "budget" and goal.value.amount == 20_000_000
+        for goal in revalidated.requirement_state.goals.values()
+    )
+
+
+@pytest.mark.asyncio
+async def test_turn1_core_build_proposal_after_search_does_not_discard_search_results():
+    trusted, products, provider = context(), Catalog(), Provider(None, name="openai")
+    calls = 0
+
+    async def respond(messages):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "search",
+                        "name": "search_catalog",
+                        "args": {"query": "RAM"},
+                    }
+                ],
+            )
+        if calls == 2:
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "budget",
+                        "name": "propose_requirements",
+                        "args": {
+                            "items": [
+                                {
+                                    "target": "GOAL",
+                                    "subject": "SETUP",
+                                    "predicate": "budget",
+                                    "operator": "LTE",
+                                    "value": 20_000_000,
+                                    "unit": "VND",
+                                    "quote": "20 tr",
+                                }
+                            ]
+                        },
+                    }
+                ],
+            )
+        if calls == 3:
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "search_after_budget",
+                        "name": "search_catalog",
+                        "args": {"query": "RAM"},
+                    }
+                ],
+            )
+        tool_messages = [
+            m
+            for m in messages
+            if isinstance(m, ToolMessage) and m.name == "search_catalog"
+        ]
+        refs = [
+            item["evidence_ref"]
+            for item in json.loads(tool_messages[-1].content)["result"]["products"]
+        ]
+        return AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "id": "submit",
+                    "name": "submit_result",
+                    "args": {
+                        "results": [
+                            {
+                                "explanation": "Đã tìm thấy RAM trong catalog.",
+                                "refs": refs,
+                            }
+                        ]
+                    },
+                }
+            ],
+        )
+
+    provider.model.ainvoke = respond
+    flow = build_flexible_graph(
+        NativeFlexibleModel(provider),
+        ToolDispatcher(products, PCBuildApplicationService()),
+        trusted,
+        [],
+        Budget(),
+        conversation_revision=0,
+        task_catalog=products,
+        publication=FlexiblePublicationInput(
+            accepted=base_snapshot(trusted),
+            task_message_id=uuid4(),
+            task_message="Tìm RAM và build PC 20 tr",
+            request_message="Tìm RAM và build PC 20 tr",
+        ),
+    )
+    terminal = await flow.ainvoke({"message": "Tìm RAM và build PC 20 tr"})
+    assert calls == 4
+    assert terminal["clarification"] is None
+    assert terminal["accepted_snapshot"]["flexible"]["answer"]["status"] == "COMPLETED"
+
+
+@pytest.mark.asyncio
+async def test_pending_build_unchanged_requirement_auto_clarifies_in_one_call():
+    from ai_service.capabilities.assistant.react.actions import AskClarificationAction
+    from ai_service.capabilities.assistant.react.outcomes import TaskOutcome
+    from ai_service.capabilities.assistant.react.published_state import (
+        FlexiblePublishedState,
+    )
+    from ai_service.capabilities.assistant.requirements.contracts import (
+        Evidence,
+        QuantityValue,
+        Requirement,
+    )
+
+    trusted, products, provider = context(), Catalog(), Provider(None, name="openai")
+    existing_budget = Requirement(
+        id=uuid4(),
+        subject="SETUP",
+        predicate="budget",
+        operator="LTE",
+        value=QuantityValue(amount=20_000_000, unit="VND"),
+        strength="HARD",
+        evidence=Evidence(
+            message_id=uuid4(),
+            start=0,
+            end=5,
+            quote="20 tr",
+        ),
+    )
+    trusted.requirements.goals[existing_budget.id] = existing_budget
+    trusted.requirements.revision = 1
+    accepted = base_snapshot(trusted).model_copy(
+        update={
+            "flexible": FlexiblePublishedState(
+                conversation_id=trusted.conversation_id,
+                task_message_id=uuid4(),
+                task_message="Build PC 20 tr",
+                status="WAITING_INPUT",
+                waiting_message="Bạn dùng PC chủ yếu để làm gì?",
+                waiting_tasks=[
+                    TaskOutcome(
+                        task=CompletionRequirement(
+                            kind="BUILD", constraints_revision=1
+                        ),
+                        status="UNRESOLVED",
+                    )
+                ],
+                clarification=AskClarificationAction(
+                    question="Bạn dùng PC chủ yếu để làm gì?",
+                    missing_fields=["USE_CASE_REQUIRED"],
+                ),
+            )
+        }
+    )
+    calls = 0
+
+    async def respond(messages):
+        nonlocal calls
+        calls += 1
+        return AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "id": "repeat_budget",
+                    "name": "propose_requirements",
+                    "args": {
+                        "items": [
+                            {
+                                "target": "GOAL",
+                                "subject": "SETUP",
+                                "predicate": "budget",
+                                "operator": "LTE",
+                                "target_id": str(existing_budget.id),
+                                "value": 20_000_000,
+                                "unit": "VND",
+                                "quote": "20 tr",
+                            }
+                        ]
+                    },
+                }
+            ],
+        )
+
+    provider.model.ainvoke = respond
+    flow = build_flexible_graph(
+        NativeFlexibleModel(provider),
+        ToolDispatcher(products, PCBuildApplicationService()),
+        trusted,
+        [CompletionRequirement(kind="BUILD", constraints_revision=1)],
+        Budget(),
+        conversation_revision=1,
+        publication=FlexiblePublicationInput(
+            accepted=accepted,
+            task_message_id=accepted.flexible.task_message_id,
+            task_message="Build PC 20 tr",
+            request_message="20 tr",
+        ),
+    )
+    terminal = await flow.ainvoke({"message": "20 tr"})
+    assert calls == 1
+    assert terminal["clarification"]["missing_fields"] == ["USE_CASE_REQUIRED"]
+    assert terminal["accepted_snapshot"]["flexible"]["status"] == "WAITING_INPUT"
