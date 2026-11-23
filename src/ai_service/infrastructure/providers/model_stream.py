@@ -2,7 +2,7 @@
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from time import monotonic
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from langchain_core.messages import (
     AIMessage,
@@ -20,6 +20,9 @@ MAX_DRAFT_CHARS = 12_000
 class BoundModel(Protocol):
     async def ainvoke(self, input: list[BaseMessage]) -> AIMessage: ...
 
+
+@runtime_checkable
+class StreamingModel(Protocol):
     def astream(self, input: list[BaseMessage]) -> AsyncIterator[AIMessageChunk]: ...
 
 
@@ -30,12 +33,9 @@ def public_text(message: AIMessageChunk) -> str:
         if len(message.tool_calls) != 1:
             return ""
         call = message.tool_calls[0]
-        if call["name"] not in {"submit_result", "ask_clarification"}:
+        if call["name"] != "submit_result":
             return ""
         args = call["args"]
-        if call["name"] == "ask_clarification":
-            question = args.get("question", "")
-            return question if isinstance(question, str) else ""
         results = args.get("results", [])
         if not isinstance(results, list):
             return ""
@@ -58,7 +58,7 @@ def public_text(message: AIMessageChunk) -> str:
 
 
 async def stream_public_text(
-    model: BoundModel, messages: list[BaseMessage], sink: TextStreamSink
+    model: StreamingModel, messages: list[BaseMessage], sink: TextStreamSink
 ) -> AIMessage:
     aggregate: AIMessageChunk | None = None
     emitted, current = "", ""

@@ -23,3 +23,22 @@ def postgres_dsn() -> str:
     if not value.startswith("postgresql://"):
         pytest.fail("AI_TEST_POSTGRES_DSN must use postgresql:// for native PostgreSQL")
     return value
+
+
+@pytest.fixture
+def test_models_config_path(tmp_path) -> str:
+    config = tmp_path / "models.yaml"
+    config.write_text(
+        """
+default_model: test-local
+models:
+  - id: test-local
+    label: Test Local
+    provider: openai
+    model_name: gpt-4o-mini
+    base_url: http://127.0.0.1:11434/v1
+    api_key_optional: true
+""",
+        encoding="utf-8",
+    )
+    return str(config)

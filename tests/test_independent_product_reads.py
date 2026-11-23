@@ -155,7 +155,11 @@ async def test_product_read_completes_without_build_dependencies(
                                         }
                                     )
                                 ),
-                                "explanation": "Nhận xét dựa trên các sản phẩm đã chọn.",
+                                "explanation": (
+                                    "Nhận xét dựa trên "
+                                    + ", ".join(p.name for p in products)
+                                    + "."
+                                ),
                                 "task_index": 0 if attached else None,
                             }
                         ]

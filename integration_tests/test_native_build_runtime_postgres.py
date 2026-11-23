@@ -31,7 +31,13 @@ from ai_service.main import create_app
     ],
 )
 async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
-    postgres_dsn, monkeypatch, react_enabled, version, retry, selected
+    postgres_dsn,
+    test_models_config_path,
+    monkeypatch,
+    react_enabled,
+    version,
+    retry,
+    selected,
 ):
     owner = uuid4()
     product_id = uuid4()
@@ -366,16 +372,15 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
 
     monkeypatch.setattr(httpx, "AsyncClient", client_factory)
     monkeypatch.setattr(
-        "ai_service.infrastructure.execution.build_runtime.build_model_provider",
-        lambda settings: Provider(),
+        "ai_service.infrastructure.providers.registry._instantiate_provider",
+        lambda entry, mode: Provider(),
     )
     monkeypatch.setattr(
         "ai_service.infrastructure.stateful.JwtAuthenticator", lambda *args: Auth()
     )
     settings = Settings(
         _env_file=None,
-        provider="openai",
-        openai_api_key="local-test-key",
+        models_config_path=test_models_config_path,
         backend_api_url="https://catalog.test",
         database_url=postgres_dsn.replace("postgresql://", "postgresql+psycopg://", 1),
         jwt_jwks_url="http://identity.test/jwks",
@@ -442,7 +447,16 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                 assert [m["role"] for m in messages] == ["user", "assistant"]
                 # Empty catalog must be truthful infeasibility, never sample data.
                 if version == "v2":
-                    assert "8,000,000 VND" in messages[-1]["content"]
+                    if selected:
+                        assert (
+                            "Đối chiếu thông số và nhu cầu" in messages[-1]["content"]
+                        )
+                        assert any(
+                            p["list_price"] == 8_000_000
+                            for p in messages[-1]["products"]
+                        )
+                    else:
+                        assert "8,000,000 VND" in messages[-1]["content"]
                     view = (await client.get(path)).json()["data"]
                     assert view["revision"] == 1
                     assert view["flexible"]["status"] == "COMPLETED"
@@ -505,7 +519,16 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                         "user",
                         "assistant",
                     ]
-                    assert "8,000,000 VND" in messages[-1]["content"]
+                    if selected:
+                        assert (
+                            "Đối chiếu thông số và nhu cầu" in messages[-1]["content"]
+                        )
+                        assert any(
+                            p["list_price"] == 8_000_000
+                            for p in messages[-1]["products"]
+                        )
+                    else:
+                        assert "8,000,000 VND" in messages[-1]["content"]
                     first_page = await client.get(
                         path + "/messages", params={"limit": 2}
                     )
@@ -598,10 +621,18 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                         assert (await client.get(path)).json()["data"]["revision"] == 3
                         result = await client.get(path + f"/runs/{recovered_id}/result")
                         assert result.status_code == 200
+                        result_payload = result.json()["data"]["result"]
                         assert (
-                            "8,000,000 VND" in result.json()["data"]["result"]["answer"]
+                            "Đối chiếu thông số và nhu cầu" in result_payload["answer"]
                         )
-                        assert "8,000,000 VND" in last_context[0]["assistant_text"]
+                        assert any(
+                            p["list_price"] == 8_000_000
+                            for p in result_payload["products"]
+                        )
+                        assert (
+                            "Đối chiếu thông số và nhu cầu"
+                            in last_context[0]["assistant_text"]
+                        )
                     if retry:
                         assert len(failures) == 1
                         assert backend_calls.count("/products/snapshot") == 0

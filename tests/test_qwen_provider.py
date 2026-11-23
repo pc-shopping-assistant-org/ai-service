@@ -178,14 +178,17 @@ async def test_truncation_is_failure_and_no_automatic_retry():
 
 
 @pytest.mark.asyncio
-async def test_qwen_plugs_into_existing_native_react_adapter():
+@pytest.mark.parametrize("with_draft_sink", [False, True])
+async def test_qwen_plugs_into_existing_native_react_adapter(with_draft_sink):
     from ai_service.capabilities.assistant.react.contracts import ToolName
     from ai_service.infrastructure.providers.react_model import NativeFlexibleModel
 
     async def respond(request):
         payload = json.loads(request.content)
         assert [tool["function"]["name"] for tool in payload["tools"]] == [
-            "search_web", "propose_requirements", "ask_clarification",
+            "search_web",
+            "propose_requirements",
+            "ask_clarification",
         ]
         return httpx.Response(
             200,
@@ -212,13 +215,18 @@ async def test_qwen_plugs_into_existing_native_react_adapter():
             },
         )
 
+    async def draft_sink(text, replace):
+        raise AssertionError(
+            "Non-streaming Qwen calls should leave publication to the graph"
+        )
+
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
         provider = QwenModelProvider(
             Settings(_env_file=None, qwen_base_url="http://qwen.test/v1"),
             client=QwenChatClient("http://qwen.test/v1", client=http),
         )
-        decision = await NativeFlexibleModel(provider).decide(
-            "GPU", [], (ToolName.SEARCH_WEB,), None
-        )
+        decision = await NativeFlexibleModel(
+            provider, text_sink=draft_sink if with_draft_sink else None
+        ).decide("GPU", [], (ToolName.SEARCH_WEB,), None)
         assert decision.action.kind == "CALL_TOOLS"
         assert decision.action.calls[0].arguments == {"query": "GPU"}

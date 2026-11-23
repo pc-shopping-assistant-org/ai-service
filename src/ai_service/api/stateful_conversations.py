@@ -31,6 +31,7 @@ from ai_service.capabilities.assistant.react.public_views import (
 from ai_service.capabilities.assistant.react.turn_contracts import (
     TurnRequestV2,
 )
+from ai_service.config.models import ModelSelectionError
 from ai_service.infrastructure.auth import AuthenticationError
 from ai_service.infrastructure.stateful import StatefulResources
 from ai_service.schemas.response import (
@@ -53,11 +54,16 @@ bearer = HTTPBearer(auto_error=False)
 
 class StatefulApiError(Exception):
     def __init__(
-        self, status_code: int, message: ResponseMessage, field: str | None = None
+        self,
+        status_code: int,
+        message: ResponseMessage,
+        field: str | None = None,
+        detail: str | None = None,
     ) -> None:
         self.status_code = status_code
         self.message = message
         self.field = field
+        self.detail = detail
 
 
 async def stateful_exception_handler(
@@ -78,9 +84,12 @@ async def stateful_exception_handler(
         errors=[
             ErrorDetail(
                 code=exc.message.value,
-                message="Account memory limit reached; delete an entry before adding another"
-                if exc.message == ResponseMessage.AI_MEMORY_LIMIT_REACHED
-                else details[exc.status_code],
+                message=exc.detail
+                or (
+                    "Account memory limit reached; delete an entry before adding another"
+                    if exc.message == ResponseMessage.AI_MEMORY_LIMIT_REACHED
+                    else details[exc.status_code]
+                ),
                 field=exc.field
                 or {400: "cursor", 422: "conversation_id"}.get(exc.status_code),
             )
@@ -215,6 +224,16 @@ async def submit_run(
         raise StatefulApiError(422, ResponseMessage.VALIDATION_ERROR)
     if runtime.runs is None:
         raise StatefulApiError(503, ResponseMessage.HTTP_ERROR)
+    if runtime.models is not None:
+        try:
+            runtime.models.resolve(body.model_id, body.thinking_mode)
+        except ModelSelectionError as exc:
+            raise StatefulApiError(
+                422,
+                ResponseMessage.VALIDATION_ERROR,
+                field=exc.field,
+                detail=str(exc),
+            ) from None
     try:
         run = await runtime.runs.submit(owner, body)
     except RunAdmissionError as exc:

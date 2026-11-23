@@ -79,6 +79,7 @@ from .contracts import (
     ToolRecord,
     ToolResult,
     ValidatedAnswer,
+    require_tool_results,
     result_web_pages,
     web_evidence_refs,
 )
@@ -138,8 +139,7 @@ def project_current_tools(
     records: list[ToolRecord], context: ToolContext
 ) -> list[ToolRecord]:
     """Select complete current evidence without rewriting the canonical ledger."""
-    if any(record.result is None for record in records):
-        raise ValueError("REACT_UNRESOLVED_TOOL_PROTOCOL")
+    require_tool_results(records)
     return [
         record
         for record in records
@@ -499,6 +499,62 @@ class ToolDispatcher:
         )
 
 
+_COMPATIBILITY_STATUS_LABELS: dict[str, str] = {
+    "COMPATIBLE": "Tương thích",
+    "WARNING": "Cần lưu ý",
+    "INCOMPATIBLE": "Không tương thích",
+}
+
+
+def _format_compatibility_block(payload: CompatibilityCheckResult) -> str:
+    overall_label = _COMPATIBILITY_STATUS_LABELS.get(payload.overall, payload.overall)
+    lines = [f"### Kết quả kiểm tra tương thích: {overall_label}"]
+    issues = [item for item in payload.results if item.status != "COMPATIBLE"]
+    if issues:
+        for item in issues:
+            status_label = _COMPATIBILITY_STATUS_LABELS.get(item.status, item.status)
+            pair = f"{item.slot_a} ↔ {item.slot_b}" if item.slot_b else item.slot_a
+            detail = item.message or item.rule
+            suggestion = f" *Gợi ý:* {item.suggestion}" if item.suggestion else ""
+            lines.append(f"- **{pair}** ({status_label}): {detail}{suggestion}")
+    else:
+        lines.append(
+            "- Tất cả các linh kiện đã kiểm tra đều tương thích về mặt kỹ thuật."
+        )
+    if payload.power is not None:
+        power_parts = [
+            f"TDP ước tính ~{payload.power.estimated_tdp_watts}W",
+            f"PSU khuyến nghị từ {payload.power.recommended_psu_watts}W",
+        ]
+        if payload.power.selected_psu_watts is not None:
+            psu_status = (
+                "đủ công suất" if payload.power.is_sufficient else "chưa đủ công suất"
+            )
+            headroom = (
+                f", dư {payload.power.headroom_watts}W"
+                if payload.power.headroom_watts is not None
+                else ""
+            )
+            power_parts.append(
+                f"PSU đang chọn: {payload.power.selected_psu_watts}W ({psu_status}{headroom})"
+            )
+        note = f" — {payload.power.note}" if payload.power.note else ""
+        lines.append(f"- **Nguồn điện:** {' · '.join(power_parts)}{note}")
+    return "\n".join(lines)
+
+
+def _format_product_fallback_lines(products: list[ProductEvidence]) -> str:
+    return "\n".join(
+        f"- **{product.name}** — "
+        + (
+            f"{product.price_vnd:,} VND"
+            if product.price_vnd is not None
+            else "chưa có giá xác thực"
+        )
+        for product in products
+    )
+
+
 def validate_answer(
     candidate: AnswerCandidate,
     ledger: list[ToolResult],
@@ -593,20 +649,38 @@ def validate_answer(
                 raise ValueError("Answer must cover the selected canonical products")
         elif not selected_results and saved is None:
             raise ValueError("Answer completion requires typed evidence")
-    lines: list[str] = []
+    explanation_text = ""
+    if candidate.explanation is not None:
+        refs = candidate.explanation.evidence_refs
+        if len(set(refs)) != len(refs) or not set(refs) <= selected:
+            raise ValueError("Explanation must cite selected canonical evidence")
+        if re.search(r"https?://|www\.", candidate.explanation.text, re.IGNORECASE):
+            raise ValueError("Server owns web citation links")
+        explanation_text = candidate.explanation.text.strip()
+
+    canonical_blocks: list[str] = []
+    has_verified_evidence = False
     if saved:
         snapshot = saved.snapshot
-        lines.append(
-            "Cấu hình đã lưu"
-            + (" — STALE" if snapshot.stale else "")
-            + ": chi phí lịch sử, không phải báo giá hiện tại."
-        )
-        lines.extend(
-            f"{part.slot}: {part.name}; {part.spending_vnd:,} VND"
-            + ("; đã có" if part.is_owned else "; pinned" if part.is_pinned else "")
-            for part in snapshot.parts
-        )
-        lines.append(f"Tổng chi phí đã lưu: {snapshot.total_spending_vnd:,} VND.")
+        saved_lines = [
+            "### Cấu hình đã lưu"
+            + (" (STALE)" if snapshot.stale else "")
+            + "\n*chi phí lịch sử, không phải báo giá hiện tại.*",
+            *(
+                f"- **{part.slot}**: {part.name} — {part.spending_vnd:,} VND"
+                + (
+                    " *(đã có)*"
+                    if part.is_owned
+                    else " *(pinned)*"
+                    if part.is_pinned
+                    else ""
+                )
+                for part in snapshot.parts
+            ),
+            f"**Tổng chi phí đã lưu:** {snapshot.total_spending_vnd:,} VND.",
+        ]
+        canonical_blocks.append("\n".join(saved_lines))
+        has_verified_evidence = True
     rendered: set[str] = set()
     web_pages = list(
         {
@@ -659,6 +733,7 @@ def validate_answer(
         ):
             raise ValueError("Server owns web citation links")
 
+    fact_lines: list[str] = []
     for page in web_pages:
         for evidence in page.facts:
             if (
@@ -670,19 +745,23 @@ def validate_answer(
             if fact.fact_status == WebFactStatus.SUPPORTED:
                 assert fact.value is not None
                 dimensions = " × ".join(f"{value:g}" for value in fact.value)
-                lines.append(
-                    f"{fact.model} — kích thước công bố: {dimensions} {fact.unit} (theo nguồn, chưa kết luận fit/compatibility)."
+                fact_lines.append(
+                    f"- **{fact.model}** — kích thước công bố: {dimensions} {fact.unit} (theo nguồn, chưa kết luận fit/compatibility)."
                 )
             elif fact.fact_status == WebFactStatus.UNKNOWN:
-                lines.append(
-                    f"{fact.model} — UNKNOWN: nguồn chưa cung cấp kích thước mm theo template hỗ trợ."
+                fact_lines.append(
+                    f"- **{fact.model}** — UNKNOWN: nguồn chưa cung cấp kích thước mm theo template hỗ trợ."
                 )
             else:
-                lines.append(
-                    f"{fact.model} — CONFLICT: các giá trị kích thước trong nguồn mâu thuẫn; chưa kết luận."
+                fact_lines.append(
+                    f"- **{fact.model}** — CONFLICT: các giá trị kích thước trong nguồn mâu thuẫn; chưa kết luận."
                 )
             rendered.add(evidence.evidence_ref)
+    if fact_lines:
+        canonical_blocks.append("\n".join(fact_lines))
+        has_verified_evidence = True
 
+    fallback_catalog_products: list[ProductEvidence] = []
     for payload in selected_results:
         if isinstance(payload, BuildResult):
             report = verify_receipt(
@@ -692,12 +771,31 @@ def validate_answer(
                 raise ValueError("Saved satisfaction evidence mismatch")
             key = str(payload.build_ref)
             if key not in rendered:
-                lines.append(grounded_summary(payload.receipt, report))
+                canonical_blocks.append(
+                    grounded_summary(
+                        payload.receipt,
+                        report,
+                        include_parts=not explanation_text,
+                    )
+                )
                 rendered.add(key)
-        elif isinstance(
-            payload,
-            (DetailsResult, CatalogResult, ComparisonResult, CompatibilityCheckResult),
-        ):
+                has_verified_evidence = True
+        elif isinstance(payload, CompatibilityCheckResult):
+            compat_key = f"compat:{id(payload)}"
+            selected_products = [
+                product
+                for product in payload.products
+                if product.evidence_ref in selected
+                and product.evidence_ref not in rendered
+            ]
+            if selected_products or compat_key not in rendered:
+                canonical_blocks.append(_format_compatibility_block(payload))
+                rendered.add(compat_key)
+                has_verified_evidence = True
+                for product in selected_products:
+                    rendered.add(product.evidence_ref)
+                    fallback_catalog_products.append(product)
+        elif isinstance(payload, (DetailsResult, CatalogResult, ComparisonResult)):
             products = (
                 [payload.product]
                 if isinstance(payload, DetailsResult)
@@ -709,15 +807,16 @@ def validate_answer(
                     or product.evidence_ref in rendered
                 ):
                     continue
-                price = (
-                    f"{product.price_vnd:,} VND"
-                    if product.price_vnd is not None
-                    else "chưa có giá xác thực"
-                )
-                lines.append(f"\n**{product.name}**: {price}.")
                 rendered.add(product.evidence_ref)
+                fallback_catalog_products.append(product)
+                has_verified_evidence = True
         elif isinstance(payload, (ReadWebPageResult, SearchWebResult, ResearchResult)):
             continue
+
+    if fallback_catalog_products and not explanation_text:
+        canonical_blocks.append(
+            _format_product_fallback_lines(fallback_catalog_products)
+        )
 
     if web_pages:
         citations: list[str] = []
@@ -734,7 +833,7 @@ def validate_answer(
         candidate_body = ""
         if re.search(r"https?://|www\.", candidate.text, re.IGNORECASE):
             raise ValueError("Server owns web citation links")
-        if not lines:
+        if not has_verified_evidence and not canonical_blocks:
             if not candidate.text.strip():
                 raise ValueError("Web answer candidate must provide synthesized text")
             if not candidate.web_excerpts:
@@ -776,42 +875,47 @@ def validate_answer(
         if citations:
             citation_block = "Nguồn tham khảo:\n" + "\n".join(citations)
             candidate_body = f"{candidate_body}\n\n{citation_block}".strip()
-        lines.append(candidate_body)
+        if candidate_body:
+            canonical_blocks.append(candidate_body)
+            has_verified_evidence = True
 
     for payload in selected_results:
         if isinstance(payload, ResearchResult):
-            lines.append(
-                "Nguồn nghiên cứu đã tra (READABLE chỉ xác nhận đọc được nguồn):"
-            )
-            lines.extend(
-                f"- {', '.join(section.subjects)}: {section.status.value}; "
-                f"official domain: {section.official_source_status.value}; "
-                + "; ".join(
-                    f"{step.tier.value}: {step.status.value}"
-                    for step in section.search_steps
-                )
-                for section in payload.sections
-            )
+            research_lines = [
+                "Nguồn nghiên cứu đã tra (READABLE chỉ xác nhận đọc được nguồn):",
+                *(
+                    f"- {', '.join(section.subjects)}: {section.status.value}; "
+                    f"official domain: {section.official_source_status.value}; "
+                    + "; ".join(
+                        f"{step.tier.value}: {step.status.value}"
+                        for step in section.search_steps
+                    )
+                    for section in payload.sections
+                ),
+            ]
             if payload.missing_conditions:
-                lines.append(
+                research_lines.append(
                     "Điều kiện benchmark chưa được cung cấp: "
                     + ", ".join(
                         condition.value for condition in payload.missing_conditions
                     )
                     + ". Không suy ra FPS cho điều kiện chưa rõ."
                 )
+            canonical_blocks.append("\n".join(research_lines))
+            has_verified_evidence = True
 
-    if not lines:
+    if not has_verified_evidence and not canonical_blocks:
         raise ValueError("Answer completion has no renderable evidence")
-    if candidate.explanation is not None:
-        refs = candidate.explanation.evidence_refs
-        if len(set(refs)) != len(refs) or not set(refs) <= selected:
-            raise ValueError("Explanation must cite selected canonical evidence")
-        # Facts/financial output above remain canonical. This is explicitly an
-        # LLM interpretation; reference validation is not a factuality guarantee.
-        lines.append("\n" + candidate.explanation.text)
+    sections: list[str] = []
+    if explanation_text:
+        # Facts/financial output remain canonical in typed UI payloads and
+        # verified blocks below. This is explicitly an LLM interpretation.
+        sections.append(explanation_text)
+    sections.extend(block for block in canonical_blocks if block.strip())
+    if not sections:
+        raise ValueError("Answer completion has no renderable evidence")
     return ValidatedAnswer(
-        text="\n".join(lines),
+        text="\n\n".join(sections),
         status="COMPLETED",
         evidence_refs=candidate.evidence_refs,
         build_ref=candidate.build_ref,

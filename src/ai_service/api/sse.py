@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 
 from ai_service.application.ports.run_events import StoredRunEvent
 from ai_service.application.use_cases.run_events import RunEventSubscription
+from ai_service.capabilities.assistant.public_contracts import RunStatusV1
 from ai_service.capabilities.assistant.schemas import (
     ChatStreamEvent,
     ChatStreamEventType,
@@ -43,10 +44,23 @@ def encode_run_event(record: StoredRunEvent) -> str:
     )
 
 
+def encode_status_event(status: RunStatusV1) -> str:
+    envelope = ApiResponse[RunStatusV1](
+        data=status,
+        message=ResponseMessage.AI_CHAT_STREAM_STATUS,
+    )
+    return f"event: {status.event.lower()}\ndata: {envelope.model_dump_json()}\n\n"
+
+
 async def run_event_frames(subscription: RunEventSubscription) -> AsyncIterator[str]:
     try:
         async for record in subscription.events():
-            yield encode_run_event(record) if record else ": keep-alive\n\n"
+            if record is None:
+                yield ": keep-alive\n\n"
+            elif isinstance(record, RunStatusV1):
+                yield encode_status_event(record)
+            else:
+                yield encode_run_event(record)
     except Exception:
         logger.exception("Run event subscription interrupted")
         # Transport-only failure: no persisted offset, no pretend completion.

@@ -144,6 +144,10 @@ async def test_v2_reopen_preserves_tool_or_confirmation_boundary(
         async with AsyncPostgresSaver.from_conn_string(postgres_dsn) as saver:
             flow = compile_flow(Model(), saver, revision=1 if proposal else 0)
             snapshot = await flow.aget_state(config)
+            assert type(snapshot.values["phase"]) is str
+            assert snapshot.values["phase"] == (
+                "WAITING_INPUT" if proposal else "TOOL_COMMITTED"
+            )
             if proposal:
                 pending = PendingRequirementProposal.model_validate(
                     snapshot.values["pending_proposal"]
@@ -294,7 +298,11 @@ async def test_confirm_then_clarify_preparation_survives_reopen(postgres_dsn):
                 confirmation=confirmation,
             )
             assert len(prepared.snapshot.requirement_state.requirements) == 1
-            assert prepared.clarification.missing_fields == ["BUDGET_REQUIRED"]
+            assert prepared.clarification.missing_fields == [
+                "BUDGET_REQUIRED",
+                "METADATA_INSUFFICIENT",
+                "USE_CASE_REQUIRED",
+            ]
             assert prepared.task_outcomes[0].status == "UNRESOLVED"
             assert waiting.snapshot.requirement_state.requirements == {}
     finally:

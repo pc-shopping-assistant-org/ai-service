@@ -41,6 +41,7 @@ from .contracts import (
 )
 from .dialogue import response_snapshot, validate_response
 from .pending_commands import validate_pending_command
+from .phases import ReActPhase
 from .public_views import public_resolution_options
 from .publication import (
     PreparedAnswerPublication,
@@ -263,7 +264,7 @@ class FlexiblePublicationInput(Contract):
         if self.discard_pending:
             if (
                 pending is None
-                or values.get("phase") != "READY_TO_PUBLISH"
+                or values.get("phase") != ReActPhase.READY_TO_PUBLISH.code
                 or values.get("working_requirements")
                 != context.requirements.model_dump(mode="json")
                 or context.requirements != self.accepted.requirement_state
@@ -481,7 +482,7 @@ class FlexiblePublicationInput(Contract):
                     conversation_revision,
                 )
             if (
-                values.get("phase") != "WAITING_INPUT"
+                values.get("phase") != ReActPhase.WAITING_INPUT.code
                 or values.get("pending_draft")
                 != pending.pending_resolution.model_dump(mode="json")
                 or values.get("pending_proposal") is not None
@@ -506,7 +507,7 @@ class FlexiblePublicationInput(Contract):
         )
         if task_resolution and task_resolution.pending:
             if (
-                values.get("phase") != "WAITING_INPUT"
+                values.get("phase") != ReActPhase.WAITING_INPUT.code
                 or any(
                     values.get(key)
                     for key in ("pending_proposal", "pending_draft", "answer")
@@ -527,7 +528,7 @@ class FlexiblePublicationInput(Contract):
                 values.get("clarification")
             )
             reasons = {item.reason for item in task_resolution.pending}
-            if not set(question.missing_fields) <= reasons:
+            if question.question is None or not set(question.missing_fields) <= reasons:
                 raise ValueError("Question is not bound to unresolved task subjects")
             unresolved = PendingTaskDraft(
                 message_id=self.task_message_id,
@@ -561,7 +562,7 @@ class FlexiblePublicationInput(Contract):
             decode_user_requirement_receipt(row, message=self.request_message)
             for row in values.get("user_receipts", [])
         ]
-        if values.get("phase") == "WAITING_INPUT":
+        if values.get("phase") == ReActPhase.WAITING_INPUT.code:
             prepared = prepare_waiting_publication(
                 values,
                 self.accepted,
@@ -650,7 +651,7 @@ class FlexiblePublicationInput(Contract):
             user_message=self.request_message,
         )
         if (
-            values.get("phase") != "READY_TO_PUBLISH"
+            values.get("phase") != ReActPhase.READY_TO_PUBLISH.code
             or self.discard_pending
             or values.get("answer")
             or values.get("working_requirements")

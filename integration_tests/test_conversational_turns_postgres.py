@@ -63,15 +63,9 @@ class Respond:
         return FlexibleDecision(action={"kind": "RESPOND", "text": self.text})
 
 
-class AskBudget:
+class NoModelCall:
     async def decide(self, *args):
-        return FlexibleDecision(
-            action={
-                "kind": "ASK_CLARIFICATION",
-                "question": "Bạn có ngân sách bao nhiêu?",
-                "missing_fields": ["BUDGET_REQUIRED"],
-            }
-        )
+        raise AssertionError("Confirmed requirements must not call the model again to ask")
 
 
 def context(conversation_id):
@@ -268,13 +262,17 @@ async def test_proposal_side_response_then_original_confirmation_after_reopen(
         )
         confirm_ctx = ctx.model_copy(update={"run_id": uuid4()}, deep=True)
         final_ref = await execute_turn(
-            postgres_dsn, confirm_ctx, side_ref, side, confirm_request, AskBudget()
+            postgres_dsn, confirm_ctx, side_ref, side, confirm_request, NoModelCall()
         )
         confirmed, _ = await reopen_and_revalidate(
             postgres_dsn, final_ref, side, confirm_request, confirm_ctx, side_ref
         )
         assert confirmed.flexible.pending_proposal is None
-        assert confirmed.flexible.clarification.missing_fields == ["BUDGET_REQUIRED"]
+        assert confirmed.flexible.clarification.missing_fields == [
+            "BUDGET_REQUIRED",
+            "METADATA_INSUFFICIENT",
+            "USE_CASE_REQUIRED",
+        ]
         assert len(confirmed.requirement_state.requirements) == 1
         assert confirmed.requirement_state.revision == 1
         applied = next(iter(confirmed.requirement_state.requirements.values()))
@@ -293,7 +291,7 @@ async def test_proposal_side_response_then_original_confirmation_after_reopen(
                 final_ref,
                 confirmed,
                 duplicate,
-                AskBudget(),
+                NoModelCall(),
             )
         async with AsyncPostgresSaver.from_conn_string(postgres_dsn) as saver:
             assert (

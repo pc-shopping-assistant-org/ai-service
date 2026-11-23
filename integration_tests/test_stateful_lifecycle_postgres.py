@@ -15,6 +15,7 @@ from ai_service.infrastructure.stateful import open_stateful_resources
 @pytest.mark.asyncio
 async def test_migrated_native_resources_reopen_without_losing_owned_conversation(
     postgres_dsn,
+    test_models_config_path,
     monkeypatch,
 ):
     dsn = postgres_dsn
@@ -23,7 +24,7 @@ async def test_migrated_native_resources_reopen_without_losing_owned_conversatio
         _env_file=None,
         database_url=url,
         jwt_jwks_url="http://identity.test/.well-known/jwks.json",
-        provider="openai", openai_api_key="fixture",
+        models_config_path=test_models_config_path,
     )
     class Provider:
         def create_model(self):
@@ -33,8 +34,8 @@ async def test_migrated_native_resources_reopen_without_losing_owned_conversatio
             pass
 
     monkeypatch.setattr(
-        "ai_service.infrastructure.execution.build_runtime.build_model_provider",
-        lambda settings: Provider(),
+        "ai_service.infrastructure.providers.registry._instantiate_provider",
+        lambda entry, mode: Provider(),
     )
     owner = uuid4()
     created_id = None

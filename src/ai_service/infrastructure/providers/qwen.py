@@ -14,7 +14,8 @@ from ai_service.capabilities.assistant.source_quotes import (
     QuotedRequirementDraft,
     QuotedTaskBatch,
 )
-from ai_service.config.enums import AIProvider
+from ai_service.config.enums import AIProvider, ThinkingMode, ThinkingStrategy
+from ai_service.config.models import ResolvedModelEntry
 from ai_service.config.qwen import QWEN_MODEL_ID, QWEN_REQUEST_TIMEOUT_SECONDS
 from ai_service.config.settings import Settings
 from ai_service.infrastructure.providers.qwen_protocol import prepare_qwen_request
@@ -42,12 +43,13 @@ class QwenChatClient:
         *,
         model: str,
         decoding: dict[str, Any] | None = None,
+        enable_thinking: bool = False,
     ) -> dict[str, Any]:
         payload = {
             **prepare_qwen_request(request),
             **(decoding or {}),
             "model": model,
-            "chat_template_kwargs": {"enable_thinking": False},
+            "chat_template_kwargs": {"enable_thinking": enable_thinking},
             "parallel_tool_calls": request.get("parallel_tool_calls", False),
         }
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
@@ -78,10 +80,12 @@ class QwenChatModel:
         tools: list[dict[str, Any]] | None = None,
         schema: type[BaseModel] | None = None,
         parallel_tool_calls: bool = False,
+        enable_thinking: bool = False,
     ):
         self.client, self.model_name, self.max_tokens = client, model_name, max_tokens
         self.tools, self.schema = tools, schema
         self.parallel_tool_calls = parallel_tool_calls
+        self.enable_thinking = enable_thinking
 
     def bind_tools(self, tools: list[dict[str, Any]], **kwargs: Any) -> "QwenChatModel":
         return QwenChatModel(
@@ -90,6 +94,7 @@ class QwenChatModel:
             self.max_tokens,
             tools=tools,
             parallel_tool_calls=kwargs.get("parallel_tool_calls", False),
+            enable_thinking=self.enable_thinking,
         )
 
     def with_structured_output(
@@ -100,7 +105,13 @@ class QwenChatModel:
         model = (
             self.model_name if schema in ADAPTER_STRUCTURED_SCHEMAS else QWEN_MODEL_ID
         )
-        return QwenChatModel(self.client, model, self.max_tokens, schema=schema)
+        return QwenChatModel(
+            self.client,
+            model,
+            self.max_tokens,
+            schema=schema,
+            enable_thinking=False,
+        )
 
     async def ainvoke(self, input: Any) -> Any:
         request: dict[str, Any] = {
@@ -126,6 +137,7 @@ class QwenChatModel:
             request,
             model=self.model_name,
             decoding={"max_tokens": self.max_tokens, "temperature": 0},
+            enable_thinking=self.enable_thinking,
         )
         message = result["choices"][0]["message"]
         message["content"] = message.get("content") or ""
@@ -142,12 +154,68 @@ class QwenChatModel:
 class QwenModelProvider:
     name = AIProvider.QWEN
 
-    def __init__(self, settings: Settings, *, client: QwenChatClient | None = None):
-        if settings.qwen_base_url is None:
-            raise ValueError("AI_QWEN_BASE_URL is required")
-        self.settings, self._client = settings, client
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        client: QwenChatClient | None = None,
+        base_url: str | None = None,
+        model_name: str | None = None,
+        api_key: str | None = None,
+        max_tokens: int | None = None,
+        timeout: float | None = None,
+        enable_thinking: bool = False,
+    ):
+        if settings is not None:
+            if settings.qwen_base_url is None and not base_url:
+                raise ValueError("AI_QWEN_BASE_URL is required")
+            self._base_url = base_url or str(settings.qwen_base_url)
+            self._model_name = model_name or settings.qwen_model_name
+            self._api_key = (
+                api_key
+                if api_key is not None
+                else (
+                    settings.qwen_api_key.get_secret_value()
+                    if settings.qwen_api_key
+                    else None
+                )
+            )
+            self._max_tokens = max_tokens if max_tokens is not None else settings.qwen_max_tokens
+            self._timeout = (
+                timeout if timeout is not None else settings.qwen_request_timeout_seconds
+            )
+        else:
+            if not base_url:
+                raise ValueError("AI_QWEN_BASE_URL is required")
+            self._base_url = base_url
+            self._model_name = model_name or QWEN_MODEL_ID
+            self._api_key = api_key
+            self._max_tokens = max_tokens if max_tokens is not None else 2048
+            self._timeout = timeout if timeout is not None else QWEN_REQUEST_TIMEOUT_SECONDS
+        self._enable_thinking = enable_thinking
+        self._client = client
         self._model: QwenChatModel | None = None
         self._closed = False
+
+    @classmethod
+    def from_entry(
+        cls,
+        entry: ResolvedModelEntry,
+        thinking_mode: ThinkingMode | None = None,
+    ) -> "QwenModelProvider":
+        enable_thinking = (
+            entry.thinking.strategy == ThinkingStrategy.QWEN_THINKING
+            and thinking_mode is not None
+            and thinking_mode != ThinkingMode.OFF
+        )
+        return cls(
+            base_url=entry.base_url,
+            model_name=entry.model_name,
+            api_key=entry.api_key.get_secret_value() if entry.api_key else None,
+            max_tokens=entry.max_output_tokens,
+            timeout=entry.timeout_seconds,
+            enable_thinking=enable_thinking,
+        )
 
     def create_model(self) -> QwenChatModel:
         if self._closed:
@@ -155,16 +223,15 @@ class QwenModelProvider:
         if self._model is None:
             if self._client is None:
                 self._client = QwenChatClient(
-                    str(self.settings.qwen_base_url),
-                    api_key=self.settings.qwen_api_key.get_secret_value()
-                    if self.settings.qwen_api_key
-                    else None,
-                    timeout=self.settings.qwen_request_timeout_seconds,
+                    self._base_url,
+                    api_key=self._api_key,
+                    timeout=self._timeout,
                 )
             self._model = QwenChatModel(
                 self._client,
-                self.settings.qwen_model_name,
-                self.settings.qwen_max_tokens,
+                self._model_name,
+                self._max_tokens,
+                enable_thinking=self._enable_thinking,
             )
         return self._model
 

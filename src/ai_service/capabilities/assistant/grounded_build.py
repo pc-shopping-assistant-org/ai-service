@@ -6,7 +6,6 @@ Unresolved accessories return routing reasons instead of a guessed allocation.
 
 from __future__ import annotations
 
-from enum import StrEnum
 from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
@@ -17,6 +16,9 @@ from ai_service.capabilities.assistant.conversation_core import (
     SetupBudgetV1,
 )
 from ai_service.capabilities.assistant.provenance import CatalogRowV1, OptimizerInputV1
+from ai_service.capabilities.assistant.requirements.diagnostics import (
+    ClarificationReason as ClarificationReason,  # noqa: PLC0414 - V1 contract re-export
+)
 from ai_service.capabilities.assistant.stateful_contracts import (
     AccessoryType,
     BudgetScope,
@@ -29,21 +31,6 @@ from ai_service.capabilities.pc_builder.schemas import (
     OwnedComponent,
     PCBuildConstraints,
 )
-
-
-class ClarificationReason(StrEnum):
-    BUDGET_REQUIRED = "BUDGET_REQUIRED"
-    USE_CASE_REQUIRED = "USE_CASE_REQUIRED"
-    BUDGET_SCOPE_REQUIRED = "BUDGET_SCOPE_REQUIRED"
-    ACCESSORY_SCOPE_CONFIRMATION = "ACCESSORY_SCOPE_CONFIRMATION"
-    ACCESSORY_REQUIREMENTS_REQUIRED = "ACCESSORY_REQUIREMENTS_REQUIRED"
-    ACCESSORY_BUDGET_REQUIRED = "ACCESSORY_BUDGET_REQUIRED"
-    ACCESSORY_CATALOG_REQUIRED = "ACCESSORY_CATALOG_REQUIRED"
-    ACCESSORY_UNAVAILABLE = "ACCESSORY_UNAVAILABLE"
-    ACCESSORY_BUDGET_EXCEEDED = "ACCESSORY_BUDGET_EXCEEDED"
-    PART_REFERENCE_REQUIRED = "PART_REFERENCE_REQUIRED"
-    PART_CATEGORY_MISMATCH = "PART_CATEGORY_MISMATCH"
-    PIN_UNAVAILABLE = "PIN_UNAVAILABLE"
 
 
 class AccessoryCatalogRowV1(Contract):

@@ -88,8 +88,26 @@ class Tokens:
         raise AuthenticationError()
 
 
+def _write_test_models_yaml(tmp_path):
+    path = tmp_path / "models.yaml"
+    path.write_text(
+        """
+default_model: test-local
+models:
+  - id: test-local
+    label: Test Local
+    provider: openai
+    model_name: gpt-4o-mini
+    base_url: http://127.0.0.1:11434/v1
+    api_key_optional: true
+""",
+        encoding="utf-8",
+    )
+    return str(path)
+
+
 @pytest.mark.asyncio
-async def test_enabled_lifecycle_auth_owner_and_public_envelope(monkeypatch):
+async def test_enabled_lifecycle_auth_owner_and_public_envelope(tmp_path, monkeypatch):
     owner = uuid4()
     saver = InMemorySaver()
     resources = StatefulResources(
@@ -116,7 +134,7 @@ async def test_enabled_lifecycle_auth_owner_and_public_envelope(monkeypatch):
         _env_file=None,
         database_url="postgresql+psycopg://postgres:postgres@localhost:5433/ai_db",
         jwt_jwks_url="http://identity.test/.well-known/jwks.json",
-        provider="openai", openai_api_key="fixture",
+        models_config_path=_write_test_models_yaml(tmp_path),
     )
     app = create_app(settings)
     async with app.router.lifespan_context(app):  # noqa: SIM117 - make lifecycle ordering explicit
@@ -202,32 +220,60 @@ def test_persistence_is_required_and_startup_requires_configuration():
         Settings(_env_file=None).require_stateful_configuration()
 
 
-def test_native_runtime_requires_explicit_model_but_not_category_mapping():
+def test_native_runtime_requires_explicit_model_but_not_category_mapping(tmp_path, monkeypatch):
     base = {
         "_env_file": None,
         "database_url": "postgresql+psycopg://postgres:postgres@localhost:5433/ai_db",
         "jwt_jwks_url": "http://identity.test/jwks",
     }
-    with pytest.raises(ValueError, match="provider/key"):
+    with pytest.raises(ValueError, match="AI_MODELS_CONFIG_PATH"):
         Settings(**base).require_stateful_configuration()
-    settings = Settings(**base, provider="openai", openai_api_key="test-key")
+    config_file = tmp_path / "models.yaml"
+    config_file.write_text(
+        """
+default_model: test-openai
+models:
+  - id: test-openai
+    label: Test OpenAI
+    provider: openai
+    model_name: gpt-4o-mini
+    api_key_env: TEST_OPENAI_KEY
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TEST_OPENAI_KEY", "test-key")
+    settings = Settings(**base, models_config_path=str(config_file))
     assert settings.require_stateful_configuration() is settings
 
 
-def test_blank_optional_mapping_env_from_compose_does_not_break_startup(monkeypatch):
+def test_blank_optional_mapping_env_from_compose_does_not_break_startup(tmp_path, monkeypatch):
     monkeypatch.setenv("AI_HARDWARE_CATALOG_MAPPING", "")
+    monkeypatch.setenv("TEST_OPENAI_KEY", "test-key")
+    config_file = tmp_path / "models.yaml"
+    config_file.write_text(
+        """
+default_model: test-openai
+models:
+  - id: test-openai
+    label: Test OpenAI
+    provider: openai
+    model_name: gpt-4o-mini
+    api_key_env: TEST_OPENAI_KEY
+""",
+        encoding="utf-8",
+    )
     settings = Settings(
         _env_file=None,
         database_url="postgresql+psycopg://postgres:postgres@localhost:5433/ai_db",
         jwt_jwks_url="http://identity.test/jwks",
-        provider="openai", openai_api_key="test-key",
+        models_config_path=str(config_file),
     )
     assert settings.hardware_catalog_mapping is None
     assert settings.require_stateful_configuration() is settings
 
 
 @pytest.mark.asyncio
-async def test_run_http_auth_scope_validation_static_errors_and_wake(monkeypatch):
+async def test_run_http_auth_scope_validation_static_errors_and_wake(tmp_path, monkeypatch):
     owner, conversation_id, request_id, run_id = (uuid4() for _ in range(4))
     wakes = []
     received = []
@@ -281,7 +327,7 @@ async def test_run_http_auth_scope_validation_static_errors_and_wake(monkeypatch
             _env_file=None,
             database_url="postgresql+psycopg://postgres:postgres@localhost:5433/ai_db",
             jwt_jwks_url="http://identity.test/jwks",
-            provider="openai", openai_api_key="fixture",
+            models_config_path=_write_test_models_yaml(tmp_path),
         )
     )
     async with app.router.lifespan_context(app):  # noqa: SIM117 - explicit lifespan ordering

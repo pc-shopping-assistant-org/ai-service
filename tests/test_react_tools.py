@@ -12,10 +12,13 @@ from ai_service.capabilities.assistant.react.contracts import (
     ToolCall,
     ToolContext,
     ToolName,
+    ToolRecord,
+    UnresolvedToolCallError,
 )
 from ai_service.capabilities.assistant.react.tools import (
     ToolDispatcher,
     allowed_tools,
+    project_current_tools,
     validate_answer,
 )
 from ai_service.capabilities.assistant.requirements.contracts import (
@@ -58,6 +61,18 @@ class Catalog:
         return self.product if product_id == self.product.product_id else None
 
 
+def test_tool_projection_rejects_a_call_without_a_result():
+    trusted = context()
+    pending = ToolRecord(
+        call=ToolCall(
+            call_id="pending", name=ToolName.SEARCH_CATALOG, arguments={"query": "GPU"}
+        ),
+        origin_run_id=trusted.run_id,
+    )
+    with pytest.raises(UnresolvedToolCallError):
+        project_current_tools([pending], trusted)
+
+
 @pytest.mark.asyncio
 async def test_consultation_explanation_keeps_canonical_facts_and_bound_sources():
     catalog, trusted = Catalog(), context()
@@ -81,13 +96,19 @@ async def test_consultation_explanation_keeps_canonical_facts_and_bound_sources(
     answer = validate_answer(
         candidate, [result], trusted, [CompletionRequirement(kind="ANSWER")]
     )
-    assert "8,000,000 VND" in answer.text and explanation["text"] in answer.text
+    assert answer.text == explanation["text"]
     assert "unused narration" not in answer.text
     forged = candidate.model_copy(deep=True)
     forged.explanation.evidence_refs = ["catalog:unread"]
     with pytest.raises(ValueError, match="Explanation"):
         validate_answer(
             forged, [result], trusted, [CompletionRequirement(kind="ANSWER")]
+        )
+    with_url = candidate.model_copy(deep=True)
+    with_url.explanation.text = "Xem tại https://example.com/gpu"
+    with pytest.raises(ValueError, match="Server owns web citation links"):
+        validate_answer(
+            with_url, [result], trusted, [CompletionRequirement(kind="ANSWER")]
         )
 
 
@@ -114,9 +135,80 @@ async def test_catalog_product_renders_clean_anchor_without_raw_spec_dump():
         trusted,
         [CompletionRequirement(kind="ANSWER")],
     )
-    assert f"**{catalog.product.name}**: 8,000,000 VND." in answer.text
+    assert f"- **{catalog.product.name}** — 8,000,000 VND" in answer.text
     assert "additional specs" not in answer.text
     assert "{'" not in answer.text and "['" not in answer.text
+
+
+def test_compatibility_check_renders_verdict_issues_and_power_summary():
+    from ai_service.capabilities.assistant.react.contracts import (
+        CompatibilityCheckResult,
+        CompatibilityPairVerdict,
+        CompatibilityPowerSummary,
+        ToolResult,
+    )
+
+    catalog, trusted = Catalog(), context()
+    board = catalog.product.model_copy(
+        update={
+            "product_id": uuid4(),
+            "name": "Canonical Mainboard",
+            "evidence_ref": "catalog:mb:1",
+        }
+    )
+    refs = [catalog.product.evidence_ref, board.evidence_ref]
+    compat_payload = CompatibilityCheckResult(
+        overall="INCOMPATIBLE",
+        products=[catalog.product, board],
+        results=[
+            CompatibilityPairVerdict(
+                rule="cpu_mainboard_socket",
+                status="INCOMPATIBLE",
+                slot_a="CPU",
+                slot_b="MAINBOARD",
+                message="Socket AM5 không khớp LGA1700.",
+                suggestion="Đổi sang mainboard socket AM5.",
+            )
+        ],
+        power=CompatibilityPowerSummary(
+            estimated_tdp_watts=420,
+            recommended_psu_watts=650,
+            selected_psu_watts=550,
+            is_sufficient=False,
+            headroom_watts=-100,
+            note="Thiếu công suất dự phòng.",
+        ),
+    )
+    record = ToolResult(
+        tool_call_id="compat-1",
+        tool=ToolName.CHECK_BUILD_COMPATIBILITY,
+        input_hash="0" * 64,
+        constraints_revision=0,
+        status="COMPLETED",
+        result=compat_payload,
+        evidence_refs=refs,
+    )
+    explanation = {
+        "text": "Hai linh kiện hiện không lắp chung được do lệch socket và nguồn thiếu công suất.",
+        "evidence_refs": refs,
+    }
+    answer = validate_answer(
+        AnswerCandidate(
+            text="unused",
+            evidence_refs=refs,
+            explanation=explanation,
+        ),
+        [record],
+        trusted,
+        [CompletionRequirement(kind="ANSWER")],
+    )
+    assert answer.text.startswith(explanation["text"])
+    assert "Kết quả kiểm tra tương thích: Không tương thích" in answer.text
+    assert "CPU ↔ MAINBOARD" in answer.text
+    assert "Socket AM5 không khớp LGA1700." in answer.text
+    assert "Đổi sang mainboard socket AM5." in answer.text
+    assert "TDP ước tính ~420W" in answer.text
+    assert "PSU đang chọn: 550W (chưa đủ công suất, dư -100W)" in answer.text
 
 
 def test_state_aware_exposure_keeps_reads_and_requires_compiled_build(
@@ -193,6 +285,26 @@ async def test_build_result_is_verified_and_generic_advice_cannot_complete_build
     assert "mọi game" not in answer.text
     assert "Tổng chi phí" in answer.text
     assert answer.status == "COMPLETED"
+
+    explained = validate_answer(
+        AnswerCandidate(
+            text="mọi game 2K đều mượt",
+            evidence_refs=result.evidence_refs,
+            build_ref=result.result.build_ref,
+            explanation={
+                "text": "Cấu hình cân đối GPU và CPU theo ngân sách đã chọn.",
+                "evidence_refs": result.evidence_refs,
+            },
+        ),
+        [result],
+        trusted,
+        required,
+    )
+    assert explained.text.startswith(
+        "Cấu hình cân đối GPU và CPU theo ngân sách đã chọn."
+    )
+    assert "**Tổng chi phí linh kiện:**" in explained.text
+    assert "- **CPU**:" not in explained.text
 
 
 @pytest.mark.asyncio
@@ -318,9 +430,7 @@ async def test_compare_products_resolves_keywords_in_single_turn_without_prior_s
 
     class KeywordComparisonCatalog:
         async def get(self, product_id):
-            return next(
-                (p for p in (gpu_a, gpu_b) if p.product_id == product_id), None
-            )
+            return next((p for p in (gpu_a, gpu_b) if p.product_id == product_id), None)
 
         async def search(self, query, limit):
             lowered = query.casefold()
@@ -457,5 +567,3 @@ async def test_check_build_compatibility_evaluates_catalog_parts_and_rejects_mis
     )
     assert ok.status == "REJECTED"
     assert ok.error == "PREREQUISITE_MISSING"
-
-

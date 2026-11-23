@@ -21,6 +21,7 @@ from ai_service.capabilities.assistant.stateful_contracts import (
     TurnRequestV1,
     UnitClarificationReplyV1,
 )
+from ai_service.config.enums import ThinkingMode
 
 from .pending_commands import PendingCommandV2
 
@@ -31,6 +32,8 @@ class TurnRequestV2(Contract):
     request_id: UUID
     expected_revision: NonNegativeInt
     message: Text = Field(max_length=MAX_TURN_MESSAGE_CHARS)
+    model_id: Text | None = Field(default=None, max_length=64)
+    thinking_mode: ThinkingMode | None = None
     selected_product_ids: list[UUID] = Field(
         default_factory=list,
         max_length=MAX_SELECTED_PRODUCTS,

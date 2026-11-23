@@ -78,6 +78,11 @@ MEASUREMENT = re.compile(
 )
 
 
+def is_standalone_money_amount(text: str) -> bool:
+    match = MEASUREMENT.fullmatch(text.strip())
+    return match is not None and match.group(2).casefold() in MONEY_ALIASES
+
+
 def normalize_quantity(value: QuantityValue) -> QuantityValue:
     if value.unit == "TB":
         return QuantityValue(amount=value.amount * 1000, unit="GB")
@@ -115,11 +120,7 @@ def verify_quantity(
             ambiguous = True
             continue
         multiplier = (
-            1_000_000
-            if alias in MILLION_ALIASES
-            else 1000
-            if unit == "TB"
-            else 1
+            1_000_000 if alias in MILLION_ALIASES else 1000 if unit == "TB" else 1
         )
         amount = Decimal(number.replace(",", ".")) * multiplier
         if amount != amount.to_integral_value():

@@ -39,6 +39,7 @@ from ai_service.capabilities.assistant.react.contracts import (
     ToolContext,
     ToolName,
     ToolRecord,
+    require_tool_results,
 )
 from ai_service.capabilities.assistant.react.control_actions import (
     CONTROL_DESCRIPTIONS,
@@ -62,6 +63,7 @@ from ai_service.capabilities.assistant.source_quotes import (
 from ai_service.infrastructure.providers.failures import invoke_provider
 from ai_service.infrastructure.providers.model_stream import (
     BoundModel,
+    StreamingModel,
     TextStreamSink,
     stream_public_text,
 )
@@ -72,7 +74,7 @@ from ai_service.infrastructure.providers.tool_projection import (
 from ai_service.infrastructure.providers.tool_schema import model_tool_schema
 
 GEMINI_SIGNATURES_KEY = "__gemini_function_call_thought_signatures__"
-REACT_PROTOCOL_VERSION = "compact-native-tools-v6"
+REACT_PROTOCOL_VERSION = "compact-native-tools-v7"
 logger = logging.getLogger(__name__)
 
 REACT_SYSTEM_PROMPT = (
@@ -82,9 +84,12 @@ REACT_SYSTEM_PROMPT = (
     "Answer brief greetings, questions about pending work, and general PC/hardware/gear "
     "concepts without unnecessary search. A conversational reply does not complete a business task. "
     "For requested catalog, comparison or build results, use the appropriate tools "
-    "and submit_result with selected evidence. If build_result is already in context, "
+    "and submit_result with selected evidence. Always write a clear, helpful consultation "
+    "in submit_result's explanation field (direct recommendation, key tradeoffs/fit analysis, "
+    "natural exact catalog names; never a bare product/price dump or raw URLs). "
+    "If build_result is already in context, "
     "submit it with submit_result. Do not substitute generic advice "
-    "for a requested build. Ask for missing required input. "
+    "for a requested build. Use ask_clarification when the requested PC build needs more input. "
     "A core build requires budget and workload. Brand, appearance and paid accessories "
     "are optional; do not delay a requested build to ask about them. "
     "Do not end with a promise to search or build later: work stops when you reply. "
@@ -146,7 +151,7 @@ def project_model_response(decision: FlexibleDecision, message: str) -> AIMessag
         ).model_dump(mode="json", exclude_defaults=True)
     elif isinstance(action, AskClarificationAction):
         name = ControlName.ASK_CLARIFICATION
-        arguments = action.model_dump(mode="json", exclude={"kind"})
+        arguments = {}
     else:
         if isinstance(action, RespondAction) and not (
             action.evidence_refs
@@ -249,8 +254,7 @@ def build_react_request(
     """Shared serving/training projection; no internal decision union in the prompt."""
     limits = limits or ReactLimits()
     records = [ToolRecord.model_validate(item.model_dump()) for item in transcript]
-    if any(item.result is None for item in records):
-        raise ValueError("Unresolved tool transcript")
+    require_tool_results(records)
     schemas = [
         {
             "name": name.value,
@@ -294,6 +298,14 @@ def build_react_request(
         }
         if context.pending is not None:
             context_payload["pending"] = context.pending.model_dump(mode="json")
+            if context.pending.missing_fields and not context.read_only_turn:
+                instruction += (
+                    " If the latest user message supplies or changes a requirement for the pending build, "
+                    "call propose_requirements before replying. A short budget or workload answer "
+                    "to the pending question counts as user input. Copy a short reply verbatim into quote. "
+                    "Side questions can be answered "
+                    "while preserving the pending build."
+                )
         if context.memories:
             context_payload["memories"] = [
                 item.model_dump(mode="json") for item in context.memories
@@ -524,7 +536,7 @@ class NativeFlexibleModel:
         response = await invoke_provider(
             lambda: (
                 stream_public_text(bound, messages, self.text_sink)
-                if self.text_sink is not None
+                if self.text_sink is not None and isinstance(bound, StreamingModel)
                 else bound.ainvoke(messages)
             )
         )

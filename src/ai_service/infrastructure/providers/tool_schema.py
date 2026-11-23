@@ -46,6 +46,16 @@ def model_tool_schema(model: type[BaseModel]) -> dict[str, Any]:
                 for field in projected["required"]
                 if field not in _EXCLUDED_PROPERTIES
             ]
+        props = projected.get("properties")
+        if (
+            isinstance(props, dict)
+            and "explanation" in props
+            and "refs" in props
+        ):
+            required = list(projected.get("required") or [])
+            if "explanation" not in required:
+                required.append("explanation")
+            projected["required"] = required
         if "anyOf" in projected:
             variants = projected["anyOf"]
             non_null = [

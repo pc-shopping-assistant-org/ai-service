@@ -313,7 +313,10 @@ async def test_read_then_dynamic_clarification_retains_tool_ledger_and_build_tas
     ).ainvoke({"message": "Build PC có GPU"})
     assert result["phase"] == "WAITING_INPUT" and result["answer"] == {}
     assert len(result["ledger"]) == 1
-    assert result["clarification"]["missing_fields"] == ["BUDGET_REQUIRED"]
+    assert result["clarification"]["missing_fields"] == [
+        "BUDGET_REQUIRED",
+        "USE_CASE_REQUIRED",
+    ]
 
 
 @pytest.mark.asyncio
