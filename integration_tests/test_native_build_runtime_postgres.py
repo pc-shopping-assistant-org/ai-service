@@ -519,7 +519,16 @@ async def test_native_runtime_claims_http_run_and_closes_provider_after_drain(
                         "user",
                         "assistant",
                     ]
-                    assert "8,000,000 VND" in messages[-1]["content"]
+                    if selected:
+                        assert (
+                            "Đối chiếu thông số và nhu cầu" in messages[-1]["content"]
+                        )
+                        assert any(
+                            p["list_price"] == 8_000_000
+                            for p in messages[-1]["products"]
+                        )
+                    else:
+                        assert "8,000,000 VND" in messages[-1]["content"]
                     first_page = await client.get(
                         path + "/messages", params={"limit": 2}
                     )
