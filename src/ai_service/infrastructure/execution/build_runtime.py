@@ -8,6 +8,7 @@ import httpx
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_service.application.activity import RunActivityBroker
 from ai_service.application.call_attempts import AttemptBoundary, ExecutionClaim
 from ai_service.application.use_cases.stateful_conversations import StatefulRunService
 from ai_service.capabilities.assistant.react.contracts import (
@@ -85,6 +86,7 @@ async def open_build_runtime(
         )
     model_catalog = load_model_catalog(settings.models_config_path.strip())
     provider_registry = ModelProviderRegistry(model_catalog)
+    activity_broker = RunActivityBroker()
     service = PCBuildApplicationService()
     coordinator = PostgresRunCoordinator(
         engine,
@@ -273,6 +275,7 @@ async def open_build_runtime(
                 catalog_loader=BackendRequirementCatalog(
                     client, settings.backend_api_url, attempts, mapping
                 ),
+                activity_sink=activity_broker.sink(claim.conversation_id, claim.run_id),
             ),
             accepted_versions={FLEXIBLE_GRAPH_VERSION},
         )
@@ -283,6 +286,7 @@ async def open_build_runtime(
             coordinator,
             graph_factory,
             FLEXIBLE_GRAPH_VERSION,
+            on_finish=activity_broker.finish,
         ),
         worker_id=uuid4(),
     )
@@ -291,6 +295,7 @@ async def open_build_runtime(
         yield (
             StatefulRunService(coordinator, executor.wake, executor.cancel_run),
             model_catalog,
+            activity_broker,
         )
     finally:
         # Shutdown may exceed grace, but live CPU/checkpoint work must not lose

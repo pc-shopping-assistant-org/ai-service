@@ -84,6 +84,7 @@ async def open_stateful_resources(settings: Settings):
             async with open_build_runtime(settings, engine, saver, client) as (
                 runs,
                 models,
+                activity_broker,
             ):
                 from ai_service.infrastructure.persistence.user_memory import (
                     PostgresUserMemoryStore,
@@ -93,7 +94,11 @@ async def open_stateful_resources(settings: Settings):
                     resources.conversations,
                     resources.authenticator,
                     runs,
-                    StatefulRunEventService(PostgresRunEventStore(engine), runs.store),
+                    StatefulRunEventService(
+                        PostgresRunEventStore(engine),
+                        runs.store,
+                        activity_broker=activity_broker,
+                    ),
                     PostgresUserMemoryStore(engine),
                     models,
                 )

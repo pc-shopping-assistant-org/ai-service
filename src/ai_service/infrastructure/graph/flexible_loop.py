@@ -6,8 +6,10 @@ from dataclasses import dataclass
 
 from pydantic import JsonValue, ValidationError
 
+from ai_service.application.activity import ActivitySink
 from ai_service.application.call_attempts import AttemptBoundary, AttemptKind
 from ai_service.capabilities.assistant.provenance import canonical_hash
+from ai_service.capabilities.assistant.public_contracts import AgentActivityStage
 from ai_service.capabilities.assistant.react.actions import (
     ActionKind,
     AskClarificationAction,
@@ -84,7 +86,15 @@ def build_loop_nodes(
     model: FlexibleModel,
     dispatcher: ToolDispatcher,
     attempts: AttemptBoundary,
+    activity_sink: ActivitySink | None = None,
 ) -> LoopNodes:
+    def emit_activity(
+        stage: AgentActivityStage,
+        tool: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        if activity_sink is not None:
+            activity_sink(stage, tool, detail)
     def wait_for_build_input(
         state: FlexibleState,
         question: AskClarificationAction,
@@ -202,6 +212,7 @@ def build_loop_nodes(
             dispatcher,
             attempts,
             runtime.limits,
+            activity_sink=activity_sink,
         )
         return runtime.bounded(
             merged,
@@ -239,6 +250,7 @@ def build_loop_nodes(
             "context": runtime.context_digest_payload(ctx),
             "graph_version": FLEXIBLE_GRAPH_VERSION,
         }
+        emit_activity(AgentActivityStage.THINKING)
         decision = await attempts.invoke(
             AttemptKind.MODEL,
             f"flexible:agent:{count}",
@@ -422,6 +434,7 @@ def build_loop_nodes(
                 return loaded | runtime.repair(merged, "INVALID_ACTION")
             return loaded | wait_for_build_input(merged, question, decision)
         assert isinstance(action, FinalAnswerAction)
+        emit_activity(AgentActivityStage.VERIFYING)
         unresolved = runtime.unresolved_tasks(state)
         if unresolved:
             return runtime.repair(state, "TASK_INCOMPLETE", unresolved)
@@ -471,6 +484,7 @@ def build_loop_nodes(
             dispatcher,
             attempts,
             runtime.limits,
+            activity_sink=activity_sink,
         )
         return runtime.bounded(
             state,

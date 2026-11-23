@@ -10,6 +10,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from ai_service.application.activity import ActivitySink
 from ai_service.application.call_attempts import AttemptBoundary
 from ai_service.capabilities.assistant.react.contracts import (
     CompletionRequirement,
@@ -65,6 +66,7 @@ def build_flexible_graph(
     amender: PendingAmender | None = None,
     task_amender: TaskAmender | None = None,
     catalog_loader: RequirementCatalog | None = None,
+    activity_sink: ActivitySink | None = None,
 ) -> CompiledStateGraph:
     trusted = ToolContext.model_validate(context.model_dump())
     if publication and publication.read_only_turn:
@@ -138,6 +140,7 @@ def build_flexible_graph(
         model=model,
         dispatcher=dispatcher,
         attempts=attempts,
+        activity_sink=activity_sink,
     )
 
     def begin(state: FlexibleState) -> FlexibleState:
