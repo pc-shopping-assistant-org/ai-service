@@ -73,10 +73,13 @@ CONTROL_DESCRIPTIONS = {
         "Do not ask for fields already present in context. General conversation can be plain text."
     ),
     ControlName.SUBMIT_RESULT: (
-        "Submit final verified answers with supporting evidence citations (refs) after research or catalog lookup. "
-        "Select refs/build_ref or supporting calls. One comparison is one result covering all selected products. "
-        "Put your answer, advice, or tradeoffs in explanation (server renders canonical facts above it). "
-        "Use quotes for exact web excerpts."
+        "Submit final verified answers with supporting evidence citations (refs/build_ref/calls) "
+        "after research or catalog lookup. One comparison is one result covering all selected products. "
+        "ALWAYS provide a clear, helpful user-facing consultation in `explanation` (directly answer the user, "
+        "explain why recommended items fit, compare key differences/tradeoffs, and mention products naturally "
+        "by exact catalog name so the UI links them; do not dump a bare product/price list because the UI "
+        "renders verified product cards and build tables automatically; never invent URLs, prices, or specs). "
+        "Use `quotes` for exact web excerpts."
     ),
 }
 

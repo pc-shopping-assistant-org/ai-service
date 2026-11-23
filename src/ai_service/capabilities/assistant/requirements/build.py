@@ -117,7 +117,12 @@ def verify_receipt(
     return report
 
 
-def grounded_summary(receipt: BuildReceipt, report: SatisfactionReport | None) -> str:
+def grounded_summary(
+    receipt: BuildReceipt,
+    report: SatisfactionReport | None,
+    *,
+    include_parts: bool = True,
+) -> str:
     if receipt.outcome != "BUILT":
         reasons = sorted(
             {m.reason for m in receipt.compilation.mapping if m.status != "APPLIED"}
@@ -129,30 +134,31 @@ def grounded_summary(receipt: BuildReceipt, report: SatisfactionReport | None) -
         raise ValueError("Cannot explain an unverified build")
     setup = receipt.compilation.setup
     total = receipt.build.total_price + (setup.spending if setup else 0)
-    lines = [f"Tổng chi phí linh kiện: {total:,} VND."]
+    lines = [f"**Tổng chi phí linh kiện:** {total:,} VND."]
     if receipt.build.ranking_status == RankingStatus.UNRANKED:
         lines.append(
-            "Cấu hình đáp ứng ngân sách và các kiểm tra tương thích đã mô hình hóa; chưa đủ dữ liệu để xếp hạng hoặc khẳng định hiệu năng."
+            "*Lưu ý:* Cấu hình đáp ứng ngân sách và các kiểm tra tương thích đã mô hình hóa; chưa đủ dữ liệu để xếp hạng hoặc khẳng định hiệu năng."
         )
-    for slot, part in sorted(receipt.build.parts.items()):
-        capacity = (
-            f"; dung lượng {part.capacity_gb} GB"
-            if part.capacity_gb is not None
-            else ""
-        )
-        lines.append(
-            f"{slot.value}: {part.name}{capacity}; chi phí {receipt.build.spending_prices[slot]:,} VND."
-        )
-    if setup:
-        lines.extend(
-            f"{item.row.component.category.value}: {item.row.component.name}; chi phí {item.spending:,} VND."
-            for item in setup.accessories
-        )
+    if include_parts:
+        for slot, part in sorted(receipt.build.parts.items()):
+            capacity = (
+                f" ({part.capacity_gb} GB)"
+                if part.capacity_gb is not None
+                else ""
+            )
+            lines.append(
+                f"- **{slot.value}**: {part.name}{capacity} — {receipt.build.spending_prices[slot]:,} VND"
+            )
+        if setup:
+            lines.extend(
+                f"- **{item.row.component.category.value}**: {item.row.component.name} — {item.spending:,} VND"
+                for item in setup.accessories
+            )
     mappings = {item.requirement_id: item for item in receipt.compilation.mapping}
     for result in report.results:
         if result.strength == "SOFT" and not result.satisfied:
             mapping = mappings[result.requirement_id]
             lines.append(
-                f"Ưu tiên chưa đáp ứng: {mapping.subject} ({mapping.predicate}); chưa thỏa hoặc thiếu dữ liệu."
+                f"- *Ưu tiên chưa đáp ứng: {mapping.subject} ({mapping.predicate}); chưa thỏa hoặc thiếu dữ liệu.*"
             )
     return "\n".join(lines)

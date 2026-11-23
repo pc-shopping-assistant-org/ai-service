@@ -304,7 +304,7 @@ async def test_react_build_tool_renders_full_setup_from_verified_receipt(
         ctx,
         [CompletionRequirement(kind="BUILD", constraints_revision=canonical.revision)],
     )
-    assert "MOUSE: Canonical gear" in answer.text
+    assert "**MOUSE**: Canonical gear" in answer.text
     total = result.result.receipt.build.total_price + 500_000
     assert f"{total:,} VND" in answer.text
 

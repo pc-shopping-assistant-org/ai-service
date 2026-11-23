@@ -726,7 +726,7 @@ class ProductReview(Contract):
 class ConsultationExplanation(Contract):
     """Evidence-linked interpretation, not a new machine-verified fact source."""
 
-    text: Text = Field(max_length=3000)
+    text: Text = Field(max_length=4000)
     evidence_refs: list[Text] = Field(min_length=1, max_length=20)
 
 

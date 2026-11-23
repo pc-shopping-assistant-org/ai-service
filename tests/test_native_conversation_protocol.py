@@ -271,7 +271,21 @@ async def test_grounded_side_answer_does_not_complete_the_pending_build():
     response = validate_response(
         decision.action, trusted, [task], records, continuing_pending=True
     )
-    assert "8,000,000 VND" in response.text
+    assert response.text == "Giá tra từ catalog."
+    assert response.evidence_refs == result.evidence_refs
     assert not hasattr(response, "outcome")
     with pytest.raises(ValueError, match="business result"):
         validate_response(decision.action, trusted, [task], records)
+
+
+def test_submit_result_tool_schema_requires_explanation_first():
+    from ai_service.capabilities.assistant.react.model_contracts import (
+        EvidenceSubmissionInput,
+    )
+    from ai_service.infrastructure.providers.tool_schema import model_tool_schema
+
+    schema = model_tool_schema(EvidenceSubmissionInput)
+    item_schema = schema["properties"]["results"]["items"]
+    assert next(iter(item_schema["properties"])) == "explanation"
+    assert "text" not in item_schema["properties"]
+    assert "explanation" in item_schema["required"]
