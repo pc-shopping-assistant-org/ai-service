@@ -44,7 +44,7 @@ class SeedState(TypedDict, total=False):
 
 @pytest.mark.asyncio
 async def test_v2_rejects_legacy_saved_snapshot_after_orphan_and_reopen(
-    postgres_dsn, monkeypatch
+    postgres_dsn, test_models_config_path, monkeypatch
 ):
     owner = uuid4()
     engine = create_async_engine(
@@ -119,8 +119,8 @@ async def test_v2_rejects_legacy_saved_snapshot_after_orphan_and_reopen(
             closed.append(True)
 
     monkeypatch.setattr(
-        "ai_service.infrastructure.execution.build_runtime.build_model_provider",
-        lambda settings: Provider(),
+        "ai_service.infrastructure.providers.registry._instantiate_provider",
+        lambda entry, mode: Provider(),
     )
     try:
         async with AsyncPostgresSaver.from_conn_string(postgres_dsn) as saver:
@@ -204,8 +204,7 @@ async def test_v2_rejects_legacy_saved_snapshot_after_orphan_and_reopen(
                     "postgresql://", "postgresql+psycopg://", 1
                 ),
                 jwt_jwks_url="http://identity.test/jwks",
-                provider="openai",
-                openai_api_key="fixture-key",
+                models_config_path=test_models_config_path,
             )
 
             def reject_network(request):
@@ -217,7 +216,11 @@ async def test_v2_rejects_legacy_saved_snapshot_after_orphan_and_reopen(
                 httpx.AsyncClient(
                     transport=httpx.MockTransport(reject_network)
                 ) as client,
-                open_build_runtime(settings, engine, saver, client) as service,
+                open_build_runtime(settings, engine, saver, client) as (
+                    service,
+                    _,
+                    _,
+                ),
             ):
                 run = await service.submit(
                     owner,
