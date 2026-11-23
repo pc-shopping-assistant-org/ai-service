@@ -29,9 +29,13 @@ class ControlName(StrEnum):
     SUBMIT_RESULT = "submit_result"
 
 
+class ClarificationRequestInput(Contract):
+    """Ask the application to determine which build requirements need input."""
+
+
 CONTROL_SCHEMAS: dict[ControlName, type[Contract]] = {
     ControlName.PROPOSE_REQUIREMENTS: RequirementProposalInput,
-    ControlName.ASK_CLARIFICATION: AskClarificationAction,
+    ControlName.ASK_CLARIFICATION: ClarificationRequestInput,
     ControlName.SUBMIT_RESULT: ResultSubmissionInput,
 }
 CONTROL_ACTIONS = {
@@ -67,10 +71,9 @@ CONTROL_DESCRIPTIONS = {
         "source_text is only your own suggestion (requires consent)."
     ),
     ControlName.ASK_CLARIFICATION: (
-        "Ask for missing business input using actual missing field names (e.g. 'BUDGET_REQUIRED', 'USE_CASE_REQUIRED', "
-        "'ACCESSORY_BUDGET_REQUIRED') "
-        "or unresolved selection reasons when required information is not available in context. "
-        "Do not ask for fields already present in context. General conversation can be plain text."
+        "Request a server-rendered clarification for the current PC build. "
+        "Admit any new requirements from the latest message using propose_requirements first. "
+        "Use plain text for ordinary clarifying questions about other topics."
     ),
     ControlName.SUBMIT_RESULT: (
         "Submit final verified answers with supporting evidence citations (refs/build_ref/calls) "
@@ -97,6 +100,7 @@ def allowed_controls(
     if (context is None or not context.read_only_turn) and (
         context is None
         or context.completion_requirements
+        or context.task_registration_open
         or context.pending
         or context.requirements.requirements
         or context.requirements.goals
@@ -147,9 +151,7 @@ def normalize_control(
     ).submission()
     if len(submitted.results) == 1 and submitted.results[0].task_index is None:
         selection, _ = resolve_result_selection(submitted.results[0], records)
-        response = RespondAction.model_validate(
-            selected_answer(selection).model_dump()
-        )
+        response = RespondAction.model_validate(selected_answer(selection).model_dump())
         return FlexibleDecision(action=response, control_call=call)
     return FlexibleDecision(
         action=derive_final_action(submitted, records), control_call=call

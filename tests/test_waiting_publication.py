@@ -135,7 +135,10 @@ async def test_clarification_must_ask_for_actual_missing_prerequisite():
         source_message="Build PC",
         conversation_revision=0,
     )
-    assert prepared.clarification.missing_fields == ["BUDGET_REQUIRED"]
+    assert prepared.clarification.missing_fields == [
+        "BUDGET_REQUIRED",
+        "USE_CASE_REQUIRED",
+    ]
     terminal["clarification"]["missing_fields"] = ["MADE_UP"]
     with pytest.raises(ValueError):
         prepare_waiting_publication(

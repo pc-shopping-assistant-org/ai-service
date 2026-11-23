@@ -5,7 +5,10 @@ import pytest
 from pydantic import ValidationError
 
 from ai_service.capabilities.assistant.provenance import CatalogRowV1
-from ai_service.capabilities.assistant.requirements.compiler import compile_requirements
+from ai_service.capabilities.assistant.requirements.compiler import (
+    Mapping,
+    compile_requirements,
+)
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
     Evidence,
@@ -76,6 +79,21 @@ def rows(catalog):
         )
         for index, part in enumerate(catalog)
     ]
+
+
+def test_compiler_diagnostics_reject_unknown_codes_and_read_legacy_wire_values():
+    compiled = compile_requirements(CanonicalRequirementState(), [])
+    diagnostic = compiled.mapping[0].model_dump(mode="json")
+    assert diagnostic["status"] == "NEEDS_CLARIFICATION"
+    assert diagnostic["reason"] == "BUDGET_REQUIRED"
+    assert Mapping.model_validate(diagnostic).model_dump(mode="json") == diagnostic
+    legacy = diagnostic | {
+        "status": "UNSUPPORTED",
+        "reason": "SOFT_SCORER_NOT_IMPLEMENTED",
+    }
+    assert Mapping.model_validate(legacy).model_dump(mode="json") == legacy
+    with pytest.raises(ValidationError, match="reason"):
+        Mapping.model_validate(diagnostic | {"reason": "BUGDET_REQUIRED"})
 
 
 def test_atomic_merge_rejects_unbound_evidence_and_preserves_original():
@@ -190,9 +208,7 @@ def test_owned_resource_is_not_implicitly_selected_or_free(realistic_catalog):
 
 
 def test_unsupported_soft_noise_preference_is_not_silently_dropped(realistic_catalog):
-    preferred = requirement(
-        "GPU", "noise", TextValue(text="Quiet"), strength="SOFT"
-    )
+    preferred = requirement("GPU", "noise", TextValue(text="Quiet"), strength="SOFT")
     compiled = compile_requirements(state(preferred), rows(realistic_catalog))
     assert not compiled.ready and compiled.optimizer_input is None
     assert (

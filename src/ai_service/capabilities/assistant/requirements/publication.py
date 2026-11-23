@@ -22,6 +22,7 @@ from ai_service.capabilities.pc_builder.schemas import (
 from .build import BuildReceipt
 from .compiler import Compilation
 from .contracts import CanonicalRequirementState, QuantityValue, TextValue
+from .diagnostics import CompilationStatus
 
 
 def public_projection(
@@ -125,11 +126,13 @@ def public_projection(
         # Partial requirements need no invented optimizer receipt. Only bindings
         # independently admitted by the compiler can enter this legacy view.
         conflicted = {
-            item.subject for item in compilation.mapping if item.status == "CONFLICT"
+            item.subject
+            for item in compilation.mapping
+            if item.status == CompilationStatus.CONFLICT
         }
         for item in compilation.mapping:
             if (
-                item.status != "APPLIED"
+                item.status != CompilationStatus.APPLIED
                 or item.subject not in set(ComponentCategory)
                 or item.subject in conflicted
                 or len(item.target_bindings) != 1

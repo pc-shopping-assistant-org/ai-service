@@ -74,8 +74,15 @@ class _LegacyProposeRequirementsAction(Contract):
 
 class AskClarificationAction(Contract):
     kind: Literal["ASK_CLARIFICATION"] = "ASK_CLARIFICATION"
-    question: Text = Field(max_length=2000)
-    missing_fields: list[Text] = Field(min_length=1, max_length=20)
+    # Empty is a model request. A published clarification carries both fields.
+    question: Text | None = Field(default=None, max_length=2000)
+    missing_fields: list[Text] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def paired_fields(self) -> "AskClarificationAction":
+        if (self.question is not None) != bool(self.missing_fields):
+            raise ValueError("Clarification details must include question and reasons")
+        return self
 
 
 class RespondAction(AnswerCandidate):

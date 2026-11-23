@@ -527,7 +527,7 @@ class FlexiblePublicationInput(Contract):
                 values.get("clarification")
             )
             reasons = {item.reason for item in task_resolution.pending}
-            if not set(question.missing_fields) <= reasons:
+            if question.question is None or not set(question.missing_fields) <= reasons:
                 raise ValueError("Question is not bound to unresolved task subjects")
             unresolved = PendingTaskDraft(
                 message_id=self.task_message_id,

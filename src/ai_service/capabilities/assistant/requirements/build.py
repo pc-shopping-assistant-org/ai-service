@@ -21,6 +21,7 @@ from ai_service.capabilities.pc_builder.schemas import (
 
 from .compiler import Compilation, compile_requirements
 from .contracts import CanonicalRequirementState
+from .diagnostics import CompilationStatus
 from .resolver import ChoiceDraft, RequirementDraft
 from .verifier import SatisfactionReport, verify_satisfaction
 
@@ -71,9 +72,9 @@ def optimize_requirements(
         statuses = {m.status for m in compiled.mapping}
         outcome: Literal["CLARIFICATION", "UNSUPPORTED", "CONFLICT"] = (
             "CONFLICT"
-            if "CONFLICT" in statuses
+            if CompilationStatus.CONFLICT in statuses
             else "UNSUPPORTED"
-            if "UNSUPPORTED" in statuses
+            if CompilationStatus.UNSUPPORTED in statuses
             else "CLARIFICATION"
         )
         return BuildReceipt(compilation=compiled, outcome=outcome)
@@ -125,7 +126,11 @@ def grounded_summary(
 ) -> str:
     if receipt.outcome != "BUILT":
         reasons = sorted(
-            {m.reason for m in receipt.compilation.mapping if m.status != "APPLIED"}
+            {
+                m.reason
+                for m in receipt.compilation.mapping
+                if m.status != CompilationStatus.APPLIED
+            }
         )
         return f"{receipt.outcome}: " + (
             ", ".join(reasons) or "Không tìm được cấu hình thỏa các yêu cầu đã hỗ trợ."
@@ -142,9 +147,7 @@ def grounded_summary(
     if include_parts:
         for slot, part in sorted(receipt.build.parts.items()):
             capacity = (
-                f" ({part.capacity_gb} GB)"
-                if part.capacity_gb is not None
-                else ""
+                f" ({part.capacity_gb} GB)" if part.capacity_gb is not None else ""
             )
             lines.append(
                 f"- **{slot.value}**: {part.name}{capacity} — {receipt.build.spending_prices[slot]:,} VND"

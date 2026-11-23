@@ -72,7 +72,7 @@ from ai_service.infrastructure.providers.tool_projection import (
 from ai_service.infrastructure.providers.tool_schema import model_tool_schema
 
 GEMINI_SIGNATURES_KEY = "__gemini_function_call_thought_signatures__"
-REACT_PROTOCOL_VERSION = "compact-native-tools-v6"
+REACT_PROTOCOL_VERSION = "compact-native-tools-v7"
 logger = logging.getLogger(__name__)
 
 REACT_SYSTEM_PROMPT = (
@@ -87,7 +87,7 @@ REACT_SYSTEM_PROMPT = (
     "natural exact catalog names; never a bare product/price dump or raw URLs). "
     "If build_result is already in context, "
     "submit it with submit_result. Do not substitute generic advice "
-    "for a requested build. Ask for missing required input. "
+    "for a requested build. Use ask_clarification when the requested PC build needs more input. "
     "A core build requires budget and workload. Brand, appearance and paid accessories "
     "are optional; do not delay a requested build to ask about them. "
     "Do not end with a promise to search or build later: work stops when you reply. "
@@ -149,7 +149,7 @@ def project_model_response(decision: FlexibleDecision, message: str) -> AIMessag
         ).model_dump(mode="json", exclude_defaults=True)
     elif isinstance(action, AskClarificationAction):
         name = ControlName.ASK_CLARIFICATION
-        arguments = action.model_dump(mode="json", exclude={"kind"})
+        arguments = {}
     else:
         if isinstance(action, RespondAction) and not (
             action.evidence_refs

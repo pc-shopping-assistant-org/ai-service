@@ -27,6 +27,7 @@ from .contracts import (
     Requirement,
     TextValue,
 )
+from .diagnostics import CompilationReason, CompilationStatus
 from .setup import SetupPlan, compile_setup
 
 COMPILER_VERSION: Literal["requirements-v2"] = "requirements-v2"
@@ -34,8 +35,8 @@ COMPILER_VERSION: Literal["requirements-v2"] = "requirements-v2"
 
 class Mapping(Contract):
     requirement_id: UUID | None
-    status: Literal["APPLIED", "NEEDS_CLARIFICATION", "UNSUPPORTED", "CONFLICT"]
-    reason: Text
+    status: CompilationStatus
+    reason: CompilationReason
     strength: Literal["HARD", "SOFT"] | None = None
     subject: str | None = None
     predicate: str | None = None
@@ -54,7 +55,7 @@ class Compilation(Contract):
     @property
     def ready(self) -> bool:
         return self.optimizer_input is not None and all(
-            m.status == "APPLIED" for m in self.mapping
+            m.status == CompilationStatus.APPLIED for m in self.mapping
         )
 
 
@@ -110,8 +111,8 @@ def compile_requirements(
 
     def outcome(
         r: Requirement,
-        status: Literal["APPLIED", "NEEDS_CLARIFICATION", "UNSUPPORTED", "CONFLICT"],
-        reason: str,
+        status: CompilationStatus,
+        reason: CompilationReason,
     ) -> None:
         mapping.append(
             Mapping(
@@ -161,9 +162,13 @@ def compile_requirements(
             )
             if supported:
                 soft.append(r)
-                outcome(r, "APPLIED", "SOFT_UTILITY")
+                outcome(r, CompilationStatus.APPLIED, CompilationReason.SOFT_UTILITY)
             else:
-                outcome(r, "UNSUPPORTED", "SOFT_PREDICATE_NOT_SUPPORTED")
+                outcome(
+                    r,
+                    CompilationStatus.UNSUPPORTED,
+                    CompilationReason.SOFT_PREDICATE_NOT_SUPPORTED,
+                )
         elif (
             r.subject == "SETUP"
             and r.predicate == "budget"
@@ -172,7 +177,7 @@ def compile_requirements(
             and v.unit == "VND"
         ):
             budget = min(budget, v.amount) if budget is not None else v.amount
-            outcome(r, "APPLIED", "BUDGET_CAP")
+            outcome(r, CompilationStatus.APPLIED, CompilationReason.BUDGET_CAP)
         elif (
             r.subject == "WORKLOAD"
             and r.predicate == "use_case"
@@ -182,13 +187,21 @@ def compile_requirements(
             try:
                 requested = UseCaseProfile(v.text)
             except ValueError:
-                outcome(r, "UNSUPPORTED", "UNKNOWN_WORKLOAD")
+                outcome(
+                    r, CompilationStatus.UNSUPPORTED, CompilationReason.UNKNOWN_WORKLOAD
+                )
                 continue
             if use_case is not None and use_case != requested:
-                outcome(r, "CONFLICT", "CONFLICTING_WORKLOAD")
+                outcome(
+                    r,
+                    CompilationStatus.CONFLICT,
+                    CompilationReason.CONFLICTING_WORKLOAD,
+                )
             else:
                 use_case = requested
-                outcome(r, "APPLIED", "WORKLOAD_PROFILE")
+                outcome(
+                    r, CompilationStatus.APPLIED, CompilationReason.WORKLOAD_PROFILE
+                )
         elif r.subject in set(ComponentCategory):
             category = ComponentCategory(r.subject)
             if (
@@ -199,26 +212,54 @@ def compile_requirements(
                 row = by_id.get(v.variant_id)
                 is_owned = r.predicate == "use_resource"
                 if row is None:
-                    outcome(r, "NEEDS_CLARIFICATION", "VARIANT_NOT_RESOLVED")
+                    outcome(
+                        r,
+                        CompilationStatus.NEEDS_CLARIFICATION,
+                        CompilationReason.VARIANT_NOT_RESOLVED,
+                    )
                 elif row.component.category != category:
-                    outcome(r, "CONFLICT", "CATEGORY_MISMATCH")
+                    outcome(
+                        r,
+                        CompilationStatus.CONFLICT,
+                        CompilationReason.CATEGORY_MISMATCH,
+                    )
                 elif is_owned and not any(
                     resource.variant_id == v.variant_id
                     for resource in state.available_resources.values()
                 ):
-                    outcome(r, "CONFLICT", "RESOURCE_NOT_AVAILABLE")
+                    outcome(
+                        r,
+                        CompilationStatus.CONFLICT,
+                        CompilationReason.RESOURCE_NOT_AVAILABLE,
+                    )
                 elif not is_owned and row.quantity == 0:
-                    outcome(r, "NEEDS_CLARIFICATION", "PIN_UNAVAILABLE")
+                    outcome(
+                        r,
+                        CompilationStatus.NEEDS_CLARIFICATION,
+                        CompilationReason.PIN_UNAVAILABLE,
+                    )
                 elif category in pinned or category in owned:
                     prior = owned.get(category) if is_owned else pinned.get(category)
                     if prior == v.variant_id:
-                        outcome(r, "APPLIED", "IDENTITY_ALREADY_BOUND")
+                        outcome(
+                            r,
+                            CompilationStatus.APPLIED,
+                            CompilationReason.IDENTITY_ALREADY_BOUND,
+                        )
                     else:
-                        outcome(r, "CONFLICT", "SLOT_BINDING_CONFLICT")
+                        outcome(
+                            r,
+                            CompilationStatus.CONFLICT,
+                            CompilationReason.SLOT_BINDING_CONFLICT,
+                        )
                 else:
                     (owned if is_owned else pinned)[category] = v.variant_id
                     outcome(
-                        r, "APPLIED", "OWNED_BINDING" if is_owned else "PINNED_IDENTITY"
+                        r,
+                        CompilationStatus.APPLIED,
+                        CompilationReason.OWNED_BINDING
+                        if is_owned
+                        else CompilationReason.PINNED_IDENTITY,
                     )
             elif (
                 (
@@ -240,11 +281,21 @@ def compile_requirements(
                 )
             ):
                 predicates.setdefault(category, []).append(r)
-                outcome(r, "APPLIED", "CANDIDATE_PREDICATE")
+                outcome(
+                    r, CompilationStatus.APPLIED, CompilationReason.CANDIDATE_PREDICATE
+                )
             else:
-                outcome(r, "UNSUPPORTED", "PREDICATE_NOT_SUPPORTED")
+                outcome(
+                    r,
+                    CompilationStatus.UNSUPPORTED,
+                    CompilationReason.PREDICATE_NOT_SUPPORTED,
+                )
         else:
-            outcome(r, "UNSUPPORTED", "SUBJECT_PREDICATE_NOT_SUPPORTED")
+            outcome(
+                r,
+                CompilationStatus.UNSUPPORTED,
+                CompilationReason.SUBJECT_PREDICATE_NOT_SUPPORTED,
+            )
 
     for identifier, binding in state.resolved_bindings.items():
         requirement = state.requirements[identifier]
@@ -255,32 +306,32 @@ def compile_requirements(
             mapping.append(
                 Mapping(
                     requirement_id=identifier,
-                    status="CONFLICT",
-                    reason="BINDING_MISMATCH",
+                    status=CompilationStatus.CONFLICT,
+                    reason=CompilationReason.BINDING_MISMATCH,
                 )
             )
     if budget is None:
         mapping.append(
             Mapping(
                 requirement_id=None,
-                status="NEEDS_CLARIFICATION",
-                reason="BUDGET_REQUIRED",
+                status=CompilationStatus.NEEDS_CLARIFICATION,
+                reason=CompilationReason.BUDGET_REQUIRED,
             )
         )
     if use_case is None:
         mapping.append(
             Mapping(
                 requirement_id=None,
-                status="NEEDS_CLARIFICATION",
-                reason="USE_CASE_REQUIRED",
+                status=CompilationStatus.NEEDS_CLARIFICATION,
+                reason=CompilationReason.USE_CASE_REQUIRED,
             )
         )
     if state.unresolved:
         mapping.append(
             Mapping(
                 requirement_id=None,
-                status="NEEDS_CLARIFICATION",
-                reason="UNRESOLVED_REQUIREMENTS",
+                status=CompilationStatus.NEEDS_CLARIFICATION,
+                reason=CompilationReason.UNRESOLVED_REQUIREMENTS,
             )
         )
 
@@ -301,8 +352,8 @@ def compile_requirements(
                 mapping = [
                     m.model_copy(
                         update={
-                            "status": "NEEDS_CLARIFICATION",
-                            "reason": "METADATA_INSUFFICIENT",
+                            "status": CompilationStatus.NEEDS_CLARIFICATION,
+                            "reason": CompilationReason.METADATA_INSUFFICIENT,
                         }
                     )
                     if m.requirement_id == rule.id
@@ -317,8 +368,8 @@ def compile_requirements(
                 mapping = [
                     m.model_copy(
                         update={
-                            "status": "CONFLICT",
-                            "reason": "BOUND_PART_VIOLATES_REQUIREMENT",
+                            "status": CompilationStatus.CONFLICT,
+                            "reason": CompilationReason.BOUND_PART_VIOLATES_REQUIREMENT,
                         }
                     )
                     if m.requirement_id == rule.id
@@ -341,7 +392,9 @@ def compile_requirements(
     if setup and budget is not None and setup.spending > budget:
         mapping.append(
             Mapping(
-                requirement_id=None, status="CONFLICT", reason="SETUP_BUDGET_EXCEEDED"
+                requirement_id=None,
+                status=CompilationStatus.CONFLICT,
+                reason=CompilationReason.SETUP_BUDGET_EXCEEDED,
             )
         )
     result = Compilation(
@@ -349,7 +402,7 @@ def compile_requirements(
         mapping=mapping,
         setup=setup,
     )
-    if any(m.status != "APPLIED" for m in mapping):
+    if any(m.status != CompilationStatus.APPLIED for m in mapping):
         return result
     assert budget is not None and use_case is not None
     constraints = PCBuildConstraints(

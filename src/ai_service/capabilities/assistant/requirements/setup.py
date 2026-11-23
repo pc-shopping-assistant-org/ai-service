@@ -17,11 +17,12 @@ from .contracts import (
     Requirement,
     TextValue,
 )
+from .diagnostics import CompilationReason, CompilationStatus
 
 SETUP_SELECTION_POLICY: Literal["explicit-cap-match-price-v1"] = (
     "explicit-cap-match-price-v1"
 )
-type SetupStatus = Literal["APPLIED", "NEEDS_CLARIFICATION", "UNSUPPORTED", "CONFLICT"]
+type SetupDiagnostic = tuple[CompilationStatus, CompilationReason]
 
 
 class SelectedAccessory(Contract):
@@ -60,9 +61,7 @@ def accessory_match(rule: Requirement, part: AccessorySpec) -> bool | None:
 
 def compile_setup(
     state: CanonicalRequirementState, catalog: list[CatalogRowV1]
-) -> tuple[
-    SetupPlan | None, dict[UUID, tuple[SetupStatus, str]], list[tuple[SetupStatus, str]]
-]:
+) -> tuple[SetupPlan | None, dict[UUID, SetupDiagnostic], list[SetupDiagnostic]]:
     rules = [*state.goals.values(), *state.requirements.values()]
     special = [
         r
@@ -72,15 +71,18 @@ def compile_setup(
     ]
     if not special:
         return None, {}, []
-    decisions: dict[UUID, tuple[SetupStatus, str]] = {}
-    problems: list[tuple[SetupStatus, str]] = []
+    decisions: dict[UUID, SetupDiagnostic] = {}
+    problems: list[SetupDiagnostic] = []
     scope = BudgetScope.BUILD_PC
     scopes = set()
     caps = []
     per_slot: dict[AccessoryType, list[Requirement]] = {}
     for rule in special:
         value = rule.value
-        decisions[rule.id] = ("APPLIED", "SETUP_SELECTION")
+        decisions[rule.id] = (
+            CompilationStatus.APPLIED,
+            CompilationReason.SETUP_SELECTION,
+        )
         if rule.subject in set(AccessoryType):
             per_slot.setdefault(AccessoryType(rule.subject), []).append(rule)
             if not (
@@ -101,8 +103,8 @@ def compile_setup(
                 )
             ):
                 decisions[rule.id] = (
-                    "UNSUPPORTED",
-                    "ACCESSORY_PREDICATE_NOT_SUPPORTED",
+                    CompilationStatus.UNSUPPORTED,
+                    CompilationReason.ACCESSORY_PREDICATE_NOT_SUPPORTED,
                 )
         elif (
             rule.predicate == "scope"
@@ -121,20 +123,35 @@ def compile_setup(
         ):
             caps.append(value.amount)
         else:
-            decisions[rule.id] = ("UNSUPPORTED", "SETUP_PREDICATE_NOT_SUPPORTED")
+            decisions[rule.id] = (
+                CompilationStatus.UNSUPPORTED,
+                CompilationReason.SETUP_PREDICATE_NOT_SUPPORTED,
+            )
     if len(scopes) > 1:
-        problems.append(("CONFLICT", "CONFLICTING_BUDGET_SCOPE"))
+        problems.append(
+            (CompilationStatus.CONFLICT, CompilationReason.CONFLICTING_BUDGET_SCOPE)
+        )
     elif scopes:
         scope = next(iter(scopes))
     elif per_slot:
         scope = BudgetScope.FULL_SETUP
     if per_slot and scope != BudgetScope.FULL_SETUP:
-        problems.append(("NEEDS_CLARIFICATION", "ACCESSORY_SCOPE_CONFIRMATION"))
+        problems.append(
+            (
+                CompilationStatus.NEEDS_CLARIFICATION,
+                CompilationReason.ACCESSORY_SCOPE_CONFIRMATION,
+            )
+        )
     if scope == BudgetScope.FULL_SETUP and not per_slot:
-        problems.append(("NEEDS_CLARIFICATION", "ACCESSORY_REQUIREMENTS_REQUIRED"))
+        problems.append(
+            (
+                CompilationStatus.NEEDS_CLARIFICATION,
+                CompilationReason.ACCESSORY_REQUIREMENTS_REQUIRED,
+            )
+        )
     pools: list[list[SelectedAccessory]] = []
     for slot, slot_rules in sorted(per_slot.items()):
-        if any(decisions[r.id][0] != "APPLIED" for r in slot_rules):
+        if any(decisions[r.id][0] != CompilationStatus.APPLIED for r in slot_rules):
             continue
         refs = {
             r.value.variant_id
@@ -144,15 +161,27 @@ def compile_setup(
         owned = any(r.predicate == "use_resource" for r in slot_rules)
         pinned = any(r.predicate == "identity" for r in slot_rules)
         if len(refs) > 1 or (owned and pinned):
-            problems.append(("CONFLICT", "ACCESSORY_SLOT_BINDING_CONFLICT"))
+            problems.append(
+                (
+                    CompilationStatus.CONFLICT,
+                    CompilationReason.ACCESSORY_SLOT_BINDING_CONFLICT,
+                )
+            )
             continue
         if owned and not refs <= {
             resource.variant_id for resource in state.available_resources.values()
         }:
-            problems.append(("CONFLICT", "RESOURCE_NOT_AVAILABLE"))
+            problems.append(
+                (CompilationStatus.CONFLICT, CompilationReason.RESOURCE_NOT_AVAILABLE)
+            )
             continue
         if not refs and not caps:
-            problems.append(("NEEDS_CLARIFICATION", "ACCESSORY_BUDGET_REQUIRED"))
+            problems.append(
+                (
+                    CompilationStatus.NEEDS_CLARIFICATION,
+                    CompilationReason.ACCESSORY_BUDGET_REQUIRED,
+                )
+            )
             continue
         candidates = [
             SelectedAccessory(row=row, owned=owned, pinned=pinned)
@@ -168,12 +197,17 @@ def compile_setup(
         ]
         if not candidates:
             problems.append(
-                ("NEEDS_CLARIFICATION", "ACCESSORY_UNAVAILABLE_OR_METADATA_MISSING")
+                (
+                    CompilationStatus.NEEDS_CLARIFICATION,
+                    CompilationReason.ACCESSORY_UNAVAILABLE_OR_METADATA_MISSING,
+                )
             )
             continue
         pools.append(candidates)
     plan = SetupPlan(scope=scope)
-    if problems or any(status != "APPLIED" for status, _ in decisions.values()):
+    if problems or any(
+        status != CompilationStatus.APPLIED for status, _ in decisions.values()
+    ):
         return plan, decisions, problems
     # Bounded canonical catalog (100 rows, four slots). No inferred quality score.
     best_key: tuple[int, int, tuple[str, ...]] | None = None
@@ -197,5 +231,10 @@ def compile_setup(
             best_key = key
             plan.accessories = list(combination)
     if best_key is None:
-        problems.append(("NEEDS_CLARIFICATION", "ACCESSORY_BUDGET_EXCEEDED"))
+        problems.append(
+            (
+                CompilationStatus.NEEDS_CLARIFICATION,
+                CompilationReason.ACCESSORY_BUDGET_EXCEEDED,
+            )
+        )
     return plan, decisions, problems

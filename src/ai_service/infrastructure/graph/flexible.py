@@ -101,7 +101,11 @@ def build_flexible_graph(
         else None
     )
     bootstrap_tasks = tasks
-    if registering and validated_publication and validated_publication.accepted.flexible:
+    if (
+        registering
+        and validated_publication
+        and validated_publication.accepted.flexible
+    ):
         bootstrap_tasks = [
             row.task for row in validated_publication.accepted.flexible.task_outcomes
         ]
@@ -143,17 +147,19 @@ def build_flexible_graph(
     builder = StateGraph(FlexibleState)
     builder.add_node("begin_turn", observed_sync("begin_turn", begin))
     builder.add_node("agent", observed_async("agent", loop.agent))
-    builder.add_node("validate_action", observed_async("validate_action", loop.validate))
+    builder.add_node(
+        "validate_action", observed_async("validate_action", loop.validate)
+    )
     builder.add_node("execute_tool", observed_async("execute_tool", loop.execute))
-    builder.add_node("resolve_proposal", observed_async("resolve_proposal", loop.resolve))
-    builder.add_node("prepare_agent", observed_async("prepare_agent", loop.prepare_agent))
-    builder.add_conditional_edges(
-        "prepare_agent",
-        lambda s: "admitted" if s.get("phase") == "DECIDED" else "ready",
-        {"admitted": "validate_action", "ready": "agent"},
+    builder.add_node(
+        "resolve_proposal", observed_async("resolve_proposal", loop.resolve)
     )
     builder.add_node(
-        "interpret_reply", observed_async("interpret_reply", clarification.interpret_reply)
+        "prepare_agent", observed_async("prepare_agent", loop.prepare_agent)
+    )
+    builder.add_node(
+        "interpret_reply",
+        observed_async("interpret_reply", clarification.interpret_reply),
     )
     builder.add_node(
         "amend_pending", observed_async("amend_pending", clarification.amend_reply)
@@ -179,6 +185,11 @@ def build_flexible_graph(
         builder.add_node(terminal, observed_sync(terminal, prepare))
         builder.add_edge(terminal, END)
 
+    builder.add_conditional_edges(
+        "prepare_agent",
+        lambda s: s["phase"] if s["phase"] in {"DECIDED", "WAITING_INPUT"} else "ready",
+        {"DECIDED": "validate_action", "ready": "agent", "WAITING_INPUT": terminal},
+    )
     builder.add_edge(START, "begin_turn")
     start_agent = "prepare_agent"
     if registering:
@@ -188,7 +199,9 @@ def build_flexible_graph(
         )
         builder.add_node(
             "resolve_registered_tasks",
-            observed_async("resolve_registered_tasks", clarification.resolve_registered),
+            observed_async(
+                "resolve_registered_tasks", clarification.resolve_registered
+            ),
         )
         if task_clarifier:
             builder.add_node(

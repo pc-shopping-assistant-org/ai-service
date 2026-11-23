@@ -30,12 +30,9 @@ def public_text(message: AIMessageChunk) -> str:
         if len(message.tool_calls) != 1:
             return ""
         call = message.tool_calls[0]
-        if call["name"] not in {"submit_result", "ask_clarification"}:
+        if call["name"] != "submit_result":
             return ""
         args = call["args"]
-        if call["name"] == "ask_clarification":
-            question = args.get("question", "")
-            return question if isinstance(question, str) else ""
         results = args.get("results", [])
         if not isinstance(results, list):
             return ""

@@ -15,9 +15,6 @@ from ai_service.application.ports.stateful_conversation import (
 )
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.requirements.amendment import PendingAmendment
-from ai_service.capabilities.assistant.requirements.catalog_policy import (
-    build_clarification_reasons,
-)
 from ai_service.capabilities.assistant.requirements.contracts import (
     CanonicalRequirementState,
     requirements_hash,
@@ -54,6 +51,7 @@ from .actions import (
     ProposeRequirementsAction,
     decode_flexible_decision,
 )
+from .build_clarification import build_clarification
 from .contracts import CompletionRequirement, ToolContext
 from .outcomes import TaskOutcome
 from .publication import bind_publication_context, snapshot_for_requirements
@@ -85,6 +83,8 @@ class PreparedWaitingPublication(Contract):
             raise ValueError("Waiting publication requires exactly one pending kind")
         if any(task.status != "UNRESOLVED" for task in self.task_outcomes):
             raise ValueError("Waiting publication cannot complete requested tasks")
+        if self.clarification is not None and self.clarification.question is None:
+            raise ValueError("Waiting publication requires a resolved question")
         return self
 
 
@@ -238,20 +238,25 @@ def prepare_waiting_publication(
     action = decode_flexible_decision(values.get("decision")).action
     if isinstance(action, AskClarificationAction):
         checked = AskClarificationAction.model_validate(values.get("clarification"))
-        missing = build_clarification_reasons(
-            state, context.catalog, catalog_ready=context.catalog_ready
+        canonical = build_clarification(
+            state,
+            context.catalog,
+            catalog_ready=context.catalog_ready,
+            selected_reasons=set(checked.missing_fields),
         )
         if (
             checked != action
             or not any(task.kind == "BUILD" for task in tasks)
-            or not set(checked.missing_fields) <= missing
+            or canonical is None
+            or canonical.missing_fields != sorted(set(checked.missing_fields))
+            or canonical.question is None
         ):
             raise ValueError("Question is not bound to actual missing prerequisites")
         return PreparedWaitingPublication(
             snapshot=snapshot,
             task_outcomes=task_outcomes,
-            clarification=checked,
-            assistant_message="Cần bổ sung: " + ", ".join(checked.missing_fields) + ".",
+            clarification=canonical,
+            assistant_message=canonical.question,
         )
     if action.kind != "PROPOSE_REQUIREMENTS":
         raise ValueError("Waiting artifact requires a proposal or validated question")
