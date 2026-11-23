@@ -12,7 +12,10 @@ from ai_service.application.call_attempts import (
     AttemptKind,
     AttemptRejected,
 )
-from ai_service.application.errors import BackendUnavailableError
+from ai_service.application.errors import (
+    BackendUnavailableError,
+    CatalogCategoryUnresolvedError,
+)
 from ai_service.capabilities.assistant.provenance import canonical_hash
 from ai_service.capabilities.assistant.react.contracts import ProductEvidence
 
@@ -65,6 +68,7 @@ class Summary(BaseModel):
     seo_name: str | None = Field(default=None, alias="seoName")
     main_image_url: str | None = Field(default=None, alias="mainImageUrl")
     brand_name: str | None = Field(default=None, alias="brandName")
+    category_id: UUID | None = Field(default=None, alias="categoryId")
     category_name: str | None = Field(default=None, alias="categoryName")
     min_price: Money | None = Field(default=None, alias="minPrice", ge=0)
     max_price: Money | None = Field(default=None, alias="maxPrice", ge=0)
@@ -86,6 +90,13 @@ class Variant(BaseModel):
     product_id: UUID = Field(alias="productId")
     price: Money = Field(ge=0)
     quantity: StrictInt = Field(ge=0)
+    status: Status
+
+
+class CatalogCategory(BaseModel):
+    id: UUID
+    name: str
+    hardware_type: str | None = Field(alias="hardwareType")
     status: Status
 
 
@@ -114,6 +125,7 @@ class Detail(BaseModel):
     image_url: str | None = Field(default=None, alias="imageUrl")
     images: list[ProductImage] = Field(default_factory=list)
     brand_name: str | None = Field(default=None, alias="brandName")
+    category_id: UUID | None = Field(default=None, alias="categoryId")
     category_name: str | None = Field(default=None, alias="categoryName")
     specifications: dict[str, JsonValue] = Field(default_factory=dict)
     variants: list[Variant] = Field(default_factory=list)
@@ -216,10 +228,11 @@ class BackendProductCatalog:
     ) -> list[ProductEvidence]:
         raw_query = query.strip()
         semantic_q = (semantic_query or "").strip()
+        category_term = (category or "").strip()
         has_filters = any(
             (
                 brand is not None and bool(brand.strip()),
-                category is not None and bool(category.strip()),
+                bool(category_term),
                 min_price is not None,
                 max_price is not None,
                 in_stock_only,
@@ -230,6 +243,9 @@ class BackendProductCatalog:
         ) or not 1 <= limit <= 20:
             raise ValueError("Invalid catalog search")
 
+        category_ids = (
+            await self._resolve_category_ids(category_term) if category_term else ()
+        )
         is_general_listing = raw_query.casefold() in GENERAL_LISTING_QUERIES
         lexical_q = "" if is_general_listing else raw_query
 
@@ -238,35 +254,83 @@ class BackendProductCatalog:
                 lexical_q=lexical_q,
                 semantic_q=semantic_q,
                 brand=brand,
-                category=category,
+                category_ids=category_ids,
                 min_price=min_price,
                 max_price=max_price,
                 in_stock_only=in_stock_only,
                 limit=limit,
             )
 
+        return await self._search_catalog_listing(
+            keyword=lexical_q or semantic_q,
+            limit=limit,
+            brand=brand,
+            category_ids=category_ids,
+            min_price=min_price,
+            max_price=max_price,
+            in_stock_only=in_stock_only,
+        )
+
+    async def _resolve_category_ids(self, category: str) -> tuple[UUID, ...]:
+        body = await self._get("/categories")
+        try:
+            if not isinstance(body, list):
+                raise TypeError("Invalid category list")
+            rows = [CatalogCategory.model_validate(row) for row in body]
+        except (ValidationError, TypeError) as exc:
+            raise BackendUnavailableError("Catalog category list is invalid") from exc
+        active = [row for row in rows if row.status == "ACTIVE"]
+        term = category.casefold()
+        matches = {
+            row.id for row in active if (row.hardware_type or "").casefold() == term
+        }
+        if not matches:
+            matches = {row.id for row in active if term in row.name.casefold()}
+        if not matches:
+            raise CatalogCategoryUnresolvedError("Unknown active catalog category")
+        return tuple(sorted(matches))
+
+    async def _search_catalog_listing(
+        self,
+        *,
+        keyword: str,
+        limit: int,
+        brand: str | None,
+        category_ids: tuple[UUID, ...],
+        min_price: int | None,
+        max_price: int | None,
+        in_stock_only: bool,
+    ) -> list[ProductEvidence]:
         params: dict[str, QueryParamScalar] = {"limit": limit}
-        if lexical_q or semantic_q:
-            params["keyword"] = lexical_q or semantic_q
+        if keyword:
+            params["keyword"] = keyword
         if min_price is not None:
             params["minPrice"] = min_price
         if max_price is not None:
             params["maxPrice"] = max_price
 
-        body = await self._get("/products", params)
-        results = self._parse_catalog_summary_page(
-            body,
+        candidates: dict[UUID, ProductEvidence] = {}
+        for category_id in category_ids or (None,):
+            scoped = (
+                {**params, "categoryId": str(category_id)} if category_id else params
+            )
+            body = await self._get("/products", scoped)
+            page = self._parse_catalog_summary_page(
+                body,
+                limit=limit,
+                brand=brand,
+                category_ids=category_ids,
+                min_price=min_price,
+                max_price=max_price,
+                in_stock_only=in_stock_only,
+            )
+            for item in page:
+                candidates.setdefault(item.product_id, item)
+        return await self._ground_filtered_candidates(
+            list(candidates.values()),
             limit=limit,
             brand=brand,
-            category=category,
-            min_price=min_price,
-            max_price=max_price,
-            in_stock_only=in_stock_only,
-        )
-        return await self._ground_filtered_candidates(
-            results,
-            brand=brand,
-            category=category,
+            category_ids=category_ids,
             min_price=min_price,
             max_price=max_price,
             in_stock_only=in_stock_only,
@@ -276,14 +340,15 @@ class BackendProductCatalog:
         self,
         candidates: list[ProductEvidence],
         *,
+        limit: int,
         brand: str | None,
-        category: str | None,
+        category_ids: tuple[UUID, ...],
         min_price: int | None,
         max_price: int | None,
         in_stock_only: bool,
     ) -> list[ProductEvidence]:
         if min_price is None and max_price is None and not in_stock_only:
-            return candidates
+            return candidates[:limit]
         results = []
         for candidate in candidates:
             body = await self._get(f"/products/{candidate.product_id}")
@@ -293,13 +358,15 @@ class BackendProductCatalog:
                 body,
                 expected_id=candidate.product_id,
                 brand=brand,
-                category=category,
+                category_ids=category_ids,
                 min_price=min_price,
                 max_price=max_price,
                 in_stock_only=in_stock_only,
             )
             if item is not None:
                 results.append(item)
+                if len(results) == limit:
+                    break
         return results
 
     async def _hybrid_search_and_ground(
@@ -308,7 +375,7 @@ class BackendProductCatalog:
         lexical_q: str,
         semantic_q: str,
         brand: str | None,
-        category: str | None,
+        category_ids: tuple[UUID, ...],
         min_price: int | None,
         max_price: int | None,
         in_stock_only: bool,
@@ -320,8 +387,6 @@ class BackendProductCatalog:
         base_filter_params: dict[str, QueryParamScalar] = {"size": window_size}
         if brand and brand.strip():
             base_filter_params["brand"] = brand.strip()
-        if category and category.strip():
-            base_filter_params["category"] = category.strip()
         if min_price is not None:
             base_filter_params["minPrice"] = min_price
         if max_price is not None:
@@ -330,41 +395,24 @@ class BackendProductCatalog:
             base_filter_params["inStockOnly"] = True
 
         async def dispatch() -> list[ProductEvidence]:
-            bm25_ids: list[UUID] = []
-            knn_ids: list[UUID] = []
-
-            if not lexical_q and not semantic_q:
-                data = await self._get_from(
-                    search_base_url, "/products/search", base_filter_params
-                )
-                bm25_ids = self._parse_search_hit_ids(data)
-
-            # 1. BM25 Branch (Elasticsearch BoolQuery + Filters)
+            branches = []
             if lexical_q:
-                bm25_params: dict[str, QueryParamScalar] = {
-                    **base_filter_params,
-                    "q": lexical_q,
-                }
-                bm25_data = await self._get_from(
-                    search_base_url, "/products/search", bm25_params
-                )
-                bm25_ids = self._parse_search_hit_ids(bm25_data)
-
-            # 2. kNN Branch (bge-m3 1024d + Elasticsearch KnnSearch)
+                branches.append({"q": lexical_q})
             if semantic_q:
-                knn_params: dict[str, QueryParamScalar] = {
-                    **base_filter_params,
-                    "semanticQuery": semantic_q,
-                }
-                knn_data = await self._get_from(
-                    search_base_url, "/products/search", knn_params
-                )
-                knn_ids = self._parse_search_hit_ids(knn_data)
+                branches.append({"semanticQuery": semantic_q})
+            ranked_lists = []
+            for category_id in category_ids or (None,):
+                scoped = dict(base_filter_params)
+                if category_id is not None:
+                    scoped["categoryId"] = str(category_id)
+                for branch in branches or [{}]:
+                    data = await self._get_from(
+                        search_base_url, "/products/search", {**scoped, **branch}
+                    )
+                    ranked_lists.append(self._parse_search_hit_ids(data))
 
-            # 3. RRF in Python (Merge ranked lists by product_id)
-            fused_ids = rrf_fuse_by_product_id(bm25_ids, knn_ids)
+            fused_ids = rrf_fuse_by_product_id(*ranked_lists)
 
-            # 4. Catalog Grounding -> ReAct Agent
             grounded: list[ProductEvidence] = []
             for pid in fused_ids:
                 if len(grounded) >= limit:
@@ -379,7 +427,7 @@ class BackendProductCatalog:
                     max_price=max_price,
                     in_stock_only=in_stock_only,
                     brand=brand,
-                    category=category,
+                    category_ids=category_ids,
                 )
                 if evidence is not None:
                     grounded.append(evidence)
@@ -387,28 +435,11 @@ class BackendProductCatalog:
             if grounded:
                 return grounded
 
-            # Fallback to catalog-service listing if ES index is empty/unindexed
-            fallback_params: dict[str, QueryParamScalar] = {"limit": limit}
-            if lexical_q or semantic_q:
-                fallback_params["keyword"] = lexical_q or semantic_q
-            if min_price is not None:
-                fallback_params["minPrice"] = min_price
-            if max_price is not None:
-                fallback_params["maxPrice"] = max_price
-            cat_body = await self._get("/products", fallback_params)
-            results = self._parse_catalog_summary_page(
-                cat_body,
+            return await self._search_catalog_listing(
+                keyword=lexical_q or semantic_q,
                 limit=limit,
                 brand=brand,
-                category=category,
-                min_price=min_price,
-                max_price=max_price,
-                in_stock_only=in_stock_only,
-            )
-            return await self._ground_filtered_candidates(
-                results,
-                brand=brand,
-                category=category,
+                category_ids=category_ids,
                 min_price=min_price,
                 max_price=max_price,
                 in_stock_only=in_stock_only,
@@ -439,7 +470,7 @@ class BackendProductCatalog:
         max_price: int | None = None,
         in_stock_only: bool = False,
         brand: str | None = None,
-        category: str | None = None,
+        category_ids: tuple[UUID, ...] = (),
     ) -> ProductEvidence | None:
         row = Detail.model_validate(body)
         if row.id != expected_id or any(v.product_id != row.id for v in row.variants):
@@ -451,10 +482,7 @@ class BackendProductCatalog:
             or brand.strip().casefold() not in row.brand_name.casefold()
         ):
             return None
-        if category and (
-            not row.category_name
-            or category.strip().casefold() not in row.category_name.casefold()
-        ):
+        if category_ids and row.category_id not in category_ids:
             return None
         active_variants = [v for v in row.variants if v.status == "ACTIVE"]
         matching_variants = [
@@ -487,7 +515,7 @@ class BackendProductCatalog:
         *,
         limit: int,
         brand: str | None = None,
-        category: str | None = None,
+        category_ids: tuple[UUID, ...] = (),
         min_price: int | None = None,
         max_price: int | None = None,
         in_stock_only: bool = False,
@@ -507,10 +535,7 @@ class BackendProductCatalog:
                     or brand.strip().casefold() not in row.brand_name.casefold()
                 ):
                     continue
-                if category and (
-                    not row.category_name
-                    or category.strip().casefold() not in row.category_name.casefold()
-                ):
+                if category_ids and row.category_id not in category_ids:
                     continue
                 if (
                     in_stock_only
@@ -622,8 +647,12 @@ class BackendProductCatalog:
             product_id=identifier,
             name=name,
             price_vnd=price,
-            seo_name=seo_name.strip() if isinstance(seo_name, str) and seo_name.strip() else None,
-            image_url=image_url.strip() if isinstance(image_url, str) and image_url.strip() else None,
+            seo_name=seo_name.strip()
+            if isinstance(seo_name, str) and seo_name.strip()
+            else None,
+            image_url=image_url.strip()
+            if isinstance(image_url, str) and image_url.strip()
+            else None,
             specifications=specifications,
             evidence_ref=f"catalog:product:{identifier}:{canonical_hash(snapshot)}",
             retrieved_at=datetime.now(UTC),

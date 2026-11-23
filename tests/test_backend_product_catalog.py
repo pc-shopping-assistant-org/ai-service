@@ -2,9 +2,17 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from test_react_tools import context
 
 from ai_service.application.errors import BackendUnavailableError
-from ai_service.capabilities.assistant.react.contracts import SearchCatalogArgs
+from ai_service.capabilities.assistant.react.contracts import (
+    SearchCatalogArgs,
+    ToolCall,
+)
+from ai_service.capabilities.assistant.react.tools import ToolDispatcher
+from ai_service.capabilities.pc_builder.application.service import (
+    PCBuildApplicationService,
+)
 from ai_service.infrastructure.commerce.product_catalog import (
     BackendProductCatalog,
     rrf_fuse_by_product_id,
@@ -347,18 +355,136 @@ def test_rrf_fuse_by_product_id_boosts_items_matching_both_bm25_and_knn():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("code", "display_name", "search_returns_hits"),
+    [
+        ("MONITOR", "Màn hình", True),
+        ("HEADSET", "Tai nghe", False),
+        ("GPU", "Card đồ họa", True),
+    ],
+)
+async def test_model_category_code_uses_catalog_ids(
+    code, display_name, search_returns_hits
+):
+    category_id, second_id, unrelated_id = [str(uuid4()) for _ in range(3)]
+    categories = [
+        {
+            "id": category_id,
+            "name": display_name,
+            "hardwareType": code,
+            "status": "ACTIVE",
+        },
+        {
+            "id": second_id,
+            "name": f"{display_name} gaming",
+            "hardwareType": code,
+            "status": "ACTIVE",
+        },
+    ]
+    products = {
+        identity: {
+            "id": str(uuid4()),
+            "name": row["name"],
+            "categoryId": identity,
+            "categoryName": row["name"],
+            "status": "ACTIVE",
+            "minPrice": 2_000_000,
+            "maxPrice": 2_000_000,
+        }
+        for row in [*categories, {"id": unrelated_id, "name": "Sai danh mục"}]
+        for identity in [row["id"]]
+    }
+    details = {
+        row["id"]: {
+            **row,
+            "variants": [
+                {
+                    "id": str(uuid4()),
+                    "productId": row["id"],
+                    "status": "ACTIVE",
+                    "price": row["minPrice"],
+                    "quantity": 2,
+                }
+            ],
+        }
+        for row in products.values()
+    }
+    modes = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/categories":
+            data = categories
+        elif path in {"/products/search", "/products"}:
+            identity = request.url.params.get("categoryId")
+            modes.append((path, identity))
+            row = products.get(identity)
+            if path == "/products/search":
+                # Simulate an index hit whose current category was changed in catalog.
+                items = (
+                    [row, products[unrelated_id]] if row and search_returns_hits else []
+                )
+                data = {"content": items}
+            else:
+                data = {"items": [row] if row else []}
+        else:
+            data = details[path.rsplit("/", 1)[-1]]
+        return httpx.Response(
+            200, json={"data": data, "message": "SUCCESS", "errors": []}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        catalog = BackendProductCatalog(
+            client, "https://catalog.test", Budget(), "https://search.test"
+        )
+        dispatcher = ToolDispatcher(catalog, PCBuildApplicationService())
+        result = await dispatcher.execute(
+            ToolCall(
+                call_id="search",
+                name="search_catalog",
+                arguments={"category": code, "max_price": 3_000_000},
+            ),
+            context(),
+        )
+        invalid = await dispatcher.execute(
+            ToolCall(
+                call_id="invalid",
+                name="search_catalog",
+                arguments={"category": "UNKNOWN_CODE"},
+            ),
+            context(),
+        )
+
+    assert result.status == "COMPLETED"
+    assert {str(row.product_id) for row in result.result.products} == {
+        products[category_id]["id"],
+        products[second_id]["id"],
+    }
+    assert set(modes) == {
+        ("/products/search", identity) for identity in (category_id, second_id)
+    } | (
+        set()
+        if search_returns_hits
+        else {("/products", identity) for identity in (category_id, second_id)}
+    )
+    assert invalid.status == "REJECTED" and invalid.error == "CATEGORY_UNRESOLVED"
+
+
+@pytest.mark.asyncio
 async def test_hybrid_search_runs_bm25_and_knn_fuses_via_rrf_and_grounds_against_catalog():
     id_bm25_top = uuid4()
     id_hybrid_winner = uuid4()
     id_inactive = uuid4()
     budget = Budget()
     search_requests = []
+    category_id = str(uuid4())
 
     details = {
         str(id_bm25_top): {
             "id": str(id_bm25_top),
             "name": "Tai nghe Razer BlackShark V2 X",
             "categoryName": "Tai nghe",
+            "categoryId": category_id,
             "status": "ACTIVE",
             "specifications": {"connection": "3.5mm"},
             "variants": [
@@ -375,6 +501,7 @@ async def test_hybrid_search_runs_bm25_and_knn_fuses_via_rrf_and_grounds_against
             "id": str(id_hybrid_winner),
             "name": "Tai nghe Sony WH-CH520",
             "categoryName": "Tai nghe",
+            "categoryId": category_id,
             "status": "ACTIVE",
             "specifications": {"battery": "50h"},
             "variants": [
@@ -397,6 +524,22 @@ async def test_hybrid_search_runs_bm25_and_knn_fuses_via_rrf_and_grounds_against
     }
 
     def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/categories":
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "id": category_id,
+                            "name": "Tai nghe",
+                            "hardwareType": "HEADSET",
+                            "status": "ACTIVE",
+                        }
+                    ],
+                    "message": "SUCCESS",
+                    "errors": [],
+                },
+            )
         if request.url.host == "search.test":
             params = dict(request.url.params)
             search_requests.append(params)
@@ -468,4 +611,4 @@ async def test_hybrid_search_runs_bm25_and_knn_fuses_via_rrf_and_grounds_against
         search_requests[1]["semanticQuery"]
         == "tai nghe không dây pin trâu làm việc dưới 2 triệu"
     )
-    assert budget.calls == ["TOOL_IO"] * 5
+    assert budget.calls == ["TOOL_IO"] * 6
