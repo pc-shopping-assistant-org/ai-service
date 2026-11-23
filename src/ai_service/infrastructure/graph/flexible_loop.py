@@ -70,6 +70,8 @@ from ai_service.infrastructure.graph.flexible_state import (
 )
 from ai_service.infrastructure.graph.tool_batches import execute_tool_batch
 
+_CORE_BUILD_SUBJECTS = frozenset({"SETUP", "WORKLOAD"})
+
 
 @dataclass(frozen=True, slots=True)
 class LoopNodes:
@@ -119,6 +121,7 @@ def build_loop_nodes(
         if (
             runtime.publication
             and runtime.publication.dialogue_continuation
+            and state.get("phase") != ReActPhase.REQUIREMENTS_UNCHANGED.code
             and (runtime.current(state).requirements == runtime.trusted.requirements)
         ):
             return {}
@@ -126,6 +129,26 @@ def build_loop_nodes(
             return {}
         ctx = runtime.current(state)
         tasks_for_turn = runtime.registered_tasks(state)
+        entries = runtime.records(state)
+        run_entries = [entry for entry in entries if entry.origin_run_id == ctx.run_id]
+        decision_action = (
+            decode_flexible_decision(state["decision"]).action
+            if state.get("decision")
+            else None
+        )
+        proposed_core_build = (
+            not tasks_for_turn
+            and not run_entries
+            and state.get("phase") == ReActPhase.REQUIREMENTS_ACCEPTED.code
+            and isinstance(decision_action, ProposeRequirementsAction)
+            and any(
+                item.subject in _CORE_BUILD_SUBJECTS
+                for item in decision_action.draft.items
+            )
+        )
+        build_only_tasks = bool(tasks_for_turn) and all(
+            task.kind == "BUILD" for task in tasks_for_turn
+        )
         can_clarify = (
             not ctx.read_only_turn
             and ctx.execution_allowed
@@ -133,17 +156,24 @@ def build_loop_nodes(
             and not state.get("pending_proposal")
             and not state.get("pending_draft")
             and not runtime.unresolved_tasks(state)
-            and bool(tasks_for_turn)
-            and all(task.kind == "BUILD" for task in tasks_for_turn)
             and (
-                state.get("phase") == ReActPhase.REQUIREMENTS_ACCEPTED.code
+                proposed_core_build
                 or (
-                    runtime.publication is not None
-                    and runtime.publication.confirmation is not None
+                    build_only_tasks
+                    and (
+                        state.get("phase")
+                        in {
+                            ReActPhase.REQUIREMENTS_ACCEPTED.code,
+                            ReActPhase.REQUIREMENTS_UNCHANGED.code,
+                        }
+                        or (
+                            runtime.publication is not None
+                            and runtime.publication.confirmation is not None
+                        )
+                    )
                 )
             )
         )
-        entries = runtime.records(state)
         should_build = (
             not ctx.read_only_turn
             and ctx.execution_allowed
