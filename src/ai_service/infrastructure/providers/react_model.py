@@ -62,6 +62,7 @@ from ai_service.capabilities.assistant.source_quotes import (
 from ai_service.infrastructure.providers.failures import invoke_provider
 from ai_service.infrastructure.providers.model_stream import (
     BoundModel,
+    StreamingModel,
     TextStreamSink,
     stream_public_text,
 )
@@ -527,7 +528,7 @@ class NativeFlexibleModel:
         response = await invoke_provider(
             lambda: (
                 stream_public_text(bound, messages, self.text_sink)
-                if self.text_sink is not None
+                if self.text_sink is not None and isinstance(bound, StreamingModel)
                 else bound.ainvoke(messages)
             )
         )
