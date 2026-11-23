@@ -112,3 +112,4 @@ class RunActivityBroker:
     def finish(self, run_id: UUID) -> None:
         self._history.pop(run_id, None)
         self._subscribers.pop(run_id, None)
+
