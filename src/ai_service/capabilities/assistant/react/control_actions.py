@@ -106,17 +106,6 @@ def allowed_controls(
         context is None or context.pending is None or context.pending.proposal is None
     ):
         controls.append(ControlName.PROPOSE_REQUIREMENTS)
-    if (context is None or not context.read_only_turn) and (
-        context is None
-        or context.completion_requirements
-        or context.task_registration_open
-        or context.pending
-        or context.requirements.requirements
-        or context.requirements.goals
-        or context.requirements.available_resources
-        or (repair and ActionKind.ASK_CLARIFICATION in repair.allowed_next_actions)
-    ):
-        controls.append(ControlName.ASK_CLARIFICATION)
     if records or (context and context.saved_build):
         controls.append(ControlName.SUBMIT_RESULT)
     if repair:

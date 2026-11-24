@@ -188,7 +188,6 @@ async def test_qwen_plugs_into_existing_native_react_adapter(with_draft_sink):
         assert [tool["function"]["name"] for tool in payload["tools"]] == [
             "search_web",
             "propose_requirements",
-            "ask_clarification",
         ]
         return httpx.Response(
             200,

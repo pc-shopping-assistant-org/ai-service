@@ -89,7 +89,7 @@ REACT_SYSTEM_PROMPT = (
     "natural exact catalog names; never a bare product/price dump or raw URLs). "
     "If build_result is already in context, "
     "submit it with submit_result. Do not substitute generic advice "
-    "for a requested build. Use ask_clarification when the requested PC build needs more input. "
+    "for a requested build. Ask for missing required input. "
     "A core build requires budget and workload. Brand, appearance and paid accessories "
     "are optional; do not delay a requested build to ask about them. "
     "Do not end with a promise to search or build later: work stops when you reply. "

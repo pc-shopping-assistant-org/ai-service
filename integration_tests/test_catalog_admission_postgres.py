@@ -50,12 +50,9 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
             if message == "Chào bạn":
                 return AIMessage(content="Chào bạn! Tôi có thể giúp chọn linh kiện PC.")
             if message == "Build PC":
-                assert "ask_clarification" in self.tools
+                assert "ask_clarification" not in self.tools
                 return AIMessage(
-                    content="",
-                    tool_calls=[
-                        {"id": "clarify", "name": "ask_clarification", "args": {}}
-                    ],
+                    content="Ngân sách tối đa của bạn cho bộ PC là bao nhiêu?"
                 )
             if message == "32GB có cần thiết không?":
                 context = json.loads(
@@ -191,10 +188,10 @@ async def test_build_clarification_and_unit_consent_publish_without_hardware_io(
                 hello = await turn("Chào bạn", 0, expected_status="COMPLETED")
                 assert hello["flexible"]["task_outcomes"] == []
                 assert "Chào bạn!" in hello["flexible"]["answer"]
-            first = await turn("Build PC", revision)
+            first = await turn("Build PC", revision, expected_status="COMPLETED")
             assert "Ngân sách" in first["flexible"]["answer"]
-            assert first["flexible"]["task_outcomes"][0]["kind"] == "BUILD"
             budget = await turn("30 triệu", revision + 1)
+            assert budget["flexible"]["task_outcomes"][0]["kind"] == "BUILD"
             assert "dùng PC chủ yếu" in budget["flexible"]["answer"]
             assert "ngân sách" not in budget["flexible"]["answer"].lower()
             second = await turn("RAM 32", revision + 2)
