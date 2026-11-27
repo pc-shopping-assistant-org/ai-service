@@ -23,19 +23,7 @@ from ai_service.infrastructure.providers.react_model import (
 
 
 def clarification():
-    return AIMessage(
-        content="",
-        tool_calls=[
-            {
-                "id": "clarify",
-                "name": "ask_clarification",
-                "args": {
-                    "question": "Ngân sách bao nhiêu?",
-                    "missing_fields": ["budget"],
-                },
-            }
-        ],
-    )
+    return AIMessage(content="Ngân sách bao nhiêu?")
 
 
 @pytest.mark.asyncio
@@ -129,15 +117,15 @@ async def test_native_call_maps_to_one_v2_action_with_provider_signature(name):
 
 @pytest.mark.asyncio
 async def test_clarification_without_tools_and_structured_repair():
-    provider = Provider(clarification())
+    provider = Provider(AIMessage(content="Ngân sách bao nhiêu?"))
     feedback = RepairFeedback(
         code="TASK_INCOMPLETE",
         missing_fields=["budget"],
-        allowed_next_actions=[ActionKind.ASK_CLARIFICATION],
+        allowed_next_actions=[ActionKind.RESPOND, ActionKind.PROPOSE_REQUIREMENTS],
     )
     decision = await NativeFlexibleModel(provider).decide("Build PC", [], (), feedback)
-    assert decision.action.question == "Ngân sách bao nhiêu?"
-    assert [tool["name"] for tool in provider.model.tools] == ["ask_clarification"]
+    assert decision.action.text == "Ngân sách bao nhiêu?"
+    assert [tool["name"] for tool in provider.model.tools] == ["propose_requirements"]
     assert feedback.model_dump_json() in provider.model.messages[0].content
 
 
