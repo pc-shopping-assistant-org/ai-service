@@ -124,7 +124,7 @@ class EvidenceResultInput(Contract):
     )
     task_index: StrictInt | None = Field(default=0, ge=0, lt=8)
     text: Text | None = Field(default=None, max_length=8000)
-    explanation_refs: list[Text] | None = Field(default=None, max_length=20)
+    explanation_refs: list[Text] | None = Field(default=None, max_length=100)
 
 
 class ResultInput(EvidenceResultInput):

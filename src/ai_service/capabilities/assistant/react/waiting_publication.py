@@ -57,6 +57,27 @@ from .outcomes import TaskOutcome
 from .phases import ReActPhase
 from .publication import bind_publication_context, snapshot_for_requirements
 
+_PENDING_REASON_MESSAGES: dict[str, str] = {
+    "QUANTITY_UNIT_REQUIRED": "Vui lòng xác nhận đơn vị đo (ví dụ: GB, TB, VND...) cho thông số bạn vừa nêu.",
+    "QUANTITY_EVIDENCE_MISMATCH": "Thông số số lượng bạn nêu chưa rõ đơn vị hoặc chưa khớp. Bạn vui lòng ghi rõ lại kèm đơn vị (ví dụ: 32GB RAM, 25 triệu VND).",
+    "QUANTITY_EVIDENCE_AMBIGUOUS": "Thông số số lượng đang có nhiều cách hiểu. Bạn vui lòng nêu rõ một mức cụ thể hơn.",
+    "AMBIGUOUS_REFERENCE": "Có nhiều mẫu linh kiện khớp với tên bạn nêu. Bạn vui lòng chọn đúng mẫu mong muốn.",
+    "AMBIGUOUS_PART": "Có nhiều mẫu linh kiện khớp với tên bạn nêu. Bạn vui lòng chọn đúng mẫu mong muốn.",
+    "PART_NOT_FOUND": "Mình chưa tìm thấy mẫu linh kiện khớp chính xác trong catalog hiện tại. Bạn có thể chọn mẫu khác không?",
+    "REPLACEMENT_TARGET_REQUIRED": "Bạn muốn thay đổi yêu cầu nào đã đặt trước đó? Vui lòng nêu rõ để mình cập nhật.",
+}
+_DEFAULT_PENDING_MESSAGE = "Mình cần bạn làm rõ thêm thông tin yêu cầu trước khi tiếp tục."
+
+
+def _format_pending_resolution_message(reasons: list[str]) -> str:
+    messages = list(
+        dict.fromkeys(
+            _PENDING_REASON_MESSAGES.get(reason, _DEFAULT_PENDING_MESSAGE)
+            for reason in reasons
+        )
+    )
+    return " ".join(messages) if messages else _DEFAULT_PENDING_MESSAGE
+
 
 class PreparedWaitingPublication(Contract):
     schema_version: StrictInt = Field(default=2, ge=2, le=2)
@@ -291,9 +312,9 @@ def prepare_waiting_publication(
             snapshot=snapshot,
             task_outcomes=task_outcomes,
             pending_resolution=actual,
-            assistant_message="Cần làm rõ: "
-            + ", ".join(item.reason for item in resolution.pending)
-            + ".",
+            assistant_message=_format_pending_resolution_message(
+                [item.reason for item in resolution.pending]
+            ),
         )
     proposal = PendingRequirementProposal.model_validate(values.get("pending_proposal"))
     if (

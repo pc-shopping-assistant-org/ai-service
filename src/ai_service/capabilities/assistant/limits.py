@@ -7,9 +7,10 @@ MAX_PUBLIC_PRODUCTS = 20
 MAX_DIALOGUE_TURNS = 4
 MAX_DIALOGUE_CHARS = 12_000
 MAX_CLARIFICATION_FIELDS = 20
-# Eight-part research needs up to sixteen external requests, plus tool admission
-# and catalog/model-adjacent reads. Persist this bounded allowance for each new run.
-DEFAULT_TOOL_IO_LIMIT = 48
+# Eight-part research needs up to sixteen external requests, plus parallel hybrid
+# catalog searches (each grounding up to 10-20 products) and build catalog scans.
+# Persist this bounded allowance for each new run.
+DEFAULT_TOOL_IO_LIMIT = 128
 
 # Complete canonical scans, including non-optimizer products, remain bounded.
 MAX_HARDWARE_CATALOG_ROWS = 3_000

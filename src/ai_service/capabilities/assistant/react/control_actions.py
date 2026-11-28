@@ -3,9 +3,12 @@
 from enum import StrEnum
 
 from ai_service.application.ports.web_search import WebPageReadStatus
+from ai_service.capabilities.assistant.requirements.contracts import QuantityValue
 from ai_service.capabilities.assistant.requirements.diagnostics import CompilationReason
 from ai_service.capabilities.assistant.requirements.units import (
+    UnresolvedQuantityValue,
     is_standalone_money_amount,
+    unresolved_amount,
 )
 from ai_service.capabilities.assistant.stateful_contracts import Contract
 from ai_service.capabilities.pc_builder.schemas import UseCaseProfile
@@ -126,24 +129,52 @@ def normalize_control(
     name = ControlName(call.name)
     if name == ControlName.PROPOSE_REQUIREMENTS:
         quoted = RequirementProposalInput.model_validate(call.arguments)
-        draft = quoted.quoted().bind(quoted.source_text or message)
+        source_text = quoted.source_text or message
+        draft = quoted.quoted().bind(source_text)
+        # If the model guessed a unit on a unitless quote (e.g. "RAM 32" -> 32 GB),
+        # keep it unresolved so the user gets an interactive unit prompt instead of
+        # a QUANTITY_EVIDENCE_MISMATCH failure.
+        for item in draft.items:
+            if (
+                isinstance(item.value, QuantityValue)
+                and unresolved_amount(source_text[item.start : item.end])
+                == item.value.amount
+            ):
+                item.value = UnresolvedQuantityValue(amount=item.value.amount)
         # Existing IDs are globally unique; their trusted collection determines
         # scope, even when the provider repeats the default REQUIREMENT target.
         if context is not None:
-            # A bare amount answers the server's pending spending-cap question.
+            standalone_money = (
+                quoted.source_text is None and is_standalone_money_amount(message)
+            )
+            # A bare amount answers either the server's pending spending-cap question
+            # or a plain-text budget question when no budget has been admitted yet.
             pending_cap = (
                 set(context.pending.missing_fields)
-                if context.pending
-                and quoted.source_text is None
-                and is_standalone_money_amount(message)
+                if context.pending and standalone_money
                 else set()
+            )
+            has_budget = any(
+                row.subject == "SETUP" and row.predicate == "budget"
+                for row in (
+                    *context.requirements.goals.values(),
+                    *context.requirements.requirements.values(),
+                )
             )
             for item in draft.items:
                 if (
                     item.subject == "SETUP"
                     and item.operation == "SET"
                     and item.operator == "EQ"
-                    and PENDING_SPENDING_CAPS.get(item.predicate) in pending_cap
+                    and (
+                        PENDING_SPENDING_CAPS.get(item.predicate) in pending_cap
+                        or (
+                            standalone_money
+                            and context.pending is None
+                            and item.predicate == "budget"
+                            and not has_budget
+                        )
+                    )
                 ):
                     item.operator = "LTE"
                 if item.target_id in context.requirements.goals:
