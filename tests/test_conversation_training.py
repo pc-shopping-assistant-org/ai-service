@@ -3,14 +3,12 @@
 import json
 from pathlib import Path
 
-import pytest
 from langchain_core.messages import convert_to_messages
 from test_react_tools import context
 from test_training_dataset import dataset, sample
 from test_training_evaluation import run_config
 
 from ai_service.capabilities.assistant.react.actions import (
-    AskClarificationAction,
     CallToolAction,
     FinalAnswerAction,
     action_calls,
@@ -84,35 +82,27 @@ def test_response_exports_plain_text_and_evaluates_with_live_protocol(tmp_path):
     assert report["cases"][0]["matches_authored_target"] is True
 
 
-@pytest.mark.parametrize("kind", ["ASK_CLARIFICATION", "PROPOSE_REQUIREMENTS"])
-def test_control_targets_export_native_calls_matching_serving_schema(tmp_path, kind):
+def test_control_targets_export_native_calls_matching_serving_schema(tmp_path):
     trusted = context()
     trusted.completion_requirements = [
         CompletionRequirement(kind="BUILD", constraints_revision=0)
     ]
-    action = (
-        {
-            "kind": kind,
-            "question": "Bạn có ngân sách bao nhiêu?",
-            "missing_fields": ["BUDGET_REQUIRED"],
-        }
-        if kind == "ASK_CLARIFICATION"
-        else {
-            "kind": kind,
-            "source_text": "RAM 32GB",
-            "draft": {
-                "items": [
-                    {
-                        "subject": "RAM",
-                        "predicate": "capacity",
-                        "start": 0,
-                        "end": 8,
-                        "value": {"kind": "QUANTITY", "amount": 32, "unit": "GB"},
-                    }
-                ]
-            },
-        }
-    )
+    kind = "PROPOSE_REQUIREMENTS"
+    action = {
+        "kind": kind,
+        "source_text": "RAM 32GB",
+        "draft": {
+            "items": [
+                {
+                    "subject": "RAM",
+                    "predicate": "capacity",
+                    "start": 0,
+                    "end": 8,
+                    "value": {"kind": "QUANTITY", "amount": 32, "unit": "GB"},
+                }
+            ]
+        },
+    }
     loaded = load_dataset(
         dataset(
             tmp_path,
@@ -129,14 +119,11 @@ def test_control_targets_export_native_calls_matching_serving_schema(tmp_path, k
     function = target["tool_calls"][0]["function"]
     assert function["name"] == kind.lower()
     arguments = json.loads(function["arguments"])
-    if kind == "PROPOSE_REQUIREMENTS":
-        assert arguments["items"][0]["quote"] == "RAM 32GB"
-        assert arguments["items"][0]["value"] == 32
-        assert arguments["items"][0]["unit"] == "GB"
-        assert "start" not in arguments["items"][0]
-        assert "end" not in arguments["items"][0]
-    else:
-        assert arguments == {}
+    assert arguments["items"][0]["quote"] == "RAM 32GB"
+    assert arguments["items"][0]["value"] == 32
+    assert arguments["items"][0]["unit"] == "GB"
+    assert "start" not in arguments["items"][0]
+    assert "end" not in arguments["items"][0]
     _, serving_schemas = build_react_request(
         record.message,
         snapshot.records,
@@ -148,12 +135,7 @@ def test_control_targets_export_native_calls_matching_serving_schema(tmp_path, k
         entry["function"] for entry in example["request"]["tools"]
     ] == serving_schemas
     parsed = parse_export(example, snapshot)
-    expected = (
-        AskClarificationAction()
-        if kind == "ASK_CLARIFICATION"
-        else record.target.action
-    )
-    assert parsed is not None and parsed.action == expected
+    assert parsed is not None and parsed.action == record.target.action
 
 
 def _expected_roundtrip_action(action):

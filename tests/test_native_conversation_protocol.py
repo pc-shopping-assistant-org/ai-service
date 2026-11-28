@@ -64,10 +64,10 @@ def test_model_request_exposes_small_native_controls_without_decision_envelope()
     assert {
         "search_catalog",
         "propose_requirements",
-        "ask_clarification",
         "submit_result",
     } <= by_name.keys()
-    for name in ("propose_requirements", "ask_clarification", "submit_result"):
+    assert "ask_clarification" not in by_name
+    for name in ("propose_requirements", "submit_result"):
         schema = json.dumps(by_name[name]["parameters"])
         assert "FlexibleDecision" not in schema
         assert '"outcome"' not in schema
@@ -136,32 +136,21 @@ def test_bare_budget_reply_uses_pending_spending_cap(message, expected_operator)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("provider_name", ["openai", "gemini"])
-@pytest.mark.parametrize("control", ["ask_clarification", "propose_requirements"])
-async def test_native_control_call_normalizes_to_internal_action(
-    provider_name, control
-):
+async def test_native_control_call_normalizes_to_internal_action(provider_name):
     trusted = context()
-    if control == "ask_clarification":
-        trusted.completion_requirements = [
-            CompletionRequirement(kind="BUILD", constraints_revision=0)
-        ]
-        arguments = {
-            "question": "Bạn có ngân sách bao nhiêu?",
-            "missing_fields": ["BUDGET_REQUIRED"],
-        }
-    else:
-        arguments = {
-            "source_text": "RAM 32GB",
-            "items": [
-                {
-                    "subject": "RAM",
-                    "predicate": "capacity",
-                    "quote": "RAM 32GB",
-                    "value": 32,
-                    "unit": "GB",
-                }
-            ],
-        }
+    control = "propose_requirements"
+    arguments = {
+        "source_text": "RAM 32GB",
+        "items": [
+            {
+                "subject": "RAM",
+                "predicate": "capacity",
+                "quote": "RAM 32GB",
+                "value": 32,
+                "unit": "GB",
+            }
+        ],
+    }
     before = trusted.model_dump(mode="json")
     provider = Provider(
         AIMessage(
@@ -175,12 +164,8 @@ async def test_native_control_call_normalizes_to_internal_action(
     )
     assert decision is not None
     assert decision.action.kind == control.upper()
-    if control == "ask_clarification":
-        assert decision.action.question == arguments["question"]
-        assert decision.action.missing_fields == arguments["missing_fields"]
-    else:
-        assert decision.action.draft.items[0].value.amount == 32
-        assert decision.action.source_text == "RAM 32GB"
+    assert decision.action.draft.items[0].value.amount == 32
+    assert decision.action.source_text == "RAM 32GB"
     assert trusted.model_dump(mode="json") == before
     assert "search_catalog" in {tool["name"] for tool in provider.model.tools}
 
@@ -281,8 +266,19 @@ async def test_selecting_build_ref_resolves_its_canonical_refs_before_explanatio
 @pytest.mark.asyncio
 async def test_multiple_control_calls_reject_entire_provider_response():
     call = {
-        "name": "ask_clarification",
-        "args": {"question": "Ngân sách?", "missing_fields": ["BUDGET_REQUIRED"]},
+        "name": "propose_requirements",
+        "args": {
+            "items": [
+                {
+                    "subject": "SETUP",
+                    "predicate": "budget",
+                    "operator": "LTE",
+                    "value": 20_000_000,
+                    "unit": "VND",
+                    "quote": "20 triệu",
+                }
+            ]
+        },
     }
     provider = Provider(
         AIMessage(
@@ -291,7 +287,7 @@ async def test_multiple_control_calls_reject_entire_provider_response():
         )
     )
     decision = await NativeFlexibleModel(provider).decide(
-        "Build PC", [], (ToolName.SEARCH_CATALOG,), None, context()
+        "Build PC 20 triệu", [], (ToolName.SEARCH_CATALOG,), None, context()
     )
     assert decision is None
 

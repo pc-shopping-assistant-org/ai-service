@@ -31,7 +31,7 @@ class RequirementInput(Contract):
     )
     predicate: str = Field(
         pattern=r"^[a-z][a-z0-9_]{0,63}$",
-        description="Property only: budget, use_case, capacity, media, brand, model, identity, scope. Never include the subject or spaces.",
+        description="Property only: budget, accessory_budget, use_case, capacity, media, brand, model, identity, selection, scope. Never include the subject or spaces.",
     )
     value: StrictInt | str | None = None
     unit: QuantityUnit | None = None

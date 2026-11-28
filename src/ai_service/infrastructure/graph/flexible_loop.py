@@ -420,6 +420,26 @@ def build_loop_nodes(
                         ["submit_result.results"],
                         next_actions=[ActionKind.FINAL_ANSWER],
                     )
+                if (
+                    not ctx.read_only_turn
+                    and ctx.execution_allowed
+                    and ctx.read_catalog_allowed
+                    and not state.get("pending_proposal")
+                    and not state.get("pending_draft")
+                    and any(task.kind == "BUILD" for task in ctx.completion_requirements)
+                ):
+                    loaded = (
+                        await runtime.load_catalog(state)
+                        if not ctx.catalog_ready and build_needs_catalog(ctx.requirements)
+                        else {}
+                    )
+                    merged = state | loaded if loaded else state
+                    ctx = runtime.current(merged) if loaded else ctx
+                    question = build_clarification(
+                        ctx.requirements, ctx.catalog, catalog_ready=ctx.catalog_ready
+                    )
+                    if question is not None:
+                        return loaded | wait_for_build_input(merged, question, decision)
                 return runtime.repair(state, "TASK_INCOMPLETE")
             return runtime.bounded(
                 state,
