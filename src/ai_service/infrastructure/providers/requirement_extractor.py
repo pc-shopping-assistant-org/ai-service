@@ -108,8 +108,11 @@ class NativeRequirementExtractor:
             ("system", prompt),
             ("human", json.dumps(payload, ensure_ascii=False)),
         ]
+        method = (
+            "function_calling" if self.provider.name == "gemini" else "json_schema"
+        )
         return await invoke_provider(
-            lambda: model.with_structured_output(schema, method="json_schema").ainvoke(
+            lambda: model.with_structured_output(schema, method=method).ainvoke(
                 messages
             )
         )
