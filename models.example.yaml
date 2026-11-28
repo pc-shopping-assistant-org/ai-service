@@ -11,7 +11,7 @@ models:
     model_name: gemini-2.5-flash
     api_key_env: AI_GEMINI_API_KEY
     max_output_tokens: 4096
-    timeout_seconds: 120
+    timeout_seconds: 60
     thinking:
       strategy: gemini_reasoning
       supported_modes: [off, low, medium, high]
@@ -23,7 +23,7 @@ models:
     model_name: gemini-3.1-flash-lite
     api_key_env: AI_GEMINI_API_KEY
     max_output_tokens: 4096
-    timeout_seconds: 120
+    timeout_seconds: 60
     thinking:
       strategy: gemini_reasoning
       supported_modes: [minimal, low, medium, high]

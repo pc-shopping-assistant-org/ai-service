@@ -397,6 +397,21 @@ def build_loop_nodes(
             )
             unresolved = runtime.unresolved_tasks(state)
             if unresolved and not continuing:
+                if (
+                    not ctx.read_only_turn
+                    and ctx.execution_allowed
+                    and ctx.read_catalog_allowed
+                    and not state.get("pending_proposal")
+                    and not state.get("pending_draft")
+                ):
+                    return wait_for_build_input(
+                        state,
+                        AskClarificationAction(
+                            question="Cần xác định rõ sản phẩm hoặc cấu hình để hoàn thành yêu cầu.",
+                            missing_fields=unresolved,
+                        ),
+                        decision,
+                    )
                 return runtime.repair(state, "TASK_INCOMPLETE", unresolved)
             try:
                 response = validate_response(

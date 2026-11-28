@@ -112,7 +112,7 @@ class ResultSelection(Contract):
     supporting_tool_call_ids: list[Text] = Field(default_factory=list, max_length=20)
     web_excerpts: list[WebExcerpt] = Field(default_factory=list, max_length=8)
     explanation: Text | None = Field(default=None, max_length=4000)
-    explanation_evidence_refs: list[Text] | None = Field(default=None, max_length=20)
+    explanation_evidence_refs: list[Text] | None = Field(default=None, max_length=100)
     review: ProductReview | None = None
 
 
@@ -123,6 +123,11 @@ class SubmitResults(Contract):
 
 
 def selected_answer(selection: ResultSelection) -> AnswerCandidate:
+    explanation_refs = (
+        selection.explanation_evidence_refs
+        if selection.explanation_evidence_refs
+        else selection.evidence_refs
+    )
     return AnswerCandidate(
         text=selection.text,
         evidence_refs=selection.evidence_refs,
@@ -131,11 +136,9 @@ def selected_answer(selection: ResultSelection) -> AnswerCandidate:
         review=selection.review,
         explanation=ConsultationExplanation(
             text=selection.explanation,
-            evidence_refs=selection.explanation_evidence_refs
-            if selection.explanation_evidence_refs is not None
-            else selection.evidence_refs,
+            evidence_refs=explanation_refs,
         )
-        if selection.explanation
+        if selection.explanation and explanation_refs
         else None,
     )
 
@@ -145,19 +148,51 @@ def resolve_result_selection(
 ) -> tuple[ResultSelection, list[ToolRecord]]:
     """Resolve model-selected calls into canonical evidence for every answer lane."""
     by_id = {record.call.call_id: record for record in records}
-    ids = [
-        cid
-        for cid in selection.supporting_tool_call_ids
-        if cid in by_id or not (selection.build_ref is not None or cid.startswith("build-"))
-    ]
+    by_name: dict[str, list[ToolRecord]] = {}
+    for record in records:
+        by_name.setdefault(record.call.name, []).append(record)
+    ids: list[str] = []
+    for cid in selection.supporting_tool_call_ids:
+        if cid in by_id:
+            ids.append(cid)
+        elif cid in by_name and len(by_name[cid]) == 1:
+            ids.append(by_name[cid][0].call.call_id)
+        elif not (selection.build_ref is not None or cid.startswith("build-")):
+            ids.append(cid)
     if (
         len(by_id) != len(records)
         or len(ids) != len(set(ids))
         or not set(ids) <= by_id.keys()
     ):
         raise ValueError("Submission requires canonical unique tool selections")
-    refs = set(selection.evidence_refs) | set(selection.explanation_evidence_refs or [])
-    if not ids and not refs and selection.build_ref is None:
+    build_by_uuid = {
+        str(record.result.result.build_ref): record.result.result.build_ref
+        for record in records
+        if record.result and isinstance(record.result.result, BuildResult)
+    }
+    normalized_refs = [
+        f"build:{ref}" if ref in build_by_uuid else ref
+        for ref in selection.evidence_refs
+    ]
+    normalized_explanation_refs = (
+        [
+            f"build:{ref}" if ref in build_by_uuid else ref
+            for ref in selection.explanation_evidence_refs
+        ]
+        if selection.explanation_evidence_refs is not None
+        else None
+    )
+    resolved_build_ref = selection.build_ref
+    if resolved_build_ref is None:
+        matched_builds = {
+            build_by_uuid[ref[6:]]
+            for ref in normalized_refs
+            if ref.startswith("build:") and ref[6:] in build_by_uuid
+        }
+        if len(matched_builds) == 1:
+            resolved_build_ref = next(iter(matched_builds))
+    refs = set(normalized_refs) | set(normalized_explanation_refs or [])
+    if not ids and not refs and resolved_build_ref is None:
         # One completed canonical operation has no selection ambiguity. Final
         # task/identity validation still decides whether it fulfills this request.
         candidates = [
@@ -187,18 +222,25 @@ def resolve_result_selection(
             or refs.intersection(record.result.evidence_refs)
             or (
                 isinstance(record.result.result, BuildResult)
-                and record.result.result.build_ref == selection.build_ref
+                and record.result.result.build_ref == resolved_build_ref
             )
         )
     ]
     # Selecting a canonical result by call ID/build ref also selects its evidence.
     # Do not require the model to copy the same reference into a second field.
+    updates: dict[str, object] = {}
+    if ids != selection.supporting_tool_call_ids:
+        updates["supporting_tool_call_ids"] = ids
+    if normalized_refs != selection.evidence_refs:
+        updates["evidence_refs"] = normalized_refs
+    if normalized_explanation_refs != selection.explanation_evidence_refs:
+        updates["explanation_evidence_refs"] = normalized_explanation_refs
+    if resolved_build_ref != selection.build_ref:
+        updates["build_ref"] = resolved_build_ref
     resolved_selection = (
-        selection
-        if ids == selection.supporting_tool_call_ids
-        else selection.model_copy(update={"supporting_tool_call_ids": ids})
+        selection.model_copy(update=updates) if updates else selection
     )
-    if not selection.evidence_refs and any(
+    if not resolved_selection.evidence_refs and any(
         record.result
         and isinstance(
             record.result.result,

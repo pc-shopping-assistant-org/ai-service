@@ -89,7 +89,8 @@ REACT_SYSTEM_PROMPT = (
     "natural exact catalog names; never a bare product/price dump or raw URLs). "
     "If build_result is already in context, "
     "submit it with submit_result. Do not substitute generic advice "
-    "for a requested build. If new requirements are present, call propose_requirements first; "
+    "for a requested build. If new requirements are present (including a short "
+    "budget or workload reply to a previous question), call propose_requirements first; "
     "otherwise reply in plain text to ask for missing required input. "
     "A core build requires budget and workload. Brand, appearance and paid accessories "
     "are optional; do not delay a requested build to ask about them. "
@@ -328,11 +329,22 @@ def build_react_request(
             }
         if latest_build is not None:
             context_payload["build_result"] = project_build_result(latest_build)
+            instruction += (
+                " build_result is ALREADY computed in Application context. "
+                "Do NOT call search_catalog to look up PC parts again; call submit_result immediately "
+                "with build_ref (and refs=[build_result.evidence_ref]) and a clear consultation in explanation, "
+                "unless the user also asked for a separate non-build item or web review."
+            )
         instruction += " Application context (data): " + json.dumps(
             context_payload,
             ensure_ascii=False,
         )
     elif latest_build is not None:
+        instruction += (
+            " build_result is ALREADY computed in Application context. "
+            "Do NOT call search_catalog to look up PC parts again; call submit_result immediately "
+            "with build_ref (and refs=[build_result.evidence_ref]) and a clear consultation in explanation."
+        )
         instruction += " Application context (data): " + json.dumps(
             {"build_result": project_build_result(latest_build)},
             ensure_ascii=False,
@@ -485,9 +497,10 @@ def parse_flexible_response(
             else []
         )
         logger.warning(
-            "model.response_rejected error_type=%s fields=%s",
+            "model.response_rejected error_type=%s fields=%s reason=%s",
             type(error).__name__,
             locations,
+            str(error)[:160],
         )
         return None
 

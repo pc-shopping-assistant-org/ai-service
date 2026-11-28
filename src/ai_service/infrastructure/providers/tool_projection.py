@@ -145,6 +145,7 @@ def project_build_result(build: BuildResult) -> dict[str, Any]:
     receipt, search = build.receipt, build.search_evidence
     projected: dict[str, Any] = {
         "build_ref": str(build.build_ref),
+        "evidence_ref": f"build:{build.build_ref}",
         "outcome": search.outcome
         if search and receipt.outcome != "BUILT"
         else receipt.outcome,

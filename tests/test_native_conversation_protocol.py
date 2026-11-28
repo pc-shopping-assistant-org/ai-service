@@ -353,3 +353,218 @@ def test_submit_result_tool_schema_requires_explanation_first():
     assert next(iter(item_schema["properties"])) == "explanation"
     assert "text" not in item_schema["properties"]
     assert "explanation" in item_schema["required"]
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_operator"),
+    [("25 triệu", "LTE"), ("Đúng 25 triệu", "EQ")],
+)
+def test_bare_budget_reply_without_pending_context_normalizes_eq_to_lte(
+    message, expected_operator
+):
+    trusted = context()
+    assert trusted.pending is None
+    call = ToolCall(
+        call_id="budget",
+        name="propose_requirements",
+        arguments={
+            "items": [
+                {
+                    "subject": "SETUP",
+                    "predicate": "budget",
+                    "value": 25_000_000,
+                    "unit": "VND",
+                    "operator": "EQ",
+                    "quote": message,
+                }
+            ]
+        },
+    )
+    decision = normalize_control(call, [], message, trusted)
+    assert decision.action.draft.items[0].operator == expected_operator
+
+
+def test_unitless_quantity_quote_downgrades_guessed_unit_and_formats_vietnamese():
+    from ai_service.capabilities.assistant.react.waiting_publication import (
+        _format_pending_resolution_message,
+    )
+    from ai_service.capabilities.assistant.requirements.resolver import resolve_draft
+    from ai_service.capabilities.assistant.requirements.units import (
+        UnresolvedQuantityValue,
+    )
+
+    message = "Build PC 25 triệu chơi game 1080p, RAM 32"
+    call = ToolCall(
+        call_id="ram_no_unit",
+        name="propose_requirements",
+        arguments={
+            "items": [
+                {
+                    "subject": "RAM",
+                    "predicate": "capacity",
+                    "value": 32,
+                    "unit": "GB",
+                    "quote": "RAM 32",
+                }
+            ]
+        },
+    )
+    decision = normalize_control(call, [], message, context())
+    assert isinstance(decision.action.draft.items[0].value, UnresolvedQuantityValue)
+    assert decision.action.draft.items[0].value.amount == 32
+
+    resolution = resolve_draft(
+        decision.action.draft,
+        message_id=uuid4(),
+        message=message,
+        state=context().requirements,
+        catalog=[],
+    )
+    assert resolution.patch is None
+    assert [item.reason for item in resolution.pending] == ["QUANTITY_UNIT_REQUIRED"]
+    rendered = _format_pending_resolution_message(
+        ["QUANTITY_UNIT_REQUIRED", "QUANTITY_EVIDENCE_MISMATCH"]
+    )
+    assert "QUANTITY_" not in rendered
+    assert "đơn vị" in rendered
+
+
+@pytest.mark.asyncio
+async def test_submit_result_tolerates_empty_explanation_refs_tool_name_and_raw_build_uuid(
+    realistic_catalog,
+):
+    from test_requirement_pipeline import rows, state
+
+    trusted = context(state(), rows(realistic_catalog))
+    dispatcher = ToolDispatcher(Catalog(), PCBuildApplicationService())
+    build_call = ToolCall(call_id="build", name="build_pc", arguments={})
+    build_result = await dispatcher.execute(build_call, trusted)
+    records = [
+        ToolRecord(call=build_call, result=build_result, origin_run_id=trusted.run_id)
+    ]
+    build_ref = str(build_result.result.build_ref)
+
+    messages, _ = build_react_request(
+        "Build PC 25 triệu chơi game 1080p",
+        records,
+        (ToolName.SEARCH_CATALOG,),
+        None,
+        trusted,
+    )
+    assert f'"evidence_ref": "build:{build_ref}"' in messages[0].content
+    assert "Do NOT call search_catalog to look up PC parts again" in messages[0].content
+
+    for args in (
+        {
+            "results": [
+                {
+                    "build_ref": build_ref,
+                    "explanation": "Cấu hình phù hợp gaming 1080p.",
+                    "explanation_refs": [],
+                }
+            ]
+        },
+        {
+            "results": [
+                {
+                    "calls": ["build_pc"],
+                    "explanation": "Cấu hình phù hợp gaming 1080p.",
+                }
+            ]
+        },
+        {
+            "results": [
+                {
+                    "refs": [build_ref],
+                    "explanation": "Cấu hình phù hợp gaming 1080p.",
+                }
+            ]
+        },
+    ):
+        call = ToolCall(call_id="submit", name="submit_result", arguments=args)
+        decision = normalize_control(call, records, "Build PC", trusted)
+        assert decision.action.kind == "FINAL_ANSWER"
+        assert decision.action.outcome == "BUILT"
+        assert decision.action.answer.build_ref == build_result.result.build_ref
+        assert decision.action.answer.evidence_refs == [f"build:{build_ref}"]
+        assert decision.action.answer.explanation is not None
+        assert decision.action.answer.explanation.evidence_refs == [
+            f"build:{build_ref}"
+        ]
+
+
+@pytest.mark.asyncio
+async def test_unresolved_tasks_plain_text_transitions_to_waiting_input():
+    from test_flexible_publication import base_snapshot
+    from test_react_graph import Budget
+
+    from ai_service.capabilities.assistant.react.actions import (
+        FlexibleDecision,
+        RespondAction,
+    )
+    from ai_service.capabilities.assistant.react.snapshot_publication import (
+        FlexiblePublicationInput,
+    )
+    from ai_service.capabilities.assistant.requirements.tasks import (
+        TaskDraft,
+        TaskDraftBatch,
+        TaskEvidence,
+    )
+    from ai_service.infrastructure.graph.flexible import build_flexible_graph
+
+    class AmbiguousCatalog(Catalog):
+        async def resolve(self, mention: str):
+            second = self.product.model_copy(
+                update={
+                    "product_id": uuid4(),
+                    "name": "MSI RTX 4060 Ventus",
+                    "evidence_ref": "catalog:product:second",
+                }
+            )
+            return [self.product, second]
+
+    class Model:
+        async def decide(self, message, transcript, allowed, repair, ctx=None):
+            return FlexibleDecision(
+                action=RespondAction(text="Bạn muốn chọn mẫu RTX 4060 nào?"),
+                registration=TaskDraftBatch(
+                    tasks=[
+                        TaskDraft(
+                            kind="COMPARE",
+                            start=0,
+                            end=len(message),
+                            quote=message,
+                            subjects=[
+                                TaskEvidence(start=8, end=16, quote="RTX 4060"),
+                                TaskEvidence(start=20, end=28, quote="RTX 4070"),
+                            ],
+                        )
+                    ]
+                ),
+            )
+
+    trusted, products = context(), AmbiguousCatalog()
+    message = "So sánh RTX 4060 và RTX 4070"
+    flow = build_flexible_graph(
+        Model(),
+        ToolDispatcher(products, PCBuildApplicationService()),
+        trusted,
+        [],
+        Budget(),
+        conversation_revision=0,
+        task_catalog=products,
+        publication=FlexiblePublicationInput(
+            accepted=base_snapshot(trusted),
+            task_message_id=uuid4(),
+            task_message=message,
+            request_message=message,
+        ),
+    )
+    terminal = await flow.ainvoke({"message": message})
+    assert terminal["phase"] == "WAITING_INPUT"
+    assert terminal["clarification"]["missing_fields"] == ["AMBIGUOUS"]
+    assert terminal["accepted_snapshot"]["flexible"]["status"] == "WAITING_INPUT"
+    assert (
+        terminal["accepted_snapshot"]["flexible"]["pending_task_resolution"]
+        is not None
+    )
