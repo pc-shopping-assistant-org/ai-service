@@ -663,7 +663,9 @@ async def test_proposal_confirmation_without_waiting_tasks_auto_clarifies_core_b
 
     from ai_service.capabilities.assistant.react.snapshot_publication import (
         FlexiblePublicationInput,
+        revalidate_flexible_publication,
     )
+    from ai_service.capabilities.assistant.react.turn_contracts import TurnRequestV2
     from ai_service.capabilities.assistant.requirements.contracts import (
         Evidence,
         QuantityValue,
@@ -674,6 +676,7 @@ async def test_proposal_confirmation_without_waiting_tasks_auto_clarifies_core_b
         ProposalConfirmation,
         issue_proposal,
     )
+    from ai_service.capabilities.assistant.stateful_contracts import CheckpointRefV1
     from ai_service.infrastructure.graph.flexible import build_flexible_graph
 
     trusted = context()
@@ -729,13 +732,16 @@ async def test_proposal_confirmation_without_waiting_tasks_auto_clarifies_core_b
         async def decide(self, *args, **kwargs):
             raise AssertionError("Model must not be called on proposal confirmation")
 
+    catalog = Catalog()
+    service = PCBuildApplicationService()
     flow = build_flexible_graph(
         FailIfCalledModel(),
-        ToolDispatcher(Catalog(), PCBuildApplicationService()),
+        ToolDispatcher(catalog, service),
         trusted,
         [],
         Budget(),
         conversation_revision=0,
+        task_catalog=catalog,
         publication=FlexiblePublicationInput(
             accepted=accepted,
             task_message_id=proposal_msg_id,
@@ -750,6 +756,28 @@ async def test_proposal_confirmation_without_waiting_tasks_auto_clarifies_core_b
     assert terminal["accepted_snapshot"]["flexible"]["status"] == "WAITING_INPUT"
     assert terminal["accepted_snapshot"]["flexible"]["pending_proposal"] is None
     assert terminal["accepted_snapshot"]["requirement_state"]["revision"] == 1
+
+    revalidated = revalidate_flexible_publication(
+        terminal,
+        accepted,
+        TurnRequestV2(
+            conversation_id=trusted.conversation_id,
+            request_id=uuid4(),
+            expected_revision=0,
+            message="Xác nhận đề xuất",
+            confirmation=confirmation,
+        ),
+        owner=trusted.account_id,
+        run_id=trusted.run_id,
+        base_ref=CheckpointRefV1(
+            thread_id=trusted.conversation_id, checkpoint_id="cp-0"
+        ),
+        service=service,
+    )
+    assert revalidated.flexible is not None
+    assert revalidated.flexible.clarification is not None
+    assert revalidated.flexible.clarification.missing_fields == ["USE_CASE_REQUIRED"]
+    assert revalidated.flexible.pending_proposal is None
 
 
 @pytest.mark.asyncio

@@ -78,6 +78,7 @@ def build_flexible_graph(
         and publication.accepted.flexible
         and publication.accepted.flexible.status == "WAITING_INPUT"
         and publication.accepted.flexible.pending_task_resolution is None
+        and bool(publication.accepted.flexible.task_outcomes)
         and not publication.discard_pending
         and not publication.read_only_turn
     ):
