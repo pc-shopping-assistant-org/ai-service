@@ -174,6 +174,7 @@ async def open_build_runtime(
             pending is not None
             and pending.status == "WAITING_INPUT"
             and pending.pending_task_resolution is None
+            and bool(pending.task_outcomes)
             and request.pending_action is None
         )
         if request.selected_product_ids:

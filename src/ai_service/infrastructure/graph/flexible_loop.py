@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from pydantic import JsonValue, ValidationError
@@ -71,6 +72,7 @@ from ai_service.infrastructure.graph.flexible_state import (
 from ai_service.infrastructure.graph.tool_batches import execute_tool_batch
 
 _CORE_BUILD_SUBJECTS = frozenset({"SETUP", "WORKLOAD"})
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +148,19 @@ def build_loop_nodes(
                 for item in decision_action.draft.items
             )
         )
+        confirmed_core_build = (
+            not tasks_for_turn
+            and not run_entries
+            and runtime.publication is not None
+            and runtime.publication.confirmation is not None
+            and any(
+                row.subject in _CORE_BUILD_SUBJECTS
+                for row in (
+                    *ctx.requirements.goals.values(),
+                    *ctx.requirements.requirements.values(),
+                )
+            )
+        )
         build_only_tasks = bool(tasks_for_turn) and all(
             task.kind == "BUILD" for task in tasks_for_turn
         )
@@ -158,6 +173,7 @@ def build_loop_nodes(
             and not runtime.unresolved_tasks(state)
             and (
                 proposed_core_build
+                or confirmed_core_build
                 or (
                     build_only_tasks
                     and (
@@ -519,7 +535,12 @@ def build_loop_nodes(
                 ["task_answers"],
                 task_indices=exc.task_indices,
             )
-        except ValueError:
+        except ValueError as exc:
+            logger.warning(
+                "validate.final_answer_rejected outcome=%s reason=%s",
+                action.outcome,
+                str(exc)[:160],
+            )
             if action.outcome in {"INFEASIBLE", "SEARCH_INCOMPLETE"}:
                 return runtime.repair(
                     state,

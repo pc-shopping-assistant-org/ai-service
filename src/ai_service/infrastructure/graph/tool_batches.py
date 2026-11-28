@@ -1,6 +1,7 @@
 """Execute a frozen native batch; LangGraph persists each completed call."""
 
 import asyncio
+import logging
 from typing import Any
 
 from langgraph.func import task
@@ -19,6 +20,8 @@ from ai_service.capabilities.assistant.react.contracts import (
 )
 from ai_service.capabilities.assistant.react.tools import ToolDispatcher, call_hash
 from ai_service.infrastructure.observability import step
+
+logger = logging.getLogger(__name__)
 
 _TOOL_STAGES: dict[str, AgentActivityStage] = {
     ToolName.SEARCH_CATALOG.value: AgentActivityStage.SEARCHING_CATALOG,
@@ -105,6 +108,19 @@ async def execute_tool_batch(
             )
             observation.span.set_attribute("ai.tool.result_type", result.tool)
             observation.result_status = result.status
+            if isinstance(result.result, BuildResult):
+                build_outcome = (
+                    result.result.search_evidence.outcome
+                    if result.result.search_evidence
+                    and result.result.receipt.outcome != "BUILT"
+                    else result.result.receipt.outcome
+                )
+                observation.span.set_attribute("ai.build.outcome", build_outcome)
+                logger.info(
+                    "tool.build_pc.completed outcome=%s build_ref=%s",
+                    build_outcome,
+                    result.result.build_ref,
+                )
         byte_limit = (
             limits.max_build_result_bytes
             if isinstance(result.result, BuildResult)

@@ -11,14 +11,14 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir "uv==0.12.3"
 
-COPY pyproject.toml uv.lock README.md ./
-COPY src ./src
+COPY pyproject.toml uv.lock ./
 
-RUN uv sync --frozen --no-dev --no-editable
+RUN uv sync --frozen --no-dev --no-install-project
 
 FROM python:3.12-slim-bookworm AS runtime
 
 ENV PATH="/opt/venv/bin:${PATH}" \
+    PYTHONPATH="/app/src" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HF_HOME=/var/cache/ai-service/huggingface
@@ -31,10 +31,10 @@ RUN addgroup --system app \
     && chown -R app:app /var/cache/ai-service
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --chown=app:app src ./src
 COPY --chown=app:app alembic.ini ./
 COPY --chown=app:app migrations ./migrations
 COPY --chown=app:app data ./data
+COPY --chown=app:app src ./src
 
 USER app
 

@@ -567,3 +567,297 @@ async def test_unresolved_tasks_plain_text_transitions_to_waiting_input():
         terminal["accepted_snapshot"]["flexible"]["pending_task_resolution"]
         is not None
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider_name", "expected_method"),
+    [("gemini", "function_calling"), ("openai", "json_schema")],
+)
+async def test_structured_extractors_use_provider_compatible_output_method(
+    provider_name, expected_method
+):
+    from ai_service.capabilities.assistant.public_contracts import (
+        ClarificationItemV1,
+        PublicClarificationV1,
+    )
+    from ai_service.capabilities.assistant.source_quotes import (
+        QuotedTaskBatch,
+        QuotedUnitChoice,
+        QuotedUnitSelection,
+    )
+    from ai_service.infrastructure.providers.requirement_extractor import (
+        NativeRequirementExtractor,
+    )
+    from ai_service.infrastructure.providers.task_extractor import NativeTaskExtractor
+
+    calls: list[tuple[type, str | None]] = []
+
+    class PassThroughAttempts:
+        async def invoke(self, kind, operation, key, dispatch):
+            return await dispatch()
+
+    class FakeStructuredModel:
+        def __init__(self, response):
+            self.response = response
+
+        async def ainvoke(self, messages):
+            return self.response
+
+    class FakeChatModel:
+        def __init__(self, responses):
+            self.responses = iter(responses)
+
+        def with_structured_output(self, schema, **kwargs):
+            calls.append((schema, kwargs.get("method")))
+            return FakeStructuredModel(next(self.responses))
+
+    class FakeProvider:
+        def __init__(self, responses):
+            self.name = provider_name
+            self._chat = FakeChatModel(responses)
+
+        def create_model(self):
+            return self._chat
+
+    provider = FakeProvider(
+        [
+            QuotedUnitChoice(
+                selections=[
+                    QuotedUnitSelection(item_index=0, unit="GB", quote="GB"),
+                ]
+            ),
+            QuotedTaskBatch(tasks=[]),
+        ]
+    )
+    options = PublicClarificationV1(
+        pending_message_id=uuid4(),
+        constraints_revision=0,
+        items=[
+            ClarificationItemV1(
+                item_index=0,
+                reason="QUANTITY_UNIT_REQUIRED",
+                quantity_amount=32,
+                unit_options=["GB", "TB"],
+            )
+        ],
+    )
+    req_extractor = NativeRequirementExtractor(provider, PassThroughAttempts())
+    unit_draft = await req_extractor.choose_unit("32 GB", options)
+    assert unit_draft.selections[0].unit == "GB"
+
+    task_extractor = NativeTaskExtractor(provider, PassThroughAttempts())
+    task_batch = await task_extractor.extract_tasks("Chào bạn")
+    assert task_batch.tasks == []
+
+    assert calls == [
+        (QuotedUnitChoice, expected_method),
+        (QuotedTaskBatch, expected_method),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_proposal_confirmation_without_waiting_tasks_auto_clarifies_core_build():
+    from test_flexible_publication import base_snapshot
+    from test_react_graph import Budget
+
+    from ai_service.capabilities.assistant.react.snapshot_publication import (
+        FlexiblePublicationInput,
+        revalidate_flexible_publication,
+    )
+    from ai_service.capabilities.assistant.react.turn_contracts import TurnRequestV2
+    from ai_service.capabilities.assistant.requirements.contracts import (
+        Evidence,
+        QuantityValue,
+        Requirement,
+        RequirementPatch,
+    )
+    from ai_service.capabilities.assistant.requirements.proposals import (
+        ProposalConfirmation,
+        issue_proposal,
+    )
+    from ai_service.capabilities.assistant.stateful_contracts import CheckpointRefV1
+    from ai_service.infrastructure.graph.flexible import build_flexible_graph
+
+    trusted = context()
+    proposal_msg_id = uuid4()
+    proposal_text = "Build PC 25 triệu"
+    patch = RequirementPatch(
+        set_requirements=[
+            Requirement(
+                id=uuid4(),
+                subject="SETUP",
+                predicate="budget",
+                operator="LTE",
+                value=QuantityValue(amount=25_000_000, unit="VND"),
+                strength="HARD",
+                evidence=Evidence(
+                    message_id=proposal_msg_id,
+                    start=9,
+                    end=17,
+                    quote="25 triệu",
+                ),
+            )
+        ]
+    )
+    pending = issue_proposal(
+        trusted.requirements,
+        patch,
+        {proposal_msg_id: proposal_text},
+        owner=trusted.account_id,
+        conversation_id=trusted.conversation_id,
+        target_revision=trusted.requirements.revision,
+    )
+    accepted = base_snapshot(trusted).model_copy(
+        update={
+            "flexible": FlexiblePublishedState(
+                conversation_id=trusted.conversation_id,
+                task_message_id=proposal_msg_id,
+                task_message=proposal_text,
+                status="WAITING_INPUT",
+                waiting_message="Xác nhận ngân sách 25 triệu?",
+                waiting_tasks=[],
+                pending_proposal=pending,
+            )
+        }
+    )
+    confirmation = ProposalConfirmation(
+        proposal_id=pending.proposal_id,
+        proposal_hash=pending.proposal_hash,
+        target_revision=pending.target_revision,
+        base_requirements_hash=pending.base_requirements_hash,
+    )
+
+    class FailIfCalledModel:
+        async def decide(self, *args, **kwargs):
+            raise AssertionError("Model must not be called on proposal confirmation")
+
+    catalog = Catalog()
+    service = PCBuildApplicationService()
+    flow = build_flexible_graph(
+        FailIfCalledModel(),
+        ToolDispatcher(catalog, service),
+        trusted,
+        [],
+        Budget(),
+        conversation_revision=0,
+        task_catalog=catalog,
+        publication=FlexiblePublicationInput(
+            accepted=accepted,
+            task_message_id=proposal_msg_id,
+            task_message=proposal_text,
+            request_message="Xác nhận đề xuất",
+            confirmation=confirmation,
+        ),
+    )
+    terminal = await flow.ainvoke({"message": "Xác nhận đề xuất"})
+    assert terminal["phase"] == "WAITING_INPUT"
+    assert terminal["clarification"]["missing_fields"] == ["USE_CASE_REQUIRED"]
+    assert terminal["accepted_snapshot"]["flexible"]["status"] == "WAITING_INPUT"
+    assert terminal["accepted_snapshot"]["flexible"]["pending_proposal"] is None
+    assert terminal["accepted_snapshot"]["requirement_state"]["revision"] == 1
+
+    revalidated = revalidate_flexible_publication(
+        terminal,
+        accepted,
+        TurnRequestV2(
+            conversation_id=trusted.conversation_id,
+            request_id=uuid4(),
+            expected_revision=0,
+            message="Xác nhận đề xuất",
+            confirmation=confirmation,
+        ),
+        owner=trusted.account_id,
+        run_id=trusted.run_id,
+        base_ref=CheckpointRefV1(
+            thread_id=trusted.conversation_id, checkpoint_id="cp-0"
+        ),
+        service=service,
+    )
+    assert revalidated.flexible is not None
+    assert revalidated.flexible.clarification is not None
+    assert revalidated.flexible.clarification.missing_fields == ["USE_CASE_REQUIRED"]
+    assert revalidated.flexible.pending_proposal is None
+
+
+@pytest.mark.asyncio
+async def test_infeasible_build_submission_narrows_mixed_search_catalog_refs(
+    realistic_catalog,
+):
+    from test_requirement_pipeline import requirement, rows
+
+    from ai_service.capabilities.assistant.react.outcomes import validate_final_answer
+    from ai_service.capabilities.assistant.requirements.contracts import (
+        CanonicalRequirementState,
+        QuantityValue,
+        TextValue,
+    )
+
+    budget = requirement(
+        "SETUP",
+        "budget",
+        QuantityValue(amount=500_000, unit="VND"),
+        operator="LTE",
+    )
+    goal = requirement("WORKLOAD", "use_case", TextValue(text="GAMING_1080P"))
+    req_state = CanonicalRequirementState(
+        requirements={budget.id: budget},
+        goals={goal.id: goal},
+    )
+    trusted = context(req_state, rows(realistic_catalog))
+    service = PCBuildApplicationService()
+    dispatcher = ToolDispatcher(Catalog(), service)
+
+    build_call = ToolCall(call_id="build", name="build_pc", arguments={})
+    build_result = await dispatcher.execute(build_call, trusted)
+    assert build_result.result.search_evidence is not None
+    assert build_result.result.search_evidence.outcome == "INFEASIBLE"
+
+    search_call = ToolCall(
+        call_id="search", name="search_catalog", arguments={"query": "GPU"}
+    )
+    search_result = await dispatcher.execute(search_call, trusted)
+    records = [
+        ToolRecord(call=build_call, result=build_result, origin_run_id=trusted.run_id),
+        ToolRecord(
+            call=search_call, result=search_result, origin_run_id=trusted.run_id
+        ),
+    ]
+
+    submit_call = ToolCall(
+        call_id="submit",
+        name="submit_result",
+        arguments={
+            "results": [
+                {
+                    "build_ref": str(build_result.result.build_ref),
+                    "refs": [
+                        *build_result.evidence_refs,
+                        *search_result.evidence_refs,
+                    ],
+                    "explanation": "Ngân sách 500k không đủ để build PC gaming.",
+                }
+            ]
+        },
+    )
+    decision = normalize_control(submit_call, records, "Build PC 500k gaming", trusted)
+    assert decision.action.kind == "FINAL_ANSWER"
+    assert decision.action.outcome == "INFEASIBLE"
+    assert decision.action.answer.evidence_refs == build_result.evidence_refs
+    assert decision.action.answer.explanation is not None
+    assert (
+        decision.action.answer.explanation.evidence_refs == build_result.evidence_refs
+    )
+
+    validated = validate_final_answer(
+        decision.action,
+        [build_result, search_result],
+        trusted,
+        [
+            CompletionRequirement(
+                kind="BUILD", constraints_revision=trusted.requirements.revision
+            )
+        ],
+        service,
+    )
+    assert validated.outcome == "INFEASIBLE"

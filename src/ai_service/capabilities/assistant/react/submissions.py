@@ -301,6 +301,12 @@ def _derive_part(
             outcome = payload.search_evidence.outcome
             supporting = [record.call.call_id]
             build_ref = None
+            resolved_selection = resolved_selection.model_copy(
+                update={
+                    "evidence_refs": list(result.evidence_refs),
+                    "explanation_evidence_refs": None,
+                }
+            )
             break
         if isinstance(payload, BuildResult) and payload.receipt.outcome == "BUILT":
             outcome = "BUILT"
