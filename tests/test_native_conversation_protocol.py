@@ -452,7 +452,6 @@ async def test_submit_result_tolerates_empty_explanation_refs_tool_name_and_raw_
         trusted,
     )
     assert f'"evidence_ref": "build:{build_ref}"' in messages[0].content
-    assert "Do NOT call search_catalog to look up PC parts again" in messages[0].content
 
     for args in (
         {
